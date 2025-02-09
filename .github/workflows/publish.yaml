@@ -28,9 +28,6 @@ jobs:
       - name: Format All Packages
         run: pnpm format
 
-      - name: Build All Packages
-        run: pnpm build
-
       - name: Publish Packages to npm
         run: |
           for pkg in packages/*; do

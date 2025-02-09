@@ -1,5 +1,5 @@
 {
-	"name": "sveltecharts",
+	"name": "@qtsurfer/sveltecharts",
 	"version": "0.2.9",
 	"author": {
 		"name": "QTSurfer",
@@ -25,7 +25,7 @@
 		"test": "vitest",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"publishd": "pnpm publish --dry-run",
+		"publishd": "pnpm publish --dry-run --no-git-checks",
 		"prepublishOnly": "pnpm build",
 		"knip": "pnpm dlx knip"
 	},
