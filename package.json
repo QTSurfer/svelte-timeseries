@@ -1,0 +1,33 @@
+{
+  "name": "qtsurfer-svelte-timeseries",
+  "version": "0.0.1",
+  "description": "QTSurfer svelte timeseries ui monorepo",
+  "author": "Manuel Polo <mrmx@users.noreply.github.com>",
+  "license": "Apache-2.0",
+  "main": "index.js",
+  "keywords": [],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QTSurfer/qtsurfer-signals-ui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/QTSurfer/qtsurfer-signals-ui/issues"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "changeset:version": "changeset version",
+    "changeset:publish": "changeset publish",
+    "clean": "pnpm -r clean",
+    "test": "pnpm -r --filter=./packages/* test",
+    "build": "pnpm -r --filter=./packages/* build",
+    "build:examples": "pnpm -r --filter=./examples/* build",
+    "lint": "pnpm -r --filter=./packages/* lint",
+    "format": "pnpm -r --filter=./packages/* format"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.0",
+    "@changesets/cli": "^2.27.12"
+  }
+}

@@ -1,0 +1,47 @@
+name: Publish Monorepo to npmjs.com
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      #- name: Run Tests in All Packages
+      #  run: pnpm test
+
+      - name: Format All Packages
+        run: pnpm format
+
+      - name: Build All Packages
+        run: pnpm build
+
+      - name: Publish Packages to npm
+        run: |
+          for pkg in packages/*; do
+            if [ -f "$pkg/package.json" ]; then
+              if grep -q '"private": *true' "$pkg/package.json"; then
+                echo "Skipping private package in $pkg"
+              else
+                echo "Publishing package in $pkg"
+                (cd "$pkg" && pnpm publish --access public)
+              fi
+            fi
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
