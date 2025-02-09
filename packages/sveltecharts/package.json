@@ -2,13 +2,16 @@
 	"name": "sveltecharts",
 	"version": "0.2.9",
 	"author": {
-		"name": "Manuel Polo",
-		"url": "https://github.com/mrmx"
+		"name": "QTSurfer",
+		"url": "https://github.com/QTSurfer"
 	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
 		"directory": "packages/sveltecharts"
+	},
+	"bugs": {
+		"url": "https://github.com/QTSurfer/svelte-timeseries/issues"
 	},
 	"license": "Apache-2.0",
 	"homepage": "https://github.com/QTSurfer/svelte-timeseries",
