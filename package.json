@@ -13,9 +13,8 @@
     "type": "git",
     "url": "git+https://github.com/QTSurfer/svelte-timeseries.git"
   },
-  "packageManager": "pnpm@9.12.0",
   "engines": {
-    "pnpm": "^9.0.0"
+    "pnpm": "^10.0.0"
   },
   "private": true,
   "type": "module",
