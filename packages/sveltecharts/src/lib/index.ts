@@ -1,2 +1,2 @@
-export { default as ECharts } from './ECharts.svelte';
-export type { EChartsOption, DataRange, DataZoomEvent } from './ECharts.svelte';
+export { default as SVECharts } from './SVECharts.svelte';
+export * from './types';

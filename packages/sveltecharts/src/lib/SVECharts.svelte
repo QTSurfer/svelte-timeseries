@@ -1,5 +1,5 @@
 <script lang="ts" context="module">
-	import * as echarts from 'echarts/core';
+	import { init, use } from 'echarts/core';
 	import { LineChart } from 'echarts/charts';
 	import {
 		DataZoomComponent,
@@ -11,10 +11,9 @@
 	} from 'echarts/components';
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
-	import type { EChartsOption } from 'echarts/types/dist/option';
-	import type { ECharts } from 'echarts/types/dist/core';
+	import type { ECharts, EChartsOption } from './types';
 	// Register the required components
-	echarts.use([
+	use([
 		LineChart,
 		DataZoomComponent,
 		LegendComponent,
@@ -26,7 +25,6 @@
 		CanvasRenderer
 	]);
 
-	export type { EChartsOption };
 	export type EChartsTheme = string | object;
 	export type EChartsRenderer = 'canvas' | 'svg';
 
@@ -50,6 +48,7 @@
 
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+
 	export let option: EChartsOption;
 	export let { theme, renderer } = DEFAULT_CONFIG;
 
@@ -73,7 +72,7 @@
 			...DEFAULT_CONFIG,
 			...echartsConfig
 		};
-		instance = echarts.init(element, theme, { renderer });
+		instance = init(element, theme, { renderer });
 
 		const handleResize = () => {
 			instance.resize();

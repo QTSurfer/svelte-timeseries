@@ -1,7 +1,7 @@
 <script lang="ts">
 	import svelteLogo from '@assets/svelte.svg';
-	import ECharts from '$lib/ECharts.svelte';
-	import type { EChartsOption } from '$lib/ECharts.svelte';
+	import SVECharts from '$lib/SVECharts.svelte';
+	import type { EChartsOption } from '$lib/types';
 
 	const getUTCDates = (hours = 24): number[] => {
 		let dates: number[] = [];
@@ -56,6 +56,7 @@
 		series: []
 	};
 	for (let i = 1; i < data[0].length; i++) {
+		//@ts-ignore
 		option.series.push({
 			type: 'line',
 			name: 'Value ' + i,
@@ -74,7 +75,7 @@
 		>
 		<h1>Svelte ECharts demo</h1>
 	</div>
-	<ECharts {option} />
+	<SVECharts {option} />
 </main>
 
 <style>
@@ -83,11 +84,8 @@
 	}
 	.header {
 		display: flex;
-	}
-	.echarts {
-		border: 1px solid black;
-		width: 100vw;
-		height: 75vh;
+		align-items: center;
+		justify-content: center;
 	}
 	.logo {
 		height: 6em;
