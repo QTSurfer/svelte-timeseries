@@ -2,8 +2,6 @@ name: Publish Monorepo to npmjs.com
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*.*.*'
 jobs:
@@ -36,6 +34,7 @@ jobs:
 
       - name: Publish Packages to npm
         run: |
+          set -e
           for pkg in packages/*; do
             if [ -f "$pkg/package.json" ]; then
               if grep -q '"private": *true' "$pkg/package.json"; then
