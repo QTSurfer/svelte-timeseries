@@ -95,6 +95,11 @@
 			}
 		};
 	}
+
+	export function clear() {
+		instance.clear();
+	}
+
 	export function showLoading(text?: string) {
 		instance.showLoading({ text: text || '' });
 	}

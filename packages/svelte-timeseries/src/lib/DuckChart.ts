@@ -34,6 +34,10 @@ export class DuckChart {
 	private globalTimestamps: number[] = [];
 
 	constructor() {
+		this.reset();
+	}
+
+	public reset() {
 		this.option = {
 			tooltip: {
 				trigger: 'axis',
@@ -114,12 +118,12 @@ export class DuckChart {
 	 * Example: only timestamp and main columns.
 	 * This is to have a minimal dataset for dataZoom or global timeline.
 	 */
-	public async load(url: string,columnConfig? : ColumnConfig): Promise<void> {
+	public async load(url: string, columnConfig?: ColumnConfig): Promise<void> {
 		if (this.db.table === url) {
 			return;
 		}
 		this.db.table = url;
-
+		this.reset();
 		await this.detectFields(columnConfig);
 
 		const query = `
@@ -270,7 +274,7 @@ export class DuckChart {
 	 * Load the list of columns and identify main/percent fields.
 	 * This is a generic metadata step.
 	 */
-	private async detectFields(columnConfig? : ColumnConfig): Promise<void> {
+	private async detectFields(columnConfig?: ColumnConfig): Promise<void> {
 		this.columns = await this.db.getColumnNames();
 		this.indexedFields = this.columns.map((name, idx) => ({ idx, name }));
 

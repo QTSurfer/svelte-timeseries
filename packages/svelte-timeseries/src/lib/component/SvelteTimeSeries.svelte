@@ -14,6 +14,7 @@
 		await duckChart.initDB();
 		loadUrl(url!);
 	});
+	
 	const handleDataZoom = (e: CustomEvent) => {
 		let start, end;
 		if (e.detail.batch) {
@@ -35,8 +36,13 @@
 	const loadUrl = async (url: string) => {
 		if (!url || url === '') return;
 		if (!duckChart) return;
+		chart.clear();
+		duckChart.reset();
+		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
+		chart.showLoading();
 		await duckChart.load(url);
 		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
+		chart.hideLoading();
 	};
 	$: if (url) {
 		loadUrl(url);
