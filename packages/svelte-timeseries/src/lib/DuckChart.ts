@@ -8,9 +8,15 @@ type IndexedField = {
 
 type DataSource = { [key: number]: number[] };
 
+export type ColumnConfig = {
+	tsColumn?: string;
+	mainColumn?: string;
+};
+
 export class DuckChart {
 	private db!: DuckDB;
 	private tsColumn!: string; // Timestamp column name
+	private tsCastType!: string; // Timestamp cast type
 	private mainColumn!: string; // Main column name
 	private zoomStart = 38;
 	private zoomEnd = 62;
@@ -87,13 +93,15 @@ export class DuckChart {
 
 	/** Initialize DuckDB in WASM */
 	public async initDB(): Promise<void> {
-		this.db = await DuckDB.create();
+		this.db = await DuckDB.create(this._debug);
 	}
 
 	/** Enable/disable debug mode */
 	set debug(enabled: boolean) {
 		this._debug = enabled;
-		this.db.debug = enabled;
+		if (this.db) {
+			this.db.debug = enabled;
+		}
 	}
 
 	/** Check if debug mode is enabled */
@@ -106,16 +114,16 @@ export class DuckChart {
 	 * Example: only timestamp and main columns.
 	 * This is to have a minimal dataset for dataZoom or global timeline.
 	 */
-	public async load(url: string): Promise<void> {
+	public async load(url: string,columnConfig? : ColumnConfig): Promise<void> {
 		if (this.db.table === url) {
 			return;
 		}
 		this.db.table = url;
 
-		await this.detectFields(); // fill columns, mainFields, etc.
+		await this.detectFields(columnConfig);
 
 		const query = `
-            SELECT "${this.tsColumn}", "${this.mainColumn}"
+            SELECT ${this.getTsCast()}, "${this.mainColumn}"
             FROM "${this.db.table}"
             WHERE "${this.mainColumn}" != 0
             ORDER BY "${this.tsColumn}"
@@ -181,11 +189,12 @@ export class DuckChart {
 
 		const selectedFields = [...this.mainFields, ...this.percentFields];
 		const fieldsStr = selectedFields.map((f) => `"${f.name}"`).join(',');
-
 		const query = `
-            SELECT "${this.tsColumn}", ${fieldsStr}
+            SELECT ${this.getTsCast()}, ${fieldsStr}
             FROM "${this.db.table}"
-            WHERE "${this.tsColumn}" >= ${startTs} AND "${this.tsColumn}" <= ${endTs} AND "${this.mainColumn}" != 0
+            WHERE ${this.getTsCast()} >= ${this.getTsValueCast(startTs)} 
+			AND ${this.getTsCast()} <= ${this.getTsValueCast(endTs)} 
+			AND "${this.mainColumn}" != 0
             ORDER BY "${this.tsColumn}"
         `;
 		if (this.debug) {
@@ -261,7 +270,7 @@ export class DuckChart {
 	 * Load the list of columns and identify main/percent fields.
 	 * This is a generic metadata step.
 	 */
-	private async detectFields(): Promise<void> {
+	private async detectFields(columnConfig? : ColumnConfig): Promise<void> {
 		this.columns = await this.db.getColumnNames();
 		this.indexedFields = this.columns.map((name, idx) => ({ idx, name }));
 
@@ -271,16 +280,46 @@ export class DuckChart {
 		this.percentFields = this.indexedFields.filter(
 			(f) => !f.name.startsWith('_') && f.name.endsWith('%')
 		);
-		this.tsColumn = this.tsColumn ?? this.columns[0];
-		this.mainColumn = this.mainColumn ?? this.mainFields[1].name;
+		this.tsColumn = columnConfig?.tsColumn ?? this.columns[0];
+		this.mainColumn = columnConfig?.mainColumn ?? this.mainFields[1].name;
+		this.mainFields = this.mainFields.filter((f) => f.name !== this.tsColumn); // Remove timestamp from main fields
+		this.tsCastType = await this.getTimestampCastType();
 		if (this.debug) {
+			console.log('Schema:', await this.db.getSchema());
 			console.log('Columns:', this.columns);
 			console.log('Main fields:', this.mainFields);
 			console.log('Percent fields:', this.percentFields);
 			console.log('Timestamp column:', this.tsColumn);
+			console.log('Timestamp cast type:', this.tsCastType || 'none');
 			console.log('Main column:', this.mainColumn);
 		}
 	}
+
+	private getTimestampCastType(): string {
+		const typeName = this.db.getColumnTypeName(this.tsColumn).toLowerCase();
+		if (this.debug) console.log('Timestamp column type:', typeName);
+		return typeName;
+	}
+
+	private getTsCast(): string {
+		switch (this.tsCastType) {
+			case 'timestamp<microsecond>':
+				return `epoch_ms("${this.tsColumn}")`;
+			case 'int64':
+				break;
+			default:
+				console.warn('Unsupported timestamp cast type:', this.tsCastType);
+		}
+		return `"${this.tsColumn}"`;
+	}
+
+	private getTsValueCast(ts: number): string {
+		if (this.tsCastType.startsWith('timestamp')) {
+			return (ts / 1000).toString();
+		}
+		return ts.toString();
+	}
+
 	/**
 	 * Convert a percentage to a timestamp from the loaded timeline.
 	 * @param percent

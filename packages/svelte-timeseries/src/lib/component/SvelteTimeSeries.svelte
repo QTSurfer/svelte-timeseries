@@ -4,11 +4,13 @@
 	import { DuckChart } from '$lib/DuckChart';
 
 	export let url: string | undefined = undefined;
+	export let debug: boolean = false;
 
 	let chart: SVECharts;
 	let duckChart: DuckChart;
 	onMount(async () => {
 		duckChart = new DuckChart();
+		duckChart.debug = debug;
 		await duckChart.initDB();
 		loadUrl(url!);
 	});

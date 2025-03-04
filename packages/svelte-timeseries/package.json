@@ -1,5 +1,5 @@
 {
-	"name": "svelte-timeseries",
+	"name": "@qtsurfer/svelte-timeseries",
 	"version": "0.2.11",
 	"author": {
 		"name": "QTSurfer",
@@ -16,6 +16,7 @@
 	"license": "Apache-2.0",
 	"homepage": "https://github.com/QTSurfer/svelte-timeseries",
 	"scripts": {
+		"clear:": "rimraf node_modules",
 		"clean": "run-s vite:clean sk:clean sk:sync",
 		"dev": "vite dev",
 		"dev-lan": "vite dev --host 0.0.0.0",

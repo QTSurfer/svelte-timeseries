@@ -21,8 +21,9 @@
 <div>
 	<select on:change={handleSelectParquet}>
 		<option disabled selected>Select signals file:</option>
-		<option value="{baseUrl}signals.parquet">Signals sample 1</option>
+		<option value="{baseUrl}signals.parquet">Sample 1: One week of BTC/USDT ticker prices+indicators - 10M timestamps -</option>
+		<option value="{baseUrl}temps_gzip.parquet">Sample 2: Temperatures sample 2 (gzip) - 1M timestamps -</option>
 	</select>
 </div>
 
-<SvelteTimeSeries {url} />
+<SvelteTimeSeries {url} debug/>
