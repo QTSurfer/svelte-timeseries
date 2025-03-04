@@ -16,7 +16,7 @@ export class DuckDB {
 		this.db = db;
 	}
 
-	static async create(): Promise<DuckDB> {
+	static async create(debug: boolean = false): Promise<DuckDB> {
 		return new Promise<DuckDB>((resolve, reject) => {
 			if (!window) reject('DuckDB only works in a browser environment.');
 			else if (window.Worker) {
@@ -25,11 +25,13 @@ export class DuckDB {
 					import('./duckdb-wasm')
 						.then(({ db }) => {
 							const t1 = performance.now();
-							console.log(`DuckDB loaded in ${t1 - t0} ms.`);
-							resolve(new DuckDB(db));
+							if (debug) console.log(`DuckDB loaded in ${t1 - t0} ms.`);
+							const duckdb = new DuckDB(db);
+							duckdb.debug = debug;
+							resolve(duckdb);
 						})
 						.catch((err) => {
-							console.log('DuckDB load error!', err);
+							console.error('DuckDB load error!', err);
 							reject(err);
 						});
 				} catch (err) {
@@ -99,5 +101,9 @@ export class DuckDB {
 			this._columns = (await this.getSchema()).fields.map((f) => f.name);
 		}
 		return this._columns;
+	}
+
+	getColumnTypeName(column: string): string {
+		return this._schema?.fields.find((f) => f.name === column)?.type.toString() ?? '';
 	}
 }
