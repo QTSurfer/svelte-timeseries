@@ -41,7 +41,7 @@ jobs:
                 echo "Skipping private package in $pkg"
               else
                 echo "Publishing package in $pkg"
-                (cd "$pkg" && pnpm publish --access public --no-git-checks)
+                (cd "$pkg" && pnpm publish --access public --no-git-checks --force)
               fi
             fi
           done
