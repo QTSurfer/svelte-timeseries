@@ -33,17 +33,6 @@ jobs:
         run: pnpm format
 
       - name: Publish Packages to npm
-        run: |
-          set -e
-          for pkg in packages/*; do
-            if [ -f "$pkg/package.json" ]; then
-              if grep -q '"private": *true' "$pkg/package.json"; then
-                echo "Skipping private package in $pkg"
-              else
-                echo "Publishing package in $pkg"
-                (cd "$pkg" && pnpm publish --access public --no-git-checks --force)
-              fi
-            fi
-          done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish
