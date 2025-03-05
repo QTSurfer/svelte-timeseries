@@ -15,12 +15,12 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
 		mainWorker: eh_worker
 	}
 };
-// See https://github.com/duckdb/duckdb-wasm/tree/main/packages/duckdb-wasm
-// Select a bundle based on browser checks
-const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
-// Instantiate the asynchronus version of DuckDB-wasm
-const worker = new Worker(bundle.mainWorker!);
-const logger = new ConsoleLogger();
-const db = new AsyncDuckDB(logger, worker);
-await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-export { db };
+
+export async function createAsyncDuckDB(): Promise<AsyncDuckDB> {
+	const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+	const worker = new Worker(bundle.mainWorker!);
+	const logger = new ConsoleLogger();
+	const db = new AsyncDuckDB(logger, worker);
+	await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+	return db;
+}

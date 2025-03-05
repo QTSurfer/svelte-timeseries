@@ -23,7 +23,8 @@ export class DuckDB {
 				try {
 					const t0 = performance.now();
 					import('./duckdb-wasm')
-						.then(({ db }) => {
+						.then((module) => module.createAsyncDuckDB())
+						.then((db) => {
 							const t1 = performance.now();
 							if (debug) console.log(`DuckDB loaded in ${t1 - t0} ms.`);
 							const duckdb = new DuckDB(db);

@@ -14,7 +14,7 @@
 		await duckChart.initDB();
 		loadUrl(url!);
 	});
-	
+
 	const handleDataZoom = (e: CustomEvent) => {
 		let start, end;
 		if (e.detail.batch) {

@@ -11,6 +11,7 @@
 		"declaration": true,
 		"declarationMap": true,
 		"strict": true,
+		"verbatimModuleSyntax": false,
 		"moduleResolution": "bundler"
 	}
 }

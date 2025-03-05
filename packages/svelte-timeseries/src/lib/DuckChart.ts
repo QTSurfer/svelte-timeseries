@@ -21,7 +21,7 @@ export class DuckChart {
 	private zoomStart = 38;
 	private zoomEnd = 62;
 	private _debug = false;
-	public option: EChartsOption; // ECharts configuration
+	public option!: EChartsOption; // ECharts configuration
 
 	// Arrays to store column metadata
 	public columns: string[] = [];
