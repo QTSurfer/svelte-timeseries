@@ -14,7 +14,7 @@
 		"url": "https://github.com/QTSurfer/svelte-timeseries/issues"
 	},
 	"license": "Apache-2.0",
-	"homepage": "https://github.com/QTSurfer/svelte-timeseries",
+	"homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run package",
