@@ -24,6 +24,7 @@
     "publish:dry": "pnpm -r publish --access public --no-git-checks --dry-run",
     "changeset:version": "changeset version",
     "changeset:publish": "changeset publish",
+    "check": "pnpm -r check",
     "clean": "pnpm -r clean",
     "clear": "pnpm -r clear",
     "test": "pnpm -r --filter=./packages/* test",

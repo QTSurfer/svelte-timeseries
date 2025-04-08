@@ -26,6 +26,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check typings in All Packages
+        run: pnpm check
+        
       #- name: Run Tests in All Packages
       #  run: pnpm test
 
