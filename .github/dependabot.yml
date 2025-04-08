@@ -5,7 +5,7 @@ updates:
     target-branch: "dev"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     ignore:
       # For all packages, ignore all patch updates
       - dependency-name: "*"
