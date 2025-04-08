@@ -236,9 +236,10 @@ export class DuckChart {
 		this.option.dataset = [{ source: this.globalSource }, detailDataset];
 
 		// Build the series array using selectedFields
-		const newSeries: any[] = [];
-		// @ts-ignore
-		newSeries.push(this.option.series[0]); // Copy the global main column series
+		const newSeries: typeof this.option.series = [];
+		if (Array.isArray(this.option.series) && this.option.series[0]) {
+			newSeries.push(this.option.series[0]); // Copy the global main column series
+		}
 		let seriesIdx = 0; // For referencing dataset columns beyond timestamps
 
 		for (const f of selectedFields) {

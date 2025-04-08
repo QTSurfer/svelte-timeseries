@@ -54,7 +54,7 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"@apache-arrow/ts": "^19.0.0",
-		"@duckdb/duckdb-wasm": "1.29.1-dev68.0"
+		"apache-arrow": "^17.0.0",
+		"@duckdb/duckdb-wasm": "1.29.1-dev132.0"
 	}
 }

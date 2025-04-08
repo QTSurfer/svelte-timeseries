@@ -1,6 +1,6 @@
-import type { Table } from '@apache-arrow/ts/table';
+import type { Table } from 'apache-arrow/table';
 import { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import type { AsyncRecordBatchStreamReader, Schema } from '@apache-arrow/ts';
+import type { AsyncRecordBatchStreamReader, Schema } from 'apache-arrow';
 
 export type SingleResult = string | number;
 
