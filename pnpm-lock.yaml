@@ -52,8 +52,8 @@ importers:
         specifier: ^8.57.0
         version: 8.57.0
       eslint-config-prettier:
-        specifier: ^9.1.0
-        version: 9.1.0(eslint@8.57.0)
+        specifier: ^10.1.5
+        version: 10.1.5(eslint@8.57.0)
       eslint-plugin-svelte:
         specifier: ^2.35.1
         version: 2.46.1(eslint@8.57.0)(svelte@4.2.19)
@@ -125,8 +125,8 @@ importers:
         specifier: ^9.20.0
         version: 9.20.0
       eslint-config-prettier:
-        specifier: ^10.0.0
-        version: 10.0.1(eslint@9.20.0)
+        specifier: ^10.1.5
+        version: 10.1.5(eslint@9.20.0)
       eslint-plugin-svelte:
         specifier: ^2.46.1
         version: 2.46.1(eslint@9.20.0)(svelte@4.2.19)
@@ -1194,14 +1194,8 @@ packages:
     peerDependencies:
       eslint: '>=6.0.0'
 
-  eslint-config-prettier@10.0.1:
-    resolution: {integrity: sha512-lZBts941cyJyeaooiKxAtzoPHTN+GbQTJFAIdQbRhA4/8whaAraEh47Whw/ZFfrjNSnlAxqfm9i0XVAEkULjCw==}
-    hasBin: true
-    peerDependencies:
-      eslint: '>=7.0.0'
-
-  eslint-config-prettier@9.1.0:
-    resolution: {integrity: sha512-NSWl5BFQWEPi1j4TjVNItzYV7dZXZ+wP6I6ZhrBGpChQhZRUaElihE9uRRkcbRnNb76UMKDF3r+WTmNcGPKsqw==}
+  eslint-config-prettier@10.1.5:
+    resolution: {integrity: sha512-zc1UmCpNltmVY34vuLRV61r1K27sWuX39E+uyUnY8xS2Bex88VV9cugG+UZbRSRGtGyFboj+D8JODyme1plMpw==}
     hasBin: true
     peerDependencies:
       eslint: '>=7.0.0'
@@ -3929,13 +3923,13 @@ snapshots:
       eslint: 9.20.0
       semver: 7.7.1
 
-  eslint-config-prettier@10.0.1(eslint@9.20.0):
-    dependencies:
-      eslint: 9.20.0
-
-  eslint-config-prettier@9.1.0(eslint@8.57.0):
+  eslint-config-prettier@10.1.5(eslint@8.57.0):
     dependencies:
       eslint: 8.57.0
+
+  eslint-config-prettier@10.1.5(eslint@9.20.0):
+    dependencies:
+      eslint: 9.20.0
 
   eslint-plugin-svelte@2.46.1(eslint@8.57.0)(svelte@4.2.19):
     dependencies:
