@@ -1,5 +1,10 @@
 packages:
-  - 'packages/*'
-  - 'playgrounds/*'
-  - 'examples/*'
+  - packages/*
+  - playgrounds/*
+  - examples/*
   - '!**/test/**'
+
+onlyBuiltDependencies:
+  - '@swc/core'
+  - esbuild
+  - svelte-preprocess
