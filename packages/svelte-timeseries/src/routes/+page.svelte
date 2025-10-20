@@ -15,7 +15,6 @@
 
 	onMount(async () => {
 		baseUrl = window.location.href;
-		//
 		setTimeout(() => {
 			const select = document.querySelector('select') as HTMLSelectElement;
 			if (select && select.options.length > 1) {
@@ -34,7 +33,10 @@
 				>Sample 1: One week of BTC/USDT ticker prices+indicators - 10M timestamps -</option
 			>
 			<option value="{baseUrl}temps_gzip.parquet"
-				>Sample 2: Temperatures sample 2 (gzip) - 1M timestamps -</option
+				>Sample 2: Temperatures sample (gzip) - 1M timestamps -</option
+			>
+			<option value="{baseUrl}temps_gzip_mini.parquet"
+				>Sample 3: Temperatures sample 2 (gzip) - 100 timestamps -</option
 			>
 		</select>
 	</div>
@@ -46,6 +48,8 @@
 	.container {
 		margin: 0 auto;
 		padding: 20px;
+		height: 80vh;
+		box-sizing: border-box;
 	}
 	h1 {
 		text-align: center;
