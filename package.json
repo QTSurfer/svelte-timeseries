@@ -27,6 +27,8 @@
     "check": "pnpm -r check",
     "clean": "pnpm -r clean",
     "clear": "pnpm -r clear",
+    "dev:ts": "pnpm -F @qtsurfer/svelte-timeseries dev",
+    "dev:charts": "pnpm -F @qtsurfer/sveltecharts dev",
     "test": "pnpm -r --filter=./packages/* test",
     "build": "pnpm -r --filter=./packages/* build",
     "build:examples": "pnpm -r --filter=./examples/* build",
