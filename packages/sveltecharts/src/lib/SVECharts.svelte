@@ -1,6 +1,6 @@
 <script lang="ts" context="module">
 	import { init, use } from 'echarts/core';
-	import { LineChart } from 'echarts/charts';
+	import { LineChart, BarChart } from 'echarts/charts';
 	import {
 		DataZoomComponent,
 		LegendComponent,
@@ -15,6 +15,7 @@
 	// Register the required components
 	use([
 		LineChart,
+		BarChart,
 		DataZoomComponent,
 		LegendComponent,
 		TitleComponent,
@@ -114,6 +115,10 @@
 <style>
 	.echarts {
 		width: 100%;
-		height: 75vh;
+		height: 100%;
+		min-height: 300px;
+		position: relative;
+		z-index: 1;
+		margin-top: 1rem;
 	}
 </style>
