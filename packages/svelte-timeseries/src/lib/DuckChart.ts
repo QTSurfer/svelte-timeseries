@@ -169,8 +169,8 @@ export class DuckChart {
 			this.globalTimestamps.push(...dateArray);
 			this.globalSource[0] = this.globalTimestamps;
 
-			const batchPrice = batch.data.children[1].values; // main column
-			this.globalSource[1].push(...batchPrice);
+			const batchMain = batch.data.children[1].values; // main column
+			this.globalSource[1].push(...batchMain);
 		}
 
 		const endTime = performance.now();
@@ -204,6 +204,7 @@ export class DuckChart {
 		if (this.debug) {
 			console.log('Query:', query);
 			console.log('Loading range:', startTs, endTs);
+			console.log('Selected fields:', selectedFields);
 		}
 
 		const detailSource: DataSource = {};
@@ -263,12 +264,14 @@ export class DuckChart {
 
 		this.option.series = newSeries;
 		this.option.legend = {
-			data: [this.mainColumn, ...selectedFields.map((f) => f.name)]
+			data: [...selectedFields.map((f) => f.name)]
 		};
 
 		const endTime = performance.now();
-		if (this.debug)
+		if (this.debug) {
 			console.log(`Range data loaded: ${rowsCount} rows in ${endTime - startTime} ms`);
+			console.log('Option:', this.option);
+		}
 	}
 
 	/**
