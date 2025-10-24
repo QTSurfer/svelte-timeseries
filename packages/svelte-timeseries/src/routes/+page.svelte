@@ -41,7 +41,9 @@
 		</select>
 	</div>
 
-	<SvelteTimeSeries {url} debug />
+	{#if url}
+		<SvelteTimeSeries {url} debug />
+	{/if}
 </div>
 
 <style>

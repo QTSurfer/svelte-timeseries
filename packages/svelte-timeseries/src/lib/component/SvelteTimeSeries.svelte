@@ -3,48 +3,52 @@
 	import { SVECharts } from '@qtsurfer/sveltecharts';
 	import { DuckChart } from '$lib/DuckChart';
 
-	export let url: string | undefined = undefined;
+	export let url: string;
 	export let debug: boolean = false;
 
 	let chart: SVECharts;
 	let duckChart: DuckChart;
+
+	let initial = false;
 	onMount(async () => {
+		console.log('Mounting SvelteTimeSeries...');
 		duckChart = new DuckChart();
 		duckChart.debug = debug;
-		await duckChart.initDB();
-		loadUrl(url!);
+		await duckChart.initDB(url);
+		initial = true;
 	});
 
+	/**
+	 * @todo Fix this
+	 */
 	const handleDataZoom = (e: CustomEvent) => {
-		let start, end;
-		if (e.detail.batch) {
-			const [info] = e.detail.batch;
-			start = info.start;
-			end = info.end;
-		} else {
-			start = e.detail.start;
-			end = e.detail.end;
-		}
-		duckChart.loadRange(start, end).then(() => {
-			// Force Svelte reactivity
-			// @ts-ignore
-			duckChart.option.dataZoom[0] = { ...duckChart.option.dataZoom[0], start, end };
-			duckChart.option.dataset = duckChart.option.dataset;
-		});
+		// let start, end;
+		// if (e.detail.batch) {
+		// 	const [info] = e.detail.batch;
+		// 	start = info.start;
+		// 	end = info.end;
+		// } else {
+		// 	start = e.detail.start;
+		// 	end = e.detail.end;
+		// }
+		// duckChart.loadRange(start, end).then(() => {
+		// 	// Force Svelte reactivity
+		// 	// @ts-ignore
+		// 	duckChart.option.dataZoom[0] = { ...duckChart.option.dataZoom[0], start, end };
+		// 	duckChart.option.dataset = duckChart.option.dataset;
+		// });
 	};
 
 	const loadUrl = async (url: string) => {
 		if (!url || url === '') return;
 		if (!duckChart) return;
-		chart.clear();
-		duckChart.reset();
-		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
 		chart.showLoading();
+		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
 		await duckChart.load(url);
 		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
 		chart.hideLoading();
 	};
-	$: if (url) {
+	$: if (url && initial) {
 		loadUrl(url);
 	}
 </script>

@@ -14,7 +14,7 @@ export type ColumnConfig = {
 };
 
 export class DuckChart {
-	private db!: DuckDB;
+	private db!: DuckDB<Record<string, string>>;
 	private tsColumn!: string; // Timestamp column name
 	private tsCastType!: string; // Timestamp cast type
 	private mainColumn!: string; // Main column name
@@ -33,6 +33,10 @@ export class DuckChart {
 	private globalSource: DataSource = {};
 	private globalTimestamps: number[] = [];
 
+	/**
+	 * @todo Add support for multiple tables
+	 */
+	private tabaleName = 'signal';
 	constructor() {
 		this.reset();
 	}
@@ -96,8 +100,13 @@ export class DuckChart {
 	}
 
 	/** Initialize DuckDB in WASM */
-	public async initDB(): Promise<void> {
-		this.db = await DuckDB.create(this._debug);
+	public async initDB(url: string): Promise<void> {
+		this.db = await DuckDB.create(
+			{
+				[this.tabaleName]: url
+			},
+			this._debug
+		);
 	}
 
 	/** Enable/disable debug mode */
@@ -119,16 +128,12 @@ export class DuckChart {
 	 * This is to have a minimal dataset for dataZoom or global timeline.
 	 */
 	public async load(url: string, columnConfig?: ColumnConfig): Promise<void> {
-		if (this.db.table === url) {
-			return;
-		}
-		this.db.table = url;
 		this.reset();
 		await this.detectFields(columnConfig);
 
 		const query = `
             SELECT ${this.getTsCast()}, "${this.mainColumn}"
-            FROM "${this.db.table}"
+            FROM "${this.tabaleName}"
             WHERE "${this.mainColumn}" != 0
             ORDER BY "${this.tsColumn}"
         `;
@@ -155,6 +160,7 @@ export class DuckChart {
 				lineStyle: { width: 3, opacity: 1, color: '#8d8' }
 			}
 		];
+
 		this.option.dataset = [globalDataset];
 		this.option.legend = {
 			data: [this.mainColumn]
@@ -178,7 +184,12 @@ export class DuckChart {
 			console.log(
 				`Global data loaded. Rows: ${this.globalTimestamps.length} in ${endTime - startTime} ms`
 			);
-		await this.loadRange(this.zoomStart, this.zoomEnd);
+
+		/**
+		 * Load first 100%
+		 * @todo: Optimize to load only the range
+		 */
+		await this.loadRange(0, 100);
 	}
 
 	/**
@@ -186,16 +197,21 @@ export class DuckChart {
 	 * Uses the stored mainFields/percentFields for a generic approach.
 	 * @param start Start percentage (0-100)
 	 * @param end End percentage (0-100)
+	 *
+	 *
+	 * @todo: Optimize to load only the range
 	 */
+
 	public async loadRange(start: number, end: number): Promise<void> {
 		const startTs = this.percentToTimestamp(start);
 		const endTs = this.percentToTimestamp(end);
 
 		const selectedFields = [...this.mainFields, ...this.percentFields];
+
 		const fieldsStr = selectedFields.map((f) => `"${f.name}"`).join(',');
 		const query = `
             SELECT ${this.getTsCast()}, ${fieldsStr}
-            FROM "${this.db.table}"
+            FROM "${this.tabaleName}"
             WHERE ${this.getTsCast()} >= ${this.getTsValueCast(startTs)} 
 			AND ${this.getTsCast()} <= ${this.getTsValueCast(endTs)} 
 			AND "${this.mainColumn}" != 0
@@ -214,6 +230,7 @@ export class DuckChart {
 		});
 
 		const startTime = performance.now();
+
 		const results = await this.db.queryBatch(query);
 		let rowsCount = 0;
 
@@ -279,7 +296,7 @@ export class DuckChart {
 	 * This is a generic metadata step.
 	 */
 	private async detectFields(columnConfig?: ColumnConfig): Promise<void> {
-		this.columns = await this.db.getColumnNames();
+		this.columns = this.db.getColumns(this.tabaleName);
 		this.indexedFields = this.columns.map((name, idx) => ({ idx, name }));
 
 		this.mainFields = this.indexedFields.filter(
@@ -291,9 +308,9 @@ export class DuckChart {
 		this.tsColumn = columnConfig?.tsColumn ?? this.columns[0];
 		this.mainColumn = columnConfig?.mainColumn ?? this.mainFields[1].name;
 		this.mainFields = this.mainFields.filter((f) => f.name !== this.tsColumn); // Remove timestamp from main fields
-		this.tsCastType = await this.getTimestampCastType();
+		this.tsCastType = this.getTimestampCastType();
 		if (this.debug) {
-			console.log('Schema:', await this.db.getSchema());
+			console.log('Schema:', this.db.getSchema(this.tabaleName));
 			console.log('Columns:', this.columns);
 			console.log('Main fields:', this.mainFields);
 			console.log('Percent fields:', this.percentFields);
@@ -304,7 +321,7 @@ export class DuckChart {
 	}
 
 	private getTimestampCastType(): string {
-		const typeName = this.db.getColumnTypeName(this.tsColumn).toLowerCase();
+		const typeName = this.db.getColumnTypeName(this.tabaleName, this.tsColumn).toLowerCase();
 		if (this.debug) console.log('Timestamp column type:', typeName);
 		return typeName;
 	}
@@ -321,11 +338,11 @@ export class DuckChart {
 		return `"${this.tsColumn}"`;
 	}
 
-	private getTsValueCast(ts: number): string {
+	private getTsValueCast(ts: number): number {
 		if (this.tsCastType.startsWith('timestamp')) {
-			return (ts / 1000).toString();
+			return Math.round(ts);
 		}
-		return ts.toString();
+		return Math.round(ts); // ts;
 	}
 
 	/**
