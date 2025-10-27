@@ -1,110 +1,344 @@
-import type { Table } from 'apache-arrow/table';
 import { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import type { AsyncRecordBatchStreamReader, Schema } from 'apache-arrow';
+import type { Schema } from 'apache-arrow';
+import { createAsyncDuckDB } from './duckdb-wasm';
 
 export type SingleResult = string | number;
 
-export class DuckDB {
-	private db: AsyncDuckDB;
-	private conn!: AsyncDuckDBConnection;
-	private _table!: string;
-	private _schema?: Schema;
-	private _columns?: string[];
-	public debug = false;
+type Tables = Record<string, string>;
+type ColumsSchema = { name: string; type: string }[];
 
-	private constructor(db: AsyncDuckDB) {
-		this.db = db;
-	}
+type EpochUnit = 's' | 'ms' | 'us' | 'ns';
 
-	static async create(debug: boolean = false): Promise<DuckDB> {
-		return new Promise<DuckDB>((resolve, reject) => {
-			if (!window) reject('DuckDB only works in a browser environment.');
-			else if (window.Worker) {
-				try {
-					const t0 = performance.now();
-					import('./duckdb-wasm')
-						.then((module) => module.createAsyncDuckDB())
-						.then((db) => {
-							const t1 = performance.now();
-							if (debug) console.log(`DuckDB loaded in ${t1 - t0} ms.`);
-							const duckdb = new DuckDB(db);
-							duckdb.debug = debug;
-							resolve(duckdb);
-						})
-						.catch((err) => {
-							console.error('DuckDB load error!', err);
-							reject(err);
-						});
-				} catch (err) {
-					reject(err);
-				}
-			} else reject('No worker support?');
-		});
-	}
+type DuckDBType =
+	| 'BOOLEAN'
+	| 'TINYINT'
+	| 'SMALLINT'
+	| 'INTEGER'
+	| 'BIGINT'
+	| 'HUGEINT'
+	| 'REAL'
+	| 'DOUBLE'
+	| 'DECIMAL'
+	| 'VARCHAR'
+	| 'DATE'
+	| 'TIMESTAMP'
+	| 'BLOB'
+	| 'JSON';
 
-	set table(name: string) {
-		this._table = name;
-		this._schema = undefined;
-		this._columns = undefined;
-	}
+// Allows you to specify TIMESTAMP with unit: 'TIMESTAMP(ms)' etc.
+type TargetType = DuckDBType | `TIMESTAMP(${EpochUnit})`;
 
-	get table(): string {
-		return this._table;
-	}
+export class DuckDB<T extends Tables> {
+	private _conn?: AsyncDuckDBConnection;
+	private _schemas: Partial<Record<keyof T, Schema>> = {};
+	private _versionDb?: string;
 
-	async open(): Promise<void> {
-		if (this.conn !== undefined) return;
+	private constructor(
+		private db: AsyncDuckDB,
+		private _tables: T,
+		public debug: boolean,
+		private _tsColumn: string = '_ts'
+	) {}
+
+	/** Create a new DuckDB instance */
+	static async create<T extends Tables>(tables: T, debug: boolean = false): Promise<DuckDB<T>> {
+		if (!window) throw new Error('DuckDB only works in a browser environment.');
+		if (!window.Worker) throw new Error('No worker support?');
+		if (debug) console.log('Loading DuckDB...');
+
 		const t0 = performance.now();
-		this.conn = await this.db.connect();
+		const db = await createAsyncDuckDB();
+		const instance = new DuckDB<T>(db, tables, debug);
+		await instance.load();
 		const t1 = performance.now();
-		if (this.debug) console.log(`DuckDB ${await this.db.getVersion()} connected in ${t1 - t0} ms.`);
+		if (debug) console.log(`DuckDB loaded in ${t1 - t0} ms.`);
+		return instance;
 	}
 
-	async close(): Promise<void> {
-		if (this.conn !== undefined) {
-			return await this.conn.close();
+	/**
+	 * Get the schema for a table
+	 */
+	getSchema(table: keyof T) {
+		if (!this._schemas[table]) throw new Error(`Schema for ${String(table)} not initialized`);
+		return this._schemas[table];
+	}
+
+	/**
+	 * Get the column names for a table
+	 */
+	getColumns(table: keyof T): string[] {
+		return this.getSchema(table).fields.map((f) => f.name);
+	}
+
+	/**
+	 * Get the URL for a table
+	 */
+	getTableUrl(table: keyof T): string {
+		return this._tables[table];
+	}
+
+	/**
+	 * Close the connection to the database
+	 */
+	async closeConnection(): Promise<void> {
+		if (this._conn) {
+			await this._conn.close();
 		}
 	}
 
-	async query(statement: string): Promise<Table> {
-		await this.open();
-		const t0 = performance.now();
-		const result = await this.conn.query(statement);
-		const t1 = performance.now();
-		if (this.debug) console.log(`DuckDB query (${statement}) executed in ${t1 - t0} ms.`);
-		return result;
+	/**
+	 *  Execute a query
+	 */
+	async query(sql: string) {
+		return await this.execute((conn) => conn.query(sql), 'query');
 	}
 
-	async queryBatch(statement: string): Promise<AsyncRecordBatchStreamReader> {
-		await this.open();
-		const result = this.conn.send(statement);
-		return result;
+	/**
+	 * Execute a batch of queries
+	 */
+	async queryBatch(statement: string) {
+		return this.execute((conn) => conn.send(statement), 'queryBatch');
 	}
 
+	/**
+	 * Get a range of data
+	 * @param table The table to get the data from
+	 * @param start The start of the range (inclusive) as a timestamp
+	 * @param end The end of the range as a timestamp
+	 */
+	async getRangeData(table: keyof T, start: number | string, end: number | string, limit?: number) {
+		const view = this.escapeIdent(String(table));
+
+		const startExp = typeof start === 'string' ? `'${start}'` : `${start}`;
+		const endtExp = typeof end === 'string' ? `'${end}'` : `${end}`;
+		const limitClause = limit ? `LIMIT ${limit}` : '';
+
+		const sql = `
+			SELECT *
+			FROM ${view}
+			WHERE ${this._tsColumn} >= ${startExp} AND ${this._tsColumn} < ${endtExp}
+			ORDER BY "${this._tsColumn}"
+			${limitClause};
+		`;
+
+		return await this.queryBatch(sql);
+	}
+
+	/**
+	 * Get a single value
+	 */
 	async getSingle<SingleResult>(query: string): Promise<SingleResult> {
 		const result = await this.query(query);
 		return result.getChildAt(0)?.get(0);
 	}
 
-	async count(): Promise<number> {
-		return Number(await this.getSingle(`select count(*) from '${this._table}'`));
+	/**
+	 * Count the number of rows in a table
+	 */
+	async count(table: keyof typeof this._tables): Promise<number> {
+		return Number(await this.getSingle(`select count(*) from '${this._tables[table]}'`));
 	}
 
-	async getSchema(): Promise<Schema> {
-		if (this._schema === undefined) {
-			this._schema = (await this.query(`select * from '${this._table}' limit 1`)).schema;
+	/**
+	 * Get the type of a column
+	 */
+	getColumnTypeName(table: keyof typeof this._tables, column: string): string {
+		return (
+			this.getSchema(table)
+				.fields.find((f) => f.name === column)
+				?.type.toString() ?? ''
+		);
+	}
+
+	/**
+	 * Escape an identifier
+	 */
+	private escapeIdent(ident: string): string {
+		// escape simple para identificadores
+		return `"${ident.replace(/"/g, '""')}"`;
+	}
+
+	/**
+	 * Register the tables and schemas in the database
+	 */
+	private async registerData() {
+		for (const [name, url] of Object.entries(this._tables) as [keyof T, string][]) {
+			await this.buildTablesAndSchemas(name.toString(), url);
 		}
-		return this._schema;
 	}
 
-	async getColumnNames(): Promise<string[]> {
-		if (this._columns === undefined) {
-			this._columns = (await this.getSchema()).fields.map((f) => f.name);
+	/**
+	 * Build the tables and schemas for the database
+	 *
+	 * @param name The name of the table
+	 * @param url The url of the table
+	 * @private
+	 */
+	private async buildTablesAndSchemas(name: keyof T, url: string) {
+		return await this.execute(async (conn) => {
+			if (this.debug) console.log('Registering tables and schemas...');
+
+			const viewName = String(name);
+			const tempViewName = `__temp_${viewName}`;
+
+			// Create temp view from parquet file
+			await conn.query(
+				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT * FROM parquet_scan('${url}')`
+			);
+
+			// detected the initial schema of the temp view
+			const initialSchemaData = await conn.query(`
+						SELECT column_name AS name, data_type AS type
+						FROM information_schema.columns
+						WHERE table_name = '${tempViewName}'
+						`);
+
+			const initialSchema: ColumsSchema = initialSchemaData.toArray();
+
+			// use the initial schema to build the casted select
+			const targetCasts = this.autoDetectFields(initialSchema);
+
+			// Build the casted select
+			const castedSelect = this.buildCastedSelect(tempViewName, targetCasts);
+
+			// Create final view
+			await conn.query(`CREATE OR REPLACE VIEW ${this.escapeIdent(viewName)} AS ${castedSelect}`);
+
+			// Get the final schema
+			const { schema: finalSchema } = await conn.query(
+				`SELECT * FROM ${this.escapeIdent(viewName)} LIMIT 0`
+			);
+
+			if (this.debug) {
+				console.log(`Registered table ${viewName}`);
+			}
+
+			this._schemas[name] = finalSchema;
+
+			// Store the final schema
+			return finalSchema;
+		}, 'buildTablesAndSchemas - ' + name.toString());
+	}
+
+	/**
+	 * Load the database
+	 */
+	private async load() {
+		await this.registerData();
+	}
+
+	/**
+	 * Get the version of the database
+	 */
+	private async getVersion(): Promise<string> {
+		if (!this._versionDb) {
+			this._versionDb = await this.db.getVersion();
 		}
-		return this._columns;
+		return this._versionDb;
 	}
 
-	getColumnTypeName(column: string): string {
-		return this._schema?.fields.find((f) => f.name === column)?.type.toString() ?? '';
+	/**
+	 * Get the tables
+	 */
+	get tables() {
+		return this._tables;
+	}
+
+	/**
+	 * Execute a function on the DuckDB connection.
+	 */
+	private async execute<R>(
+		fn: (connection: AsyncDuckDBConnection, db: AsyncDuckDB) => Promise<R>,
+		label: string = 'query'
+	): Promise<R> {
+		const t0 = performance.now();
+
+		if (!this._conn) {
+			this._conn = await this.db.connect();
+		}
+
+		try {
+			const result = await fn(this._conn, this.db);
+			return result;
+		} finally {
+			const t1 = performance.now();
+			if (this.debug) {
+				const version = await this.getVersion();
+				console.log(`DuckDB ${version} ${label} in ${(t1 - t0).toFixed(1)} ms.`);
+			}
+		}
+	}
+
+	/**
+	 * Convert a column from epoch to timestamp
+	 */
+	private sqlTimestampFromEpoch(colSQL: string, unit: EpochUnit): string {
+		if (unit === 'ms') return `epoch_ms(${colSQL})`;
+		if (unit === 's') return `TIMESTAMP '1970-01-01' + (${colSQL} * INTERVAL 1 SECOND)`;
+		if (unit === 'us') return `TIMESTAMP '1970-01-01' + (${colSQL} * INTERVAL 1 MICROSECOND)`;
+		// ns → μs
+		return `TIMESTAMP '1970-01-01' + ((${colSQL} / 1000) * INTERVAL 1 MICROSECOND)`;
+	}
+
+	/**
+	 * Automatically detect the type of each column
+	 */
+	private autoDetectFields(fields: ColumsSchema): Record<string, TargetType> {
+		const casts: Record<string, TargetType> = {};
+
+		fields.forEach((f, idx) => {
+			if (idx === 0) {
+				// The first column is the timestamp
+				casts[f.name] = 'TIMESTAMP';
+				return;
+			}
+
+			if (f.name.endsWith('%')) {
+				casts[f.name] = 'DOUBLE';
+				return;
+			}
+
+			if (f.name === '_m') {
+				casts[f.name] = 'JSON';
+				return;
+			}
+
+			//
+			casts[f.name] = (f.type?.toString()?.toUpperCase() as DuckDBType) ?? 'VARCHAR';
+		});
+
+		return casts;
+	}
+
+	/**
+	 * Build the casted type
+	 */
+	private buildCastedSelect(tempViewName: string, casts: Record<string, TargetType>): string {
+		// Build the casted select
+		const parts: string[] = [];
+
+		for (const [col, target] of Object.entries(casts)) {
+			const colSQL = this.escapeIdent(col);
+
+			// Timestamp with unit
+			const m = typeof target === 'string' ? target.match(/^TIMESTAMP\((s|ms|us|ns)\)$/i) : null;
+			if (m) {
+				const unit = m[1].toLowerCase() as EpochUnit;
+				parts.push(`${this.sqlTimestampFromEpoch(colSQL, unit)} AS ${colSQL}`);
+				continue;
+			}
+
+			// TIMESTAMP Without unit
+			if (target === 'TIMESTAMP') {
+				parts.push(`${colSQL} AS ${colSQL}`);
+				continue;
+			}
+
+			// Other types
+			parts.push(`CAST(${colSQL} AS ${target}) AS ${colSQL}`);
+		}
+
+		// Build the select
+		return `SELECT ${parts.join(', ')} FROM ${this.escapeIdent(tempViewName)}`;
 	}
 }
