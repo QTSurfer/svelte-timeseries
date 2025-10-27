@@ -1,6 +1,6 @@
 {
 	"name": "@qtsurfer/sveltecharts",
-	"version": "0.3.5",
+	"version": "0.3.6",
 	"author": {
 		"name": "QTSurfer",
 		"url": "https://github.com/QTSurfer"
@@ -51,9 +51,9 @@
 		"@eslint/eslintrc": "^3.2.0",
 		"@eslint/js": "^9.20.0",
 		"@sveltejs/adapter-auto": "^3.3.1",
-		"@sveltejs/kit": "^2.17.1",
+		"@sveltejs/kit": "^2.48.0",
 		"@sveltejs/package": "^2.3.10",
-		"@sveltejs/vite-plugin-svelte": "^3.1.2",
+		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@types/eslint": "^9.6.1",
 		"@types/node": "^22.13.1",
 		"@typescript-eslint/eslint-plugin": "^8.23.0",
@@ -65,14 +65,15 @@
 		"prettier": "^3.5.0",
 		"prettier-plugin-svelte": "^3.3.3",
 		"publint": "^0.3.4",
-		"svelte": "^4.2.19",
+		"svelte": "^5.42.2",
 		"svelte-check": "^3.8.6",
 		"typescript": "^5.7.3",
-		"vite": "^5.4.14",
-		"vitest": "^1.6.1"
+		"vite": "^6.4.1",
+		"vitest": "^4.0.4"
 	},
 	"dependencies": {
-		"echarts": "^5.6.0"
+		"echarts": "^6.0.0",
+		"vite-plugin-svelte": "^3.0.1"
 	},
 	"svelte": "./dist/index.js",
 	"types": "./dist/index.d.ts",
