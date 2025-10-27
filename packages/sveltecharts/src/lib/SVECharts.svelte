@@ -1,4 +1,4 @@
-<script lang="ts" context="module">
+<script lang="ts" module>
 	import { init, use } from 'echarts/core';
 	import { LineChart, BarChart } from 'echarts/charts';
 	import {
@@ -35,11 +35,11 @@
 		option: EChartsOption;
 	};
 
-	export type DataRange = {
-		start: number;
-		end: number;
-	};
-	export type DataZoomEvent = CustomEvent<DataRange>;
+	export type DataRange = { start: number; end: number };
+	export type DataZoomEventSingle = { batch?: never } & DataRange;
+	export type DataZoomEventBatch = { batch: DataRange[]; start?: never; end?: never };
+
+	export type DataZoomEvent = DataZoomEventBatch | DataZoomEventSingle;
 
 	const DEFAULT_CONFIG: Partial<EChartsConfig> = {
 		theme: undefined,
@@ -48,15 +48,33 @@
 </script>
 
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	let {
+		config = DEFAULT_CONFIG,
+		option,
+		onDataZoom,
+		onClear = $bindable(),
+		onShowLoading = $bindable(),
+		onHideLoading = $bindable()
+	}: {
+		config?: typeof DEFAULT_CONFIG;
+		option: EChartsOption;
+		onDataZoom?: (event: DataZoomEventSingle) => void;
+		onClear?: () => void;
+		onShowLoading?: () => void;
+		onHideLoading?: () => void;
+	} = $props();
 
-	export let option: EChartsOption;
-	export let { theme, renderer } = DEFAULT_CONFIG;
-
+	let { theme, renderer } = config;
 	let instance: ECharts;
-	const dispatch = createEventDispatcher();
-	const handleDataZoom = (event: any) => {
-		let start, end;
+
+	const handleDataZoom = (zoomEvent: unknown) => {
+		if (!onDataZoom) {
+			return;
+		}
+
+		const event = zoomEvent as DataZoomEvent;
+		let start: number, end: number;
+
 		if (event.batch) {
 			const [info] = event.batch;
 			start = info.start;
@@ -65,10 +83,11 @@
 			start = event.start;
 			end = event.end;
 		}
-		dispatch('datazoom', { event, start, end });
+
+		onDataZoom({ start, end });
 	};
 
-	export function chartAction(element: HTMLElement, echartsConfig: EChartsConfig) {
+	function chartAction(element: HTMLElement, echartsConfig: EChartsConfig) {
 		const { theme, renderer, option } = {
 			...DEFAULT_CONFIG,
 			...echartsConfig
@@ -81,6 +100,18 @@
 		window.addEventListener('resize', handleResize);
 		instance.setOption(option);
 		instance.on('datazoom', handleDataZoom);
+
+		onShowLoading = (text?: string) => {
+			instance.showLoading?.({ text: text || '' });
+		};
+
+		onHideLoading = () => {
+			instance.hideLoading();
+		};
+
+		onClear = () => {
+			instance.clear();
+		};
 
 		return {
 			destroy() {
@@ -97,17 +128,13 @@
 		};
 	}
 
-	export function clear() {
-		instance.clear();
-	}
-
-	export function showLoading(text?: string) {
-		instance.showLoading({ text: text || '' });
-	}
-
-	export function hideLoading() {
-		instance.hideLoading();
-	}
+	$effect(() => {
+		if (instance) {
+			instance.setOption({
+				...option
+			});
+		}
+	});
 </script>
 
 <div id="chart" class="echarts" use:chartAction={{ renderer, theme, option }}></div>
