@@ -10,14 +10,12 @@
 	let duckChart: DuckChart;
 
 	let loading = false;
-	let initial = false;
 
 	onMount(async () => {
 		console.log('Mounting SvelteTimeSeries...');
 		duckChart = new DuckChart();
 		duckChart.debug = debug;
-		await duckChart.initDB(url);
-		initial = true;
+		loadUrl(url);
 	});
 
 	/**
@@ -45,12 +43,12 @@
 		if (!url || url === '') return;
 		if (!duckChart) return;
 		loading = true;
-		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
+		await duckChart.initDB(url);
 		await duckChart.load(url);
 		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
 		loading = false;
 	};
-	$: if (url && initial) {
+	$: if (url) {
 		loadUrl(url);
 	}
 </script>
