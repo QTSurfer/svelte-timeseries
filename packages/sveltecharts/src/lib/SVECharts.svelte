@@ -128,7 +128,9 @@
 
 	$effect(() => {
 		if (!instance || !option) return;
-		instance.setOption(option);
+		instance.setOption(option, {
+			notMerge: true
+		});
 	});
 </script>
 
