@@ -163,6 +163,7 @@ export class DuckChart {
 
 		this.option.dataset = [globalDataset];
 		this.option.legend = {
+			top: 'top',
 			data: [this.mainColumn]
 		};
 
@@ -281,6 +282,7 @@ export class DuckChart {
 
 		this.option.series = newSeries;
 		this.option.legend = {
+			top: 'top',
 			data: [...selectedFields.map((f) => f.name)]
 		};
 
