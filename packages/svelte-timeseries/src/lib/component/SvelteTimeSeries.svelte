@@ -9,7 +9,9 @@
 	let chart: SVECharts;
 	let duckChart: DuckChart;
 
+	let loading = false;
 	let initial = false;
+
 	onMount(async () => {
 		console.log('Mounting SvelteTimeSeries...');
 		duckChart = new DuckChart();
@@ -21,32 +23,32 @@
 	/**
 	 * @todo Fix this
 	 */
-	const handleDataZoom = (e: CustomEvent) => {
-		// let start, end;
-		// if (e.detail.batch) {
-		// 	const [info] = e.detail.batch;
-		// 	start = info.start;
-		// 	end = info.end;
-		// } else {
-		// 	start = e.detail.start;
-		// 	end = e.detail.end;
-		// }
-		// duckChart.loadRange(start, end).then(() => {
-		// 	// Force Svelte reactivity
-		// 	// @ts-ignore
-		// 	duckChart.option.dataZoom[0] = { ...duckChart.option.dataZoom[0], start, end };
-		// 	duckChart.option.dataset = duckChart.option.dataset;
-		// });
-	};
+	// const handleDataZoom = (e: CustomEvent) => {
+	// let start, end;
+	// if (e.detail.batch) {
+	// 	const [info] = e.detail.batch;
+	// 	start = info.start;
+	// 	end = info.end;
+	// } else {
+	// 	start = e.detail.start;
+	// 	end = e.detail.end;
+	// }
+	// duckChart.loadRange(start, end).then(() => {
+	// 	// Force Svelte reactivity
+	// 	// @ts-ignore
+	// 	duckChart.option.dataZoom[0] = { ...duckChart.option.dataZoom[0], start, end };
+	// 	duckChart.option.dataset = duckChart.option.dataset;
+	// });
+	// };
 
 	const loadUrl = async (url: string) => {
 		if (!url || url === '') return;
 		if (!duckChart) return;
-		chart.showLoading();
+		loading = true;
 		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
 		await duckChart.load(url);
 		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
-		chart.hideLoading();
+		loading = false;
 	};
 	$: if (url && initial) {
 		loadUrl(url);
@@ -54,5 +56,5 @@
 </script>
 
 {#if duckChart?.option}
-	<SVECharts bind:this={chart} option={duckChart?.option} on:datazoom={handleDataZoom} />
+	<SVECharts bind:this={chart} option={duckChart?.option} {loading} />
 {/if}

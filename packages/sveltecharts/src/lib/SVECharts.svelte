@@ -43,7 +43,8 @@
 
 	const DEFAULT_CONFIG: Partial<EChartsConfig> = {
 		theme: undefined,
-		renderer: 'canvas'
+		renderer: 'canvas',
+		option: {}
 	};
 </script>
 
@@ -52,16 +53,14 @@
 		config = DEFAULT_CONFIG,
 		option,
 		onDataZoom,
-		onClear = $bindable(),
-		onShowLoading = $bindable(),
-		onHideLoading = $bindable()
+		loading = $bindable(false),
+		onClear = $bindable()
 	}: {
 		config?: typeof DEFAULT_CONFIG;
 		option: EChartsOption;
 		onDataZoom?: (event: DataZoomEventSingle) => void;
+		loading?: boolean;
 		onClear?: () => void;
-		onShowLoading?: () => void;
-		onHideLoading?: () => void;
 	} = $props();
 
 	let { theme, renderer } = config;
@@ -92,6 +91,7 @@
 			...DEFAULT_CONFIG,
 			...echartsConfig
 		};
+
 		instance = init(element, theme, { renderer });
 
 		const handleResize = () => {
@@ -100,14 +100,6 @@
 		window.addEventListener('resize', handleResize);
 		instance.setOption(option);
 		instance.on('datazoom', handleDataZoom);
-
-		onShowLoading = (text?: string) => {
-			instance.showLoading?.({ text: text || '' });
-		};
-
-		onHideLoading = () => {
-			instance.hideLoading();
-		};
 
 		onClear = () => {
 			instance.clear();
@@ -129,11 +121,14 @@
 	}
 
 	$effect(() => {
-		if (instance) {
-			instance.setOption({
-				...option
-			});
-		}
+		if (!instance) return;
+		if (loading) instance.showLoading();
+		else instance.hideLoading();
+	});
+
+	$effect(() => {
+		if (!instance || !option) return;
+		instance.setOption(option);
 	});
 </script>
 
