@@ -45,15 +45,17 @@ export class TimeSeriesChartBuilder {
 				{
 					type: 'inside',
 					filterMode: 'filter',
-					throttle: 60,
 					zoomOnMouseWheel: true,
 					moveOnMouseMove: true,
-					moveOnMouseWheel: false
+					realtime: false,
+					start: 32,
+					end: 64
 				},
 				{
 					type: 'slider',
 					show: true,
-					filterMode: 'filter'
+					filterMode: 'filter',
+					realtime: false
 				}
 			],
 			tooltip: {},
@@ -134,7 +136,7 @@ export class TimeSeriesChartBuilder {
 			},
 			connectNulls: false,
 			smooth: false,
-			sampling: 'minmax',
+			sampling: 'lttb',
 			progressive: 10000,
 			progressiveThreshold: 100000,
 			progressiveChunkMode: 'mod',
