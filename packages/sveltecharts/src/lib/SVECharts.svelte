@@ -7,7 +7,10 @@
 		TitleComponent,
 		TooltipComponent,
 		GridComponent,
-		DatasetComponent
+		DatasetComponent,
+		MarkLineComponent,
+		MarkPointComponent,
+		MarkAreaComponent
 	} from 'echarts/components';
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
@@ -23,7 +26,10 @@
 		GridComponent,
 		DatasetComponent,
 		LabelLayout,
-		CanvasRenderer
+		CanvasRenderer,
+		MarkLineComponent,
+		MarkPointComponent,
+		MarkAreaComponent
 	]);
 
 	export type EChartsTheme = string | object;
