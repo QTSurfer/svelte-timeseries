@@ -57,12 +57,24 @@ export class TimeSeriesChartBuilder {
 			xAxis: {
 				type: 'time'
 			},
-			yAxis: {
-				type: 'value',
-				min: 0,
-				scale: true,
-				splitLine: { show: true }
-			},
+			yAxis: [
+				{
+					type: 'value',
+					scale: true,
+					splitLine: { show: false },
+					axisLine: { show: true, lineStyle: { type: 'dashed' } }
+				},
+				{
+					type: 'value',
+					scale: true,
+					splitLine: { show: false },
+					axisLine: { show: true, lineStyle: { type: 'dashed' } },
+					axisLabel: {
+						formatter: '{value} %'
+					},
+					name: '%'
+				}
+			],
 			dataset: { source: [] },
 			series: []
 		};
@@ -107,7 +119,7 @@ export class TimeSeriesChartBuilder {
 		};
 
 		/** Automatically set line width based on number of columns */
-		const lineStyleWidth = Math.max(1, 10 - 1.5 * yDimensions.length);
+		const lineStyleWidth = 1;
 
 		this.option.xAxis = { type: 'time' };
 		this.option.series = yDimensions.map((dim) => ({
