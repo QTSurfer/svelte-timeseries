@@ -1,23 +1,67 @@
-import type { EChartsOption, SeriesOption, LineSeriesOption } from 'echarts';
+import type {
+	EChartsOption,
+	SeriesOption,
+	LineSeriesOption,
+	DataZoomComponentOption
+} from 'echarts';
+import type { GridOption } from 'echarts/types/dist/shared';
+import type { SeriesLabelOption, ZRColor } from 'echarts/types/src/util/types.js';
 
 type Row = number[]; // [time, v1, v2, ...]
+type IconType = 'circle' | 'rect' | 'roundRect' | 'triangle' | 'diamond' | 'pin' | 'arrow' | 'none';
+export type MarkerEvent = {
+	name?: string;
+	xAxis: number[];
+	icon?: IconType;
+	color?: ZRColor;
+};
 
+export type MarkArea = {
+	name?: string;
+	xAxis: [number, number];
+	color?: ZRColor;
+};
 export class TimeSeriesChartBuilder {
 	private option: EChartsOption;
-	private pendingSeriesNames?: string[];
+	private yDimensions?: string[];
 
 	constructor() {
 		this.option = {
-			title: {},
+			animation: false,
+			title: {
+				left: 'center',
+				top: 0
+			},
+			legend: {
+				top: '10%'
+			},
+			grid: {
+				top: '20%',
+				left: 150,
+				right: 150,
+				bottom: '15%'
+			},
+			dataZoom: [
+				{
+					type: 'inside',
+					zoomOnMouseWheel: true,
+					moveOnMouseMove: true,
+					moveOnMouseWheel: false
+				},
+				{
+					type: 'slider',
+					show: true
+				}
+			],
 			tooltip: {},
-			legend: {},
-			grid: {},
 			xAxis: {
 				type: 'time'
 			},
 			yAxis: {
 				type: 'value',
-				scale: true
+				min: 0,
+				scale: true,
+				splitLine: { show: true }
 			},
 			dataset: { source: [] },
 			series: []
@@ -28,35 +72,53 @@ export class TimeSeriesChartBuilder {
 	 * Accepts data as rows: [timestamp, v1, v2, ...]
 	 * Automatically generates line series for each value column (>=1).
 	 */
-	setDataset(data: Row[]): this {
-		this.option.dataset = { source: data };
-
+	setDataset(data: Row[], yDimensions?: string[]): this {
 		// Build series based on number of columns (minus the time column).
 		const columns = Array.isArray(data) && data.length > 0 ? data[0].length : 0;
-		const valueCols = Math.max(0, columns - 1);
+		const totalCol = Math.max(0, columns - 1);
 
-		const series: SeriesOption[] = [];
-		for (let i = 1; i <= valueCols; i++) {
-			const s: LineSeriesOption = {
-				type: 'line',
-				name: `Series ${i}`,
-				encode: { x: 0, y: i },
-				emphasis: { focus: 'series' },
-				showSymbol: false, // good default for dense timeseries
-				sampling: 'lttb' // improves perf for large datasets
-			};
-			series.push(s);
+		if (totalCol !== yDimensions?.length) {
+			throw new Error(
+				`Dimensions length ${yDimensions?.length} does not match total columns ${totalCol}.`
+			);
 		}
-		this.option.series = series;
 
-		// Apply pending series names if they were set before dataset
-		if (this.pendingSeriesNames && Array.isArray(this.option.series)) {
-			const names = this.pendingSeriesNames;
-			this.option.series = (this.option.series as SeriesOption[]).map((s, idx) => ({
-				...(s as object),
-				name: names[idx] ?? (s as any).name
-			})) as SeriesOption[];
-		}
+		/**
+		 * Dimensions are the column names.
+		 * --------------------------------------------------------
+		 * | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |
+		 * --------------------------------------------------------
+		 */
+
+		this.yDimensions = yDimensions;
+
+		/**
+		 * Dataset is an array of rows.
+		 * --------------------------------------------------------------------------------
+		 * Dimensions |    TIME    | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |
+		 * --------------------------------------------------------------------------------
+		 * Source     | 1658870400 |  32.4    |  32.7    |  32.8    |  32.9    |  32.5    |
+		 * --------------------------------------------------------------------------------
+		 */
+
+		this.option.dataset = {
+			dimensions: ['time', ...yDimensions],
+			source: data
+		};
+
+		/** Automatically set line width based on number of columns */
+		const lineStyleWidth = Math.max(1, 10 - 1.5 * yDimensions.length);
+
+		this.option.xAxis = { type: 'time' };
+		this.option.series = yDimensions.map((dim) => ({
+			type: 'line',
+			name: dim,
+			encode: { x: 'time', y: dim },
+			emphasis: {
+				focus: 'series'
+			},
+			lineStyle: { width: lineStyleWidth }
+		}));
 
 		return this;
 	}
@@ -75,11 +137,10 @@ export class TimeSeriesChartBuilder {
 	/**
 	 * Legend with a custom icon (e.g., 'circle', 'rect').
 	 */
-	setLegendIcon(icon: string): this {
+	setLegendIcon(icon: IconType): this {
 		this.option.legend = {
-			show: true,
-			icon,
-			top: 10
+			...this.option.legend,
+			icon
 		};
 		return this;
 	}
@@ -87,15 +148,16 @@ export class TimeSeriesChartBuilder {
 	/**
 	 * Adds both inside and slider dataZoom.
 	 */
-	setDataZoom(): this {
-		this.option.dataZoom = [
-			{ type: 'inside' },
-			{
-				type: 'slider',
-				height: 24,
-				bottom: 10
-			}
-		];
+	setDataZoom(zoomOptions: DataZoomComponentOption): this {
+		this.option.dataZoom = zoomOptions;
+		return this;
+	}
+
+	setGrid(gridOption: GridOption): this {
+		this.option.grid = {
+			...this.option.grid,
+			...gridOption
+		};
 		return this;
 	}
 
@@ -104,9 +166,9 @@ export class TimeSeriesChartBuilder {
 	 */
 	setTitle(text: string, subtext?: string): this {
 		this.option.title = {
+			...this.option.title,
 			text,
-			subtext,
-			left: 'center'
+			subtext
 		};
 		return this;
 	}
@@ -125,25 +187,87 @@ export class TimeSeriesChartBuilder {
 	}
 
 	/**
-	 * Sets the display names for the generated series. If called before setDataset,
-	 * names are stored and applied once the dataset creates the series.
-	 */
-	setSeriesNames(names: string[]): this {
-		this.pendingSeriesNames = names;
-		if (Array.isArray(this.option.series) && this.option.series.length > 0) {
-			this.option.series = (this.option.series as SeriesOption[]).map((s, idx) => ({
-				...(s as object),
-				name: names[idx] ?? (s as any).name
-			})) as SeriesOption[];
-		}
-		return this;
-	}
-
-	/**
 	 * Returns the built ECharts option.
 	 */
 	build(): EChartsOption {
 		// Shallow clone is fine for typical ECharts options here.
 		return { ...this.option };
+	}
+
+	/**
+	 * Adds a marker event to the chart.
+	 */
+	addMarkerEvents(data: MarkerEvent[], widthLine: number = 2): this {
+		if (!Array.isArray(this.option.series)) {
+			throw new Error('Series must be an array');
+		}
+
+		for (const event of data) {
+			this.option.series.push({
+				type: 'line',
+				data: [],
+				markLine: {
+					symbol: event.icon || 'none',
+					label: {
+						position: 'end',
+						formatter: event.name || '',
+						fontWeight: 'bold',
+						fontSize: 11
+					},
+					lineStyle: {
+						color: event.color,
+						width: widthLine,
+						type: 'dashed'
+					},
+					data: event.xAxis.map((x) => ({ xAxis: x }))
+				}
+			});
+		}
+
+		return this;
+	}
+
+	/**
+	 * Adds a marker area event to the chart.
+	 */
+	addMarkArea(data: MarkArea[]): this {
+		if (!Array.isArray(this.option.series)) {
+			throw new Error('Series must be an array');
+		}
+
+		for (const event of data) {
+			this.option.series.push({
+				type: 'line',
+				data: [],
+				markArea: {
+					itemStyle: {
+						color: event.color || 'rgba(0, 17, 255, 0.1)'
+					},
+					label: {
+						position: 'top',
+						formatter: event.name || '',
+						fontWeight: 'bold',
+						fontSize: 11
+					},
+					data: [
+						[
+							{
+								xAxis: event.xAxis[0]
+							},
+							{
+								xAxis: event.xAxis[1]
+							}
+						]
+					]
+				}
+			});
+		}
+
+		this.addMarkerEvents(
+			data.map((e) => ({ ...e, name: undefined })),
+			1
+		);
+
+		return this;
 	}
 }
