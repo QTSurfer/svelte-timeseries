@@ -45,7 +45,7 @@ export class TimeSeriesChartBuilder {
 				{
 					type: 'inside',
 					filterMode: 'filter',
-					throttle: 20,
+					throttle: 60,
 					zoomOnMouseWheel: true,
 					moveOnMouseMove: true,
 					moveOnMouseWheel: false
@@ -134,8 +134,8 @@ export class TimeSeriesChartBuilder {
 			},
 			connectNulls: false,
 			smooth: false,
-			sampling: 'lttb',
-			progressive: 100000,
+			sampling: 'minmax',
+			progressive: 10000,
 			progressiveThreshold: 100000,
 			progressiveChunkMode: 'mod',
 			silent: true,
