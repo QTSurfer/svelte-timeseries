@@ -44,13 +44,16 @@ export class TimeSeriesChartBuilder {
 			dataZoom: [
 				{
 					type: 'inside',
+					filterMode: 'filter',
+					throttle: 60,
 					zoomOnMouseWheel: true,
 					moveOnMouseMove: true,
 					moveOnMouseWheel: false
 				},
 				{
 					type: 'slider',
-					show: true
+					show: true,
+					filterMode: 'filter'
 				}
 			],
 			tooltip: {},
@@ -129,6 +132,12 @@ export class TimeSeriesChartBuilder {
 			emphasis: {
 				focus: 'series'
 			},
+			smooth: false,
+			sampling: 'lttb',
+			progressive: 20000,
+			progressiveThreshold: 100000,
+			progressiveChunkMode: 'mod',
+			silent: true,
 			lineStyle: { width: lineStyleWidth }
 		}));
 
