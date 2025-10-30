@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { SVECharts, type EChartsOption } from '$lib';
 	import { TimeSeriesChartBuilder } from '$lib';
-s	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
+	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
 	import { onMount } from 'svelte';
 
 	const createDataSet = (hours: number): Record<string, number>[] => {
