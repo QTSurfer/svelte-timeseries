@@ -5,10 +5,32 @@ import type {
 	DataZoomComponentOption
 } from 'echarts';
 import type { GridOption } from 'echarts/types/dist/shared';
-import type { SeriesLabelOption, ZRColor } from 'echarts/types/src/util/types.js';
+import type {
+	OptionDataItemOriginal,
+	OptionDataValue,
+	OptionSourceData,
+	OptionSourceDataArrayRows,
+	SeriesLabelOption,
+	ZRColor
+} from 'echarts/types/src/util/types.js';
 
 type Row = number[]; // [time, v1, v2, ...]
 type IconType = 'circle' | 'rect' | 'roundRect' | 'triangle' | 'diamond' | 'pin' | 'arrow' | 'none';
+type LabelPosition =
+	| 'top'
+	| 'left'
+	| 'right'
+	| 'bottom'
+	| 'inside'
+	| 'insideLeft'
+	| 'insideRight'
+	| 'insideTop'
+	| 'insideBottom'
+	| 'insideTopLeft'
+	| 'insideBottomLeft'
+	| 'insideTopRight'
+	| 'insideBottomRight';
+
 export type MarkerEvent = {
 	name?: string;
 	xAxis: number[];
@@ -292,6 +314,84 @@ export class TimeSeriesChartBuilder {
 			data.map((e) => ({ ...e, name: undefined })),
 			1
 		);
+
+		return this;
+	}
+
+	addMarkerPoint(
+		data: {
+			dimName: string;
+			timestamp: number;
+			name?: string;
+		},
+		opt: {
+			icon?: IconType;
+			color?: ZRColor;
+			position: LabelPosition;
+		} = {
+			icon: 'pin',
+			position: 'inside'
+		}
+	): this {
+		if (!Array.isArray(this.option.series)) {
+			throw new Error('Series must be an array');
+		}
+
+		if (Array.isArray(this.option.dataset)) {
+			this.option.dataset;
+			throw new Error('Series must be an array');
+		}
+
+		if (!Array.isArray(this.option?.dataset?.source) || !this.option.dataset.dimensions?.length) {
+			throw new Error('No data found');
+		}
+
+		// Search for the dimension
+		const series = this.option.series.find((s: any) => s.name === data.dimName);
+		if (!series) throw new Error(`Dimension ${data.dimName} not found`);
+
+		// Search for the timestamp
+		const dataset = this.option.dataset as { source: number[][] };
+
+		const dataFind =
+			dataset.source.find((row) => {
+				return row[0] === data.timestamp;
+			}) || [];
+
+		if (!dataFind) {
+			throw new Error(`No data found in timestamp ${data.timestamp}`);
+		}
+		const dimensionKey = this.option.dataset.dimensions.findIndex((d) => d === data.dimName);
+		const value = dataFind[dimensionKey];
+
+		if (!value) {
+			throw new Error(`No value found in dimension ${data.dimName}`);
+		}
+
+		// Create markPoint if it doesn't exist
+		if (!series.markPoint) {
+			series.markPoint = {
+				symbol: opt.icon || 'pin',
+				symbolSize: 50,
+				itemStyle: {
+					color: opt.color,
+					borderColor: '#fff',
+					borderWidth: 1
+				},
+				data: [
+					{
+						coord: [data.timestamp, value],
+						label: {
+							show: true,
+							position: opt.position,
+							formatter: data.name ?? value.toFixed(2),
+							fontSize: 12,
+							fontWeight: 'bold'
+						}
+					}
+				]
+			};
+		}
 
 		return this;
 	}
