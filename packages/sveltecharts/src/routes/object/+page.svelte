@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { SVECharts, type EChartsOption } from '$lib';
 	import { TimeSeriesChartBuilder } from '$lib';
-	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
+s	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
 	import { onMount } from 'svelte';
 
-	const createDataSet = (hours: number): number[][] => {
+	const createDataSet = (hours: number): Record<string, number>[] => {
 		// Create random number between min and max
 		const random = (min = 45, max = 50): number => Math.random() * max + min;
 
@@ -17,11 +17,19 @@
 		for (let i = 0; i < hours; i++) {
 			// Add 1 hour
 			const time = new Date(startDate + i * 3600000).getTime();
-			timeSeriesData.push([time, random(), random(), random(), random(), random()]);
+			timeSeriesData.push({
+				_ts: time,
+				col1: random(),
+				col2: random(),
+				col3: random(),
+				col4: random(),
+				col5: random()
+			});
 		}
 
 		return timeSeriesData;
 	};
+
 	const timeSeries = new TimeSeriesChartBuilder();
 
 	let timeSeriesOption: EChartsOption = {};
@@ -30,8 +38,7 @@
 		const totalDays = 60;
 		let dataCount = 1;
 
-		const data = createDataSet(dataCount * totalDays);
-
+		const object = createDataSet(dataCount * totalDays);
 		const yDimensions = ['Column 1', 'Column 2', 'Column 3', 'Column 4', 'Column 5'];
 
 		const marker: MarkerEvent[] = [
@@ -62,8 +69,8 @@
 			}
 		];
 		timeSeries
-			.setTitle('Time Series Data ARRAY', 'Last 24 hours')
-			.setDataset(data, yDimensions)
+			.setTitle('Time Series Data OBJECT', 'Last 24 hours')
+			.setDataset(object, yDimensions, 'TIME')
 			.setAxisTooltip()
 			.setLegendIcon('rect')
 			.setGrid({})
@@ -71,9 +78,12 @@
 			.addMarkerEvents(marker)
 			.addMarkArea(area)
 			.addMarkerPoint({
-				dimName: 'Column 1',
-				timestamp: data[10][0],
-				name: 'Point 1'
+				dimName: 'col1',
+				timestamp: object[10]._ts
+			})
+			.addMarkerPoint({
+				dimName: 'col3',
+				timestamp: object[25]._ts
 			});
 
 		timeSeriesOption = timeSeries.build();
