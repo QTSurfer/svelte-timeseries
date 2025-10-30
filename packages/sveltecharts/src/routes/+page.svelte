@@ -68,7 +68,27 @@
 			.setGrid({})
 			.setSeriesStyle({ smooth: false, symbol: 'none' })
 			.addMarkerEvents(marker)
-			.addMarkArea(area);
+			.addMarkArea(area)
+			.addMarkerPoint(
+				{
+					dimName: 'Column 1',
+					timestamp: new Date(2025, 9, 29, 14, 0, 0).getTime()
+				},
+				{
+					icon: 'pin',
+					position: 'inside'
+				}
+			)
+			.addMarkerPoint(
+				{
+					dimName: 'Column 2',
+					timestamp: new Date(2025, 9, 30, 14, 0, 0).getTime()
+				},
+				{
+					icon: 'circle',
+					position: 'inside'
+				}
+			);
 
 		timeSeriesOption = timeSeries.build();
 
