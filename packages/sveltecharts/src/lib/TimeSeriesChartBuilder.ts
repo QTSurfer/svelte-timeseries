@@ -327,7 +327,7 @@ export class TimeSeriesChartBuilder {
 		opt: {
 			icon?: IconType;
 			color?: ZRColor;
-			position: LabelPosition;
+			position?: LabelPosition;
 		} = {
 			icon: 'pin',
 			position: 'inside'
