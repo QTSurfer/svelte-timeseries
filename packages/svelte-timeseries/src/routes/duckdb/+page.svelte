@@ -36,9 +36,6 @@
 		}));
 		const table = [...normalized.map(Object.values)];
 
-		console.log(table[28000]);
-		console.log(table[29000]);
-
 		timeSeries
 			.setTitle('Price')
 			.setDataset(table, yDimensions)
@@ -49,25 +46,25 @@
 			.addMarkArea([
 				{
 					name: 'Area 1',
-					xAxis: [1690656466993, 1690657470867]
+					xAxis: [table[28000][0], table[29000][0]]
 				}
 			])
 			.addMarkerEvents([
 				{
 					name: 'Event 1',
 					icon: 'circle',
-					xAxis: [1690653457837]
+					xAxis: [table[35000][0]]
 				},
 				{
 					name: 'Event 2',
 					icon: 'circle',
-					xAxis: [1690668504169]
+					xAxis: [table[39000][0]]
 				}
 			])
 			.addMarkerPoint(
 				{
 					dimName: 'price',
-					timestamp: 1690658472642,
+					timestamp: table[35700][0],
 					name: 'Point 1'
 				},
 				{
