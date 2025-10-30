@@ -35,13 +35,45 @@
 			_ts: Number(r._ts)
 		}));
 		const table = [...normalized.map(Object.values)];
+
+		console.log(table[28000]);
+		console.log(table[29000]);
+
 		timeSeries
-			.setTitle('Tempp', 'Last 24 hours')
+			.setTitle('Price')
 			.setDataset(table, yDimensions)
 			.setAxisTooltip()
 			.setLegendIcon('rect')
 			.setGrid({})
-			.setSeriesStyle({ smooth: false, symbol: 'none' });
+			.setSeriesStyle({ smooth: false, symbol: 'none' })
+			.addMarkArea([
+				{
+					name: 'Area 1',
+					xAxis: [1690656466993, 1690657470867]
+				}
+			])
+			.addMarkerEvents([
+				{
+					name: 'Event 1',
+					icon: 'circle',
+					xAxis: [1690653457837]
+				},
+				{
+					name: 'Event 2',
+					icon: 'circle',
+					xAxis: [1690668504169]
+				}
+			])
+			.addMarkerPoint(
+				{
+					dimName: 'price',
+					timestamp: 1690658472642,
+					name: 'Point 1'
+				},
+				{
+					icon: 'pin'
+				}
+			);
 
 		timeSeriesOption = timeSeries.build();
 		loading = false;
