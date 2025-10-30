@@ -31,6 +31,9 @@ type LabelPosition =
 	| 'insideTopRight'
 	| 'insideBottomRight';
 
+type DatasetFormatObject = Record<string, any>[];
+type DatasetFormatArray = number[][];
+
 export type MarkerEvent = {
 	name?: string;
 	xAxis: number[];
@@ -46,6 +49,7 @@ export type MarkArea = {
 export class TimeSeriesChartBuilder {
 	private option: EChartsOption;
 	private yDimensions?: string[];
+	private yDimensionNames?: string[];
 
 	constructor() {
 		this.option = {
@@ -111,25 +115,58 @@ export class TimeSeriesChartBuilder {
 	 * Accepts data as rows: [timestamp, v1, v2, ...]
 	 * Automatically generates line series for each value column (>=1).
 	 */
-	setDataset(data: Row[], yDimensions?: string[]): this {
+	setDataset(
+		data: DatasetFormatArray | DatasetFormatObject,
+		yDimensionsNames?: string[],
+		xAxisName?: string
+	): this {
+		if (!Array.isArray(data)) {
+			throw new Error('Data must be an array');
+		}
+
+		if (data.length < 2) {
+			throw new Error('Minimum data length is 2.');
+		}
+
+		if (this.isNumberArray(data)) {
+			if (!yDimensionsNames?.length) {
+				throw new Error('Requires yDimensionsNames. e.g. ["v1", "v2", "v3"]');
+			}
+			this.setDatasetByArray(data, yDimensionsNames, xAxisName);
+		} else if (this.isRecordArray(data)) {
+			this.setDataByObject(data, yDimensionsNames, xAxisName);
+		} else {
+			throw new Error('Data must be an array');
+		}
+
+		return this;
+	}
+
+	/**
+	 * Accepts data as rows: [timestamp, v1, v2, ...]
+	 * Automatically generates line series for each value column (>=1).
+	 */
+	setDatasetByArray(data: DatasetFormatArray, dimensionsNames: string[], xAxisName?: string): this {
 		// Build series based on number of columns (minus the time column).
 		const columns = Array.isArray(data) && data.length > 0 ? data[0].length : 0;
 		const totalCol = Math.max(0, columns - 1);
 
-		if (totalCol !== yDimensions?.length) {
+		if (totalCol !== dimensionsNames?.length) {
 			throw new Error(
-				`Dimensions length ${yDimensions?.length} does not match total columns ${totalCol}.`
+				`Dimensions length ${dimensionsNames?.length} does not match total columns ${totalCol}.`
 			);
 		}
 
 		/**
 		 * Dimensions are the column names.
 		 * --------------------------------------------------------
-		 * | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |
+		 * Time | Column 1 | Column 2 | Column 3 | Column 4 | Column 5
 		 * --------------------------------------------------------
 		 */
+		const timeDimensionKey = xAxisName || 'Time';
 
-		this.yDimensions = yDimensions;
+		this.yDimensions = dimensionsNames;
+		this.yDimensionNames = dimensionsNames;
 
 		/**
 		 * Dataset is an array of rows.
@@ -139,34 +176,47 @@ export class TimeSeriesChartBuilder {
 		 * Source     | 1658870400 |  32.4    |  32.7    |  32.8    |  32.9    |  32.5    |
 		 * --------------------------------------------------------------------------------
 		 */
-
 		this.option.dataset = {
-			dimensions: ['time', ...yDimensions],
+			dimensions: [timeDimensionKey, ...this.yDimensions],
 			source: data
 		};
 
 		/** Automatically set line width based on number of columns */
-		const lineStyleWidth = 1;
+		this.createSeriesData(timeDimensionKey, timeDimensionKey);
 
-		this.option.xAxis = { type: 'time' };
-		this.option.series = yDimensions.map((dim) => ({
-			type: 'line',
-			name: dim,
-			encode: { x: 'time', y: dim },
-			emphasis: {
-				focus: 'series'
-			},
-			connectNulls: false,
-			smooth: false,
-			sampling: 'lttb',
-			progressive: 10000,
-			progressiveThreshold: 100000,
-			progressiveChunkMode: 'mod',
-			silent: true,
-			clip: true,
-			lineStyle: { width: lineStyleWidth }
-		}));
+		return this;
+	}
 
+	/**
+	 * Data is an array of objects.
+	 * [
+	 *	{_ts: 1658870400, count: 823, score: 95.8},
+	 *  {...}
+	 * ]
+	 */
+	setDataByObject(data: DatasetFormatObject, dimensionsNames?: string[], xAxisName?: string): this {
+		if (data.length < 2) {
+			throw new Error('Minimum data length is 2.');
+		}
+
+		// Get dimensions from first row
+		const dimensionKeys = Object.keys(data[0]);
+		const timeDimensionKey = dimensionKeys.shift();
+
+		if (timeDimensionKey === undefined) {
+			throw new Error('No time dimension found.');
+		}
+		const timeDimensionName = xAxisName || timeDimensionKey;
+
+		this.yDimensions = dimensionKeys;
+		this.yDimensionNames = dimensionsNames || dimensionKeys;
+
+		this.option.dataset = {
+			dimensions: [timeDimensionKey, ...this.yDimensions],
+			source: data
+		};
+
+		this.createSeriesData(timeDimensionKey, timeDimensionName);
 		return this;
 	}
 
@@ -328,9 +378,11 @@ export class TimeSeriesChartBuilder {
 			icon?: IconType;
 			color?: ZRColor;
 			position?: LabelPosition;
+			symbolSize?: number;
 		} = {
 			icon: 'pin',
-			position: 'inside'
+			position: 'inside',
+			symbolSize: 50
 		}
 	): this {
 		if (!Array.isArray(this.option.series)) {
@@ -338,41 +390,25 @@ export class TimeSeriesChartBuilder {
 		}
 
 		if (Array.isArray(this.option.dataset)) {
-			this.option.dataset;
 			throw new Error('Series must be an array');
 		}
 
-		if (!Array.isArray(this.option?.dataset?.source) || !this.option.dataset.dimensions?.length) {
-			throw new Error('No data found');
-		}
-
 		// Search for the dimension
-		const series = this.option.series.find((s: any) => s.name === data.dimName);
-		if (!series) throw new Error(`Dimension ${data.dimName} not found`);
+		const seriesDimension = this.option.series
+			.filter((s: any) => s.encode && s.encode.y)
+			.find((s: any) => {
+				return s.encode.y === data.dimName;
+			});
 
-		// Search for the timestamp
-		const dataset = this.option.dataset as { source: number[][] };
+		if (!seriesDimension) throw new Error(`Dimension ${data.dimName} not found`);
 
-		const dataFind =
-			dataset.source.find((row) => {
-				return row[0] === data.timestamp;
-			}) || [];
-
-		if (!dataFind) {
-			throw new Error(`No data found in timestamp ${data.timestamp}`);
-		}
-		const dimensionKey = this.option.dataset.dimensions.findIndex((d) => d === data.dimName);
-		const value = dataFind[dimensionKey];
-
-		if (!value) {
-			throw new Error(`No value found in dimension ${data.dimName}`);
-		}
+		let value = this.searchValueByDimensionKeyAndTimestamp(data.dimName, data.timestamp);
 
 		// Create markPoint if it doesn't exist
-		if (!series.markPoint) {
-			series.markPoint = {
-				symbol: opt.icon || 'pin',
-				symbolSize: 50,
+		if (!seriesDimension.markPoint) {
+			seriesDimension.markPoint = {
+				symbol: opt.icon,
+				symbolSize: opt.symbolSize,
 				itemStyle: {
 					color: opt.color,
 					borderColor: '#fff',
@@ -394,5 +430,86 @@ export class TimeSeriesChartBuilder {
 		}
 
 		return this;
+	}
+
+	private isRecordArray(arr: any[]): arr is DatasetFormatObject {
+		return !Array.isArray(arr[0]) && typeof arr === 'object';
+	}
+	private isNumberArray(arr: any[]): arr is DatasetFormatArray {
+		return Array.isArray(arr[0]);
+	}
+
+	/**
+	 * Creates the series data
+	 */
+	private createSeriesData(timeDimensionKey: string, timeDimensionName?: string) {
+		if (!this.yDimensions?.length || !this.yDimensionNames?.length) {
+			throw new Error('No dimensions found.');
+		}
+
+		if (this.yDimensions.length !== this.yDimensionNames.length) {
+			throw new Error(
+				`Dimensions length ${this.yDimensionNames.length} does not match total columns ${this.yDimensions.length}.`
+			);
+		}
+
+		/** Automatically set line width based on number of columns */
+		const lineStyleWidth = 1;
+
+		this.option.xAxis = { type: 'time', name: timeDimensionName };
+		this.option.series = this.yDimensions.map((dim, inx) => ({
+			type: 'line',
+			name: this.yDimensionNames![inx],
+			encode: { x: timeDimensionKey, y: dim },
+			emphasis: {
+				focus: 'series'
+			},
+			connectNulls: false,
+			smooth: false,
+			sampling: 'lttb',
+			progressive: 10000,
+			progressiveThreshold: 100000,
+			progressiveChunkMode: 'mod',
+			silent: true,
+			clip: true,
+			lineStyle: { width: lineStyleWidth }
+		}));
+	}
+
+	/**
+	 * Search for the dimension key and timestamp
+	 */
+
+	private searchValueByDimensionKeyAndTimestamp(yDimKey: string, timestamp: number): any {
+		const dataset = this.option.dataset as {
+			source: DatasetFormatArray | DatasetFormatObject;
+			dimensions: string[];
+		};
+
+		if (!Array.isArray(dataset.source) || !dataset.dimensions.length) {
+			throw new Error('No source data or dimensions found. Before loading data');
+		}
+
+		if (this.isNumberArray(dataset.source)) {
+			const dataFind = dataset.source.find((row) => {
+				return row[0] === timestamp;
+			});
+
+			if (!dataFind) {
+				throw new Error(`No data found in timestamp ${timestamp}`);
+			}
+			const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
+			return dataFind[yDimensionKey];
+		} else if (this.isRecordArray(dataset.source)) {
+			const dataFind = dataset.source.find((row) => {
+				return row._ts === timestamp;
+			});
+			if (!dataFind) {
+				throw new Error(`No data found in timestamp ${timestamp}`);
+			}
+			return dataFind[yDimKey];
+		} else {
+			throw new Error('Incompatible data format');
+		}
 	}
 }
