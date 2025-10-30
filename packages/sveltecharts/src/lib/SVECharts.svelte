@@ -7,7 +7,10 @@
 		TitleComponent,
 		TooltipComponent,
 		GridComponent,
-		DatasetComponent
+		DatasetComponent,
+		MarkLineComponent,
+		MarkPointComponent,
+		MarkAreaComponent
 	} from 'echarts/components';
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
@@ -23,7 +26,10 @@
 		GridComponent,
 		DatasetComponent,
 		LabelLayout,
-		CanvasRenderer
+		CanvasRenderer,
+		MarkLineComponent,
+		MarkPointComponent,
+		MarkAreaComponent
 	]);
 
 	export type EChartsTheme = string | object;
@@ -128,9 +134,7 @@
 
 	$effect(() => {
 		if (!instance || !option) return;
-		instance.setOption(option, {
-			notMerge: true
-		});
+		instance.setOption(option, { notMerge: true, lazyUpdate: true, replaceMerge: ['series'] });
 	});
 </script>
 

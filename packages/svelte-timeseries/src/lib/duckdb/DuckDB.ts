@@ -289,7 +289,7 @@ export class DuckDB<T extends Tables> {
 		fields.forEach((f, idx) => {
 			if (idx === 0) {
 				// The first column is the timestamp
-				casts[f.name] = 'TIMESTAMP';
+				casts[f.name] = 'TIMESTAMP(ms)';
 				return;
 			}
 
