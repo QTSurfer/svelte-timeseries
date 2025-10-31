@@ -499,10 +499,16 @@ export class TimeSeriesChartBuilder {
 					position: 'inside',
 					formatter(params) {
 						if (!params.seriesId || !params.data) return '';
+						console.log(params);
 						const value = params.data as Record<string, any>;
 
 						if (value[params.seriesId]) {
 							return `${value[params.seriesId].toFixed(2)}${isPercentage ? '%' : ''}`;
+						}
+
+						const idx = params.componentIndex + 1;
+						if (value[idx]) {
+							return `${value[idx].toFixed(2)}${isPercentage ? '%' : ''}`;
 						}
 						return '-';
 					}
