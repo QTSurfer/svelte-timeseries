@@ -84,9 +84,15 @@ export class TimeSeriesChartBuilder {
 					realtime: false
 				}
 			],
-			tooltip: {},
+			tooltip: {
+				trigger: 'item',
+				valueFormatter: (value) => {
+					return `${value}`;
+				}
+			},
 			xAxis: {
-				type: 'time'
+				type: 'time',
+				axisLine: { show: true }
 			},
 			yAxis: [
 				{
@@ -101,7 +107,7 @@ export class TimeSeriesChartBuilder {
 					splitLine: { show: false },
 					axisLine: { show: true, lineStyle: { type: 'dashed' } },
 					axisLabel: {
-						formatter: '{value} %'
+						formatter: (value) => `${value.toFixed(2)}%`
 					},
 					name: '%'
 				}
@@ -225,6 +231,7 @@ export class TimeSeriesChartBuilder {
 	 */
 	setAxisTooltip(): this {
 		this.option.tooltip = {
+			...this.option.tooltip,
 			trigger: 'axis',
 			axisPointer: { type: 'cross' }
 		};
@@ -416,7 +423,7 @@ export class TimeSeriesChartBuilder {
 				},
 				data: [
 					{
-						coord: [data.timestamp, value],
+						coord: [data.timestamp, value * 1.05],
 						label: {
 							show: true,
 							position: opt.position,
@@ -453,28 +460,55 @@ export class TimeSeriesChartBuilder {
 			);
 		}
 
+		const percentageFields = this.detectPercentageFields();
+
 		/** Automatically set line width based on number of columns */
 		const lineStyleWidth = 1;
 
 		this.option.xAxis = { type: 'time', name: timeDimensionName };
-		this.option.series = this.yDimensions.map((dim, inx) => ({
-			type: 'line',
-			name: this.yDimensionNames![inx],
-			encode: { x: timeDimensionKey, y: dim },
-			emphasis: {
-				focus: 'series'
-			},
-			connectNulls: false,
-			smooth: false,
-			sampling: 'lttb',
-			showSymbol: false,
-			progressive: 10000,
-			progressiveThreshold: 100000,
-			progressiveChunkMode: 'mod',
-			silent: true,
-			clip: true,
-			lineStyle: { width: lineStyleWidth }
-		}));
+		this.option.series = this.yDimensions.map((dim, inx) => {
+			const isPercentage = percentageFields.includes(dim);
+			return {
+				type: 'line',
+				id: dim,
+				name: this.yDimensionNames![inx],
+				encode: { x: timeDimensionKey, y: dim },
+				emphasis: {
+					focus: 'series'
+				},
+				connectNulls: false,
+				smooth: false,
+				sampling: 'lttb',
+				showSymbol: false,
+				progressive: 1800,
+				progressiveThreshold: 100000,
+				progressiveChunkMode: 'mod',
+				silent: true,
+				clip: true,
+				lineStyle: { width: lineStyleWidth },
+				yAxisIndex: isPercentage ? 1 : 0,
+				z: 10,
+				label: {
+					show: true,
+					backgroundColor: '#000000ff',
+					color: '#fff',
+					fontSize: 10,
+					fontWeight: 'bold',
+					borderRadius: 3,
+					padding: [5, 5, 5, 5],
+					position: 'inside',
+					formatter(params) {
+						if (!params.seriesId || !params.data) return '';
+						const value = params.data as Record<string, any>;
+
+						if (value[params.seriesId]) {
+							return `${value[params.seriesId].toFixed(2)}${isPercentage ? '%' : ''}`;
+						}
+						return '-';
+					}
+				}
+			};
+		});
 	}
 
 	/**
@@ -512,5 +546,19 @@ export class TimeSeriesChartBuilder {
 		} else {
 			throw new Error('Incompatible data format');
 		}
+	}
+
+	/**
+	 * Return the percentage fields in the dataset
+	 */
+	private detectPercentageFields(): string[] {
+		if (!this.yDimensions?.length) {
+			throw new Error('No dimensions found.');
+		}
+		const percentFields = this.yDimensions.filter(
+			(key) => !key.startsWith('_') && key.endsWith('%')
+		);
+
+		return percentFields;
 	}
 }
