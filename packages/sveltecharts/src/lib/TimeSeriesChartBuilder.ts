@@ -467,6 +467,7 @@ export class TimeSeriesChartBuilder {
 			connectNulls: false,
 			smooth: false,
 			sampling: 'lttb',
+			showSymbol: false,
 			progressive: 10000,
 			progressiveThreshold: 100000,
 			progressiveChunkMode: 'mod',
