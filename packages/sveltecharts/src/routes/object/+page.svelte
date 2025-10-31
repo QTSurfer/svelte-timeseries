@@ -23,7 +23,7 @@
 				col2: random(),
 				col3: random(),
 				col4: random(),
-				col5: random()
+				'col5%': random(0, 5)
 			});
 		}
 
@@ -39,7 +39,7 @@
 		let dataCount = 1;
 
 		const object = createDataSet(dataCount * totalDays);
-		const yDimensions = ['Column 1', 'Column 2', 'Column 3', 'Column 4', 'Column 5'];
+		const yDimensions = ['Column 1', 'Column 2', 'Column 3', 'Column 4', 'Column 5 %'];
 
 		const marker: MarkerEvent[] = [
 			{
@@ -82,7 +82,7 @@
 				timestamp: object[10]._ts
 			})
 			.addMarkerPoint({
-				dimName: 'col3',
+				dimName: 'col5%',
 				timestamp: object[25]._ts
 			});
 
