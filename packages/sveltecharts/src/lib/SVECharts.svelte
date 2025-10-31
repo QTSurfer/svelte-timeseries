@@ -134,7 +134,11 @@
 
 	$effect(() => {
 		if (!instance || !option) return;
-		instance.setOption(option, { notMerge: true, lazyUpdate: true, replaceMerge: ['series'] });
+		instance.setOption(option, {
+			notMerge: false,
+			lazyUpdate: true,
+			replaceMerge: ['series', 'dataset']
+		});
 	});
 </script>
 
