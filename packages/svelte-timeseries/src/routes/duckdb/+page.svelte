@@ -19,26 +19,14 @@
 		console.log('Load DuckDb...');
 		duckDb = await DuckDB.create(tables, debug);
 		const result = await duckDb.query(
-			`SELECT _ts, price FROM signal WHERE price NOT NULL LIMIT 50000`
+			`SELECT _ts, price, "vlongBolBW%", "longDistemas%", ema500 FROM signal WHERE price NOT NULL LIMIT 50000`
 		);
 
 		const rows = result.toArray();
 
-		const yDimensions = Object.keys(rows[0]);
-		yDimensions.shift();
-
-		/**
-		 * @todo Fix this normalization
-		 */
-		const normalized = rows.map((r) => ({
-			...r,
-			_ts: Number(r._ts)
-		}));
-		const table = [...normalized.map(Object.values)];
-
 		timeSeries
 			.setTitle('Price')
-			.setDataset(table, yDimensions)
+			.setDataset(rows)
 			.setAxisTooltip()
 			.setLegendIcon('rect')
 			.setGrid({})
@@ -46,25 +34,25 @@
 			.addMarkArea([
 				{
 					name: 'Area 1',
-					xAxis: [table[28000][0], table[29000][0]]
+					xAxis: [rows[28000]._ts, rows[29000]._ts]
 				}
 			])
 			.addMarkerEvents([
 				{
 					name: 'Event 1',
 					icon: 'circle',
-					xAxis: [table[35000][0]]
+					xAxis: [rows[35000]._ts]
 				},
 				{
 					name: 'Event 2',
 					icon: 'circle',
-					xAxis: [table[39000][0]]
+					xAxis: [rows[39000]._ts]
 				}
 			])
 			.addMarkerPoint(
 				{
 					dimName: 'price',
-					timestamp: table[35700][0],
+					timestamp: rows[35700]._ts,
 					name: 'Point 1'
 				},
 				{
