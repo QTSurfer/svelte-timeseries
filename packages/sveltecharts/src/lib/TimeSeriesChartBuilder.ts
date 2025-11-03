@@ -499,7 +499,6 @@ export class TimeSeriesChartBuilder {
 					position: 'inside',
 					formatter(params) {
 						if (!params.seriesId || !params.data) return '';
-						console.log(params);
 						const value = params.data as Record<string, any>;
 
 						if (value[params.seriesId]) {
