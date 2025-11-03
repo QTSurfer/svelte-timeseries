@@ -85,10 +85,7 @@ export class TimeSeriesChartBuilder {
 				}
 			],
 			tooltip: {
-				trigger: 'item',
-				valueFormatter: (value) => {
-					return `${value}`;
-				}
+				trigger: 'item'
 			},
 			xAxis: {
 				type: 'time',
