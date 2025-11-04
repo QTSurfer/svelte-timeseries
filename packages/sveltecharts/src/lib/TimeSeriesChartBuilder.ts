@@ -1,21 +1,24 @@
-import type {
-	EChartsOption,
-	SeriesOption,
-	LineSeriesOption,
-	DataZoomComponentOption
+import {
+	type EChartsOption,
+	type SeriesOption,
+	type LineSeriesOption,
+	type DataZoomComponentOption,
+	color
 } from 'echarts';
 import type { GridOption } from 'echarts/types/dist/shared';
-import type {
-	OptionDataItemOriginal,
-	OptionDataValue,
-	OptionSourceData,
-	OptionSourceDataArrayRows,
-	SeriesLabelOption,
-	ZRColor
-} from 'echarts/types/src/util/types.js';
+import type { ZRColor } from 'echarts/types/src/util/types.js';
 
-type Row = number[]; // [time, v1, v2, ...]
-type IconType = 'circle' | 'rect' | 'roundRect' | 'triangle' | 'diamond' | 'pin' | 'arrow' | 'none';
+type IconType =
+	| 'circle'
+	| 'rect'
+	| 'roundRect'
+	| 'triangle'
+	| 'diamond'
+	| 'pin'
+	| 'arrowUp'
+	| 'arrowDown'
+	| 'none';
+
 type LabelPosition =
 	| 'top'
 	| 'left'
@@ -31,6 +34,12 @@ type LabelPosition =
 	| 'insideTopRight'
 	| 'insideBottomRight';
 
+type MarkerPointOption = {
+	icon: IconType;
+	color: ZRColor;
+	position: LabelPosition;
+	symbolSize: number;
+};
 type DatasetFormatObject = Record<string, any>[];
 type DatasetFormatArray = number[][];
 
@@ -39,6 +48,7 @@ export type MarkerEvent = {
 	xAxis: number[];
 	icon?: IconType;
 	color?: ZRColor;
+	position?: 'aboveBar' | 'belowBar';
 };
 
 export type MarkArea = {
@@ -85,7 +95,8 @@ export class TimeSeriesChartBuilder {
 				}
 			],
 			tooltip: {
-				trigger: 'item'
+				trigger: 'axis',
+				axisPointer: { type: 'cross' }
 			},
 			xAxis: {
 				type: 'time',
@@ -228,9 +239,7 @@ export class TimeSeriesChartBuilder {
 	 */
 	setAxisTooltip(): this {
 		this.option.tooltip = {
-			...this.option.tooltip,
-			trigger: 'axis',
-			axisPointer: { type: 'cross' }
+			...this.option.tooltip
 		};
 		return this;
 	}
@@ -298,22 +307,39 @@ export class TimeSeriesChartBuilder {
 	/**
 	 * Adds a marker event to the chart.
 	 */
-	addMarkerEvents(data: MarkerEvent[], widthLine: number = 2): this {
+	addMarkerEvents(data: MarkerEvent[], widthLine: number = 1): this {
 		if (!Array.isArray(this.option.series)) {
 			throw new Error('Series must be an array');
 		}
 
 		for (const event of data) {
+			const position = event.position || 'aboveBar';
+
 			this.option.series.push({
 				type: 'line',
 				data: [],
 				markLine: {
-					symbol: event.icon || 'none',
+					symbol: this.getIcon(event.icon || 'none'),
+					symbolSize: [15, 15],
+					symbolOffset: [
+						[0, 15],
+						[0, 15]
+					],
 					label: {
-						position: 'end',
+						position: position === 'aboveBar' ? 'insideEnd' : 'insideStart',
+						offset: position === 'aboveBar' ? [-35, 0] : [35, 0],
+						distance: 0,
+						color: 'white',
 						formatter: event.name || '',
-						fontWeight: 'bold',
-						fontSize: 11
+						fontSize: 12,
+						fontFamily: 'Arial',
+						fontStyle: 'normal',
+						padding: 8,
+						backgroundColor: event.name ? (event.color?.toString() ?? 'white') : undefined,
+						borderRadius: 4
+					},
+					emphasis: {
+						disabled: true
 					},
 					lineStyle: {
 						color: event.color,
@@ -372,23 +398,47 @@ export class TimeSeriesChartBuilder {
 		return this;
 	}
 
+	getIcon(icon: IconType): string {
+		const arrowUpPath =
+			'path://M7.414 27.414l16.586-16.586v7.172c0 1.105 0.895 2 2 2s2-0.895 2-2v-12c0-0.809-0.487-1.538-1.235-1.848-0.248-0.103-0.508-0.151-0.765-0.151v-0.001h-12c-1.105 0-2 0.895-2 2s0.895 2 2 2h7.172l-16.586 16.586c-0.391 0.39-0.586 0.902-0.586 1.414s0.195 1.024 0.586 1.414c0.781 0.781 2.047 0.781 2.828 0z';
+
+		const arrowDownPath =
+			'path://M4.586 7.414l16.586 16.586h-7.171c-1.105 0-2 0.895-2 2s0.895 2 2 2h12c0.809 0 1.538-0.487 1.848-1.235 0.103-0.248 0.151-0.508 0.151-0.765h0.001v-12c0-1.105-0.895-2-2-2s-2 0.895-2 2v7.172l-16.586-16.586c-0.391-0.391-0.902-0.586-1.414-0.586s-1.024 0.195-1.414 0.586c-0.781 0.781-0.781 2.047 0 2.828z';
+
+		const circlePath =
+			'path://M16 0c-8.837 0-16 7.163-16 16s7.163 16 16 16 16-7.163 16-16-7.163-16-16-16zM16 28c-6.627 0-12-5.373-12-12s5.373-12 12-12c6.627 0 12 5.373 12 12s-5.373 12-12 12z';
+
+		if (icon === 'arrowDown') {
+			return arrowDownPath;
+		}
+
+		if (icon === 'arrowUp') {
+			return arrowUpPath;
+		}
+
+		if (icon === 'circle') {
+			return circlePath;
+		}
+
+		return icon;
+	}
+
 	addMarkerPoint(
 		data: {
 			dimName: string;
 			timestamp: number;
 			name?: string;
 		},
-		opt: {
-			icon?: IconType;
-			color?: ZRColor;
-			position?: LabelPosition;
-			symbolSize?: number;
-		} = {
-			icon: 'pin',
-			position: 'inside',
-			symbolSize: 50
-		}
+		options: Partial<MarkerPointOption>
 	): this {
+		const opt: MarkerPointOption = {
+			icon: 'none',
+			position: 'inside',
+			symbolSize: 18,
+			color: 'black',
+			...options
+		};
+
 		if (!Array.isArray(this.option.series)) {
 			throw new Error('Series must be an array');
 		}
@@ -408,29 +458,45 @@ export class TimeSeriesChartBuilder {
 
 		let value = this.searchValueByDimensionKeyAndTimestamp(data.dimName, data.timestamp);
 
+		/**
+		 * Creates a data point for the marker
+		 */
+		const dataPoint = () => {
+			return {
+				coord: [data.timestamp, value],
+				symbol: this.getIcon(opt.icon),
+				symbolSize: opt.symbolSize,
+				symbolOffset: [0, -1 * (opt.symbolSize * 3)],
+				itemStyle: {
+					color: opt.color,
+					borderColor: opt.color,
+					borderWidth: 2
+				},
+				label: {
+					show: true,
+					offset: [0, 30],
+					formatter:
+						data.name && Number(data.name)
+							? Number(data.name).toFixed(2)
+							: (data.name ?? value.toFixed(2)),
+					fontSize: 12,
+					fontWeight: 'bold',
+					color: 'white',
+					backgroundColor: opt.color,
+					padding: 4,
+					borderRadius: 4
+				},
+				z: 11
+			};
+		};
+
 		// Create markPoint if it doesn't exist
 		if (!seriesDimension.markPoint) {
 			seriesDimension.markPoint = {
-				symbol: opt.icon,
-				symbolSize: opt.symbolSize,
-				itemStyle: {
-					color: opt.color,
-					borderColor: '#fff',
-					borderWidth: 1
-				},
-				data: [
-					{
-						coord: [data.timestamp, value * 1.05],
-						label: {
-							show: true,
-							position: opt.position,
-							formatter: data.name ?? value.toFixed(2),
-							fontSize: 12,
-							fontWeight: 'bold'
-						}
-					}
-				]
+				data: [dataPoint()]
 			};
+		} else {
+			seriesDimension.markPoint.data.push(dataPoint());
 		}
 
 		return this;
@@ -484,7 +550,6 @@ export class TimeSeriesChartBuilder {
 				clip: true,
 				lineStyle: { width: lineStyleWidth },
 				yAxisIndex: isPercentage ? 1 : 0,
-				z: 10,
 				label: {
 					show: true,
 					backgroundColor: '#000000ff',
@@ -494,6 +559,7 @@ export class TimeSeriesChartBuilder {
 					borderRadius: 3,
 					padding: [5, 5, 5, 5],
 					position: 'inside',
+					z: 10,
 					formatter(params) {
 						if (!params.seriesId || !params.data) return '';
 						const value = params.data as Record<string, any>;
