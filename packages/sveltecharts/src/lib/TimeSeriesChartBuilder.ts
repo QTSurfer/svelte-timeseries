@@ -2,8 +2,7 @@ import {
 	type EChartsOption,
 	type SeriesOption,
 	type LineSeriesOption,
-	type DataZoomComponentOption,
-	color
+	type DataZoomComponentOption
 } from 'echarts';
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
