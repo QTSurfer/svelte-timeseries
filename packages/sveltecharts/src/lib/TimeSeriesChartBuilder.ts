@@ -430,74 +430,77 @@ export class TimeSeriesChartBuilder {
 		},
 		options: Partial<MarkerPointOption>
 	): this {
-		const opt: MarkerPointOption = {
-			icon: 'none',
-			position: 'inside',
-			symbolSize: 18,
-			color: 'black',
-			...options
-		};
-
-		if (!Array.isArray(this.option.series)) {
-			throw new Error('Series must be an array');
-		}
-
-		if (Array.isArray(this.option.dataset)) {
-			throw new Error('Series must be an array');
-		}
-
-		// Search for the dimension
-		const seriesDimension = this.option.series
-			.filter((s: any) => s.encode && s.encode.y)
-			.find((s: any) => {
-				return s.encode.y === data.dimName;
-			});
-
-		if (!seriesDimension) throw new Error(`Dimension ${data.dimName} not found`);
-
-		let value = this.searchValueByDimensionKeyAndTimestamp(data.dimName, data.timestamp);
-
-		/**
-		 * Creates a data point for the marker
-		 */
-		const dataPoint = () => {
-			return {
-				coord: [data.timestamp, value],
-				symbol: this.getIcon(opt.icon),
-				symbolSize: opt.symbolSize,
-				symbolOffset: [0, -1 * (opt.symbolSize * 3)],
-				itemStyle: {
-					color: opt.color,
-					borderColor: opt.color,
-					borderWidth: 2
-				},
-				label: {
-					show: true,
-					offset: [0, 30],
-					formatter:
-						data.name && Number(data.name)
-							? Number(data.name).toFixed(2)
-							: (data.name ?? value.toFixed(2)),
-					fontSize: 12,
-					fontWeight: 'bold',
-					color: 'white',
-					backgroundColor: opt.color,
-					padding: 4,
-					borderRadius: 4
-				},
-				z: 11
+		try {
+			const opt: MarkerPointOption = {
+				icon: 'none',
+				position: 'inside',
+				symbolSize: 18,
+				color: 'black',
+				...options
 			};
-		};
 
-		// Create markPoint if it doesn't exist
-		if (!seriesDimension.markPoint) {
-			seriesDimension.markPoint = {
-				data: [dataPoint()]
+			if (!Array.isArray(this.option.series)) {
+				throw new Error('Series must be an array');
+			}
+
+			if (Array.isArray(this.option.dataset)) {
+				throw new Error('Series must be an array');
+			}
+
+			// Search for the dimension
+			const seriesDimension = this.option.series
+				.filter((s: any) => s.encode && s.encode.y)
+				.find((s: any) => {
+					return s.encode.y === data.dimName;
+				});
+
+			if (!seriesDimension) throw new Error(`Dimension ${data.dimName} not found`);
+
+			let value = this.searchValueByDimensionKeyAndTimestamp(data.dimName, data.timestamp);
+
+			/**
+			 * Creates a data point for the marker
+			 */
+			const dataPoint = () => {
+				return {
+					coord: [data.timestamp, value],
+					symbol: this.getIcon(opt.icon),
+					symbolSize: opt.symbolSize,
+					symbolOffset: [0, -1 * (opt.symbolSize * 3)],
+					itemStyle: {
+						color: opt.color,
+						borderColor: opt.color,
+						borderWidth: 2
+					},
+					label: {
+						show: true,
+						offset: [0, 30],
+						formatter:
+							data.name && Number(data.name)
+								? Number(data.name).toFixed(2)
+								: (data.name ?? value.toFixed(2)),
+						fontSize: 12,
+						fontWeight: 'bold',
+						color: 'white',
+						backgroundColor: opt.color,
+						padding: 4,
+						borderRadius: 4
+					},
+					z: 11
+				};
 			};
-		} else {
-			seriesDimension.markPoint.data.push(dataPoint());
-		}
 
+			// Create markPoint if it doesn't exist
+			if (!seriesDimension.markPoint) {
+				seriesDimension.markPoint = {
+					data: [dataPoint()]
+				};
+			} else {
+				seriesDimension.markPoint.data.push(dataPoint());
+			}
+		} catch (error: any) {
+			console.error(error.message);
+		}
 		return this;
 	}
 
