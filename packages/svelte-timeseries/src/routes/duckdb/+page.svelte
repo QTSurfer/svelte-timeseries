@@ -5,70 +5,78 @@
 
 	let { url, debug = true }: { url: string; debug: boolean } = $props();
 
+	/**
+	 * The `_m` value represents the column where *markers* are stored, and its value indicates the associated table name.
+	 * You can assign either a Parquet file or a URL.
+	 * If a column is used, it will search for that column across all available tables.
+	 * Note that only one *markers* column can exist across all tables.
+	 */
 	let tables = {
+		markers: {
+			table: 'signal',
+			objetiveColumn: '_m'
+		},
 		signal: 'http://localhost:5173/signals.parquet'
 	};
 
 	let duckDb = $state<DuckDB<typeof tables>>();
-	const timeSeries = new TimeSeriesChartBuilder();
 	let timeSeriesOption = $state<EChartsOption>({});
-
+	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
+	let changes = $state(0);
 	let loading = $state(true);
 
 	async function load() {
 		console.log('Load DuckDb...');
 		duckDb = await DuckDB.create(tables, debug);
-		const result = await duckDb.query(
-			`SELECT _ts, price, "vlongBolBW%", "longDistemas%", ema500 FROM signal WHERE price NOT NULL LIMIT 50000`
-		);
 
+		timeSeries.setTitle('Price').setLegendIcon('rect');
+		const result = await duckDb.query(`SELECT _ts, price FROM signal WHERE price NOT NULL`);
+		const markers = await duckDb.getMarkets();
+
+		const markersRows = markers.toArray();
 		const rows = result.toArray();
-
-		timeSeries
-			.setTitle('Price')
-			.setDataset(rows)
-			.setAxisTooltip()
-			.setLegendIcon('rect')
-			.setGrid({})
-			.setSeriesStyle({ smooth: false, symbol: 'none' })
-			.addMarkArea([
-				{
-					name: 'Area 1',
-					xAxis: [rows[28000]._ts, rows[29000]._ts]
-				}
-			])
-			.addMarkerEvents([
-				{
-					name: 'Event 1',
-					icon: 'circle',
-					xAxis: [rows[35000]._ts]
-				},
-				{
-					name: 'Event 2',
-					icon: 'circle',
-					xAxis: [rows[39000]._ts]
-				}
-			])
-			.addMarkerPoint(
+		timeSeries.setDataset(rows);
+		for (const m of markersRows) {
+			timeSeries.addMarkerPoint(
 				{
 					dimName: 'price',
-					timestamp: rows[35700]._ts,
-					name: 'Point 1'
+					timestamp: m._ts,
+					name: m.text
 				},
 				{
-					icon: 'pin'
+					icon: m.shape,
+					color: m.color
 				}
 			);
-
-		timeSeriesOption = timeSeries.build();
+		}
+		changes++;
+		await Promise.all([duckDb.closeConnection(), tick()]);
 		loading = false;
 	}
 
-	onMount(async () => {
-		await load();
+	onMount(() => {
+		load();
 	});
 </script>
 
 <div class="container" style="height: 80vh;">
-	<SVECharts option={timeSeriesOption} {loading} />
+	<SVECharts option={timeSeriesOption} {loading} {changes} />
 </div>
+
+<style>
+	.spinner {
+		width: 40px;
+		height: 40px;
+		border: 4px solid #ccc; /* Color del borde */
+		border-top-color: #1d72b8; /* Color del borde superior */
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite; /* Animación */
+		margin: auto; /* Centrar en el contenedor si es necesario */
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>

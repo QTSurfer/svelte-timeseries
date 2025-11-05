@@ -8,10 +8,11 @@
 	let timeSeriesOption: EChartsOption = {};
 	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
 	let loading = $state(true);
+	let changes = $state(0);
 
 	onMount(async () => {
 		loading = true;
-		const totalHours = 1000;
+		const totalHours = 700000;
 		const { data, yDimensionsNames } = createDataSet<number[]>(totalHours, 'array');
 		const marker: MarkerEvent[] = [
 			{
@@ -46,6 +47,7 @@
 
 		await new Promise((r) => setTimeout(r, 3000));
 
+		changes++;
 		loading = false;
 	});
 </script>
@@ -54,7 +56,7 @@
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">
-				<SVECharts option={timeSeriesOption} />
+				<SVECharts option={timeSeriesOption} {loading} {changes} />
 			</div>
 		</div>
 	</div>

@@ -5,16 +5,20 @@
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
 	import { onMount } from 'svelte';
 
-	const timeSeriesOption: EChartsOption = {};
+	let timeSeriesOption: EChartsOption = {};
 	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
 	let loading = $state(true);
+	let changes = $state(0);
+
 	onMount(async () => {
-		const totalHours = 1000;
+		const totalHours = 700000;
 
 		const { data: object, yDimensionsNames } = createDataSet<Record<string, any>>(
 			totalHours,
 			'object'
 		);
+
+		await new Promise((r) => setTimeout(r, 3000));
 
 		const marker: MarkerEvent[] = [
 			{
@@ -84,7 +88,8 @@
 					color: 'green'
 				}
 			);
-		await new Promise((r) => setTimeout(r, 3000));
+
+		changes++;
 		loading = false;
 	});
 </script>
@@ -93,7 +98,7 @@
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">
-				<SVECharts option={timeSeries.build()} {loading} />
+				<SVECharts option={timeSeriesOption} {loading} {changes} />
 			</div>
 		</div>
 	</div>
