@@ -10,7 +10,7 @@ export function createDataSet<T>(hours: number, type: 'object' | 'array') {
 	// Create random data per hour
 	for (let i = 0; i < hours; i++) {
 		// Add 1 hour
-		const time = new Date(startDate + i * 3600000).getTime();
+		const time = new Date(startDate + i * 60000).getTime();
 		if (type === 'object') {
 			(rows as Record<string, any>[]).push({
 				_ts: time,
