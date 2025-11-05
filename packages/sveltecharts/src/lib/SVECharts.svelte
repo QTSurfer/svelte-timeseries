@@ -104,25 +104,31 @@
 			instance.resize();
 		};
 		window.addEventListener('resize', handleResize);
-		instance.setOption(option);
 		instance.on('datazoom', handleDataZoom);
 
-		onClear = () => {
-			instance.clear();
-		};
+		/**
+		 * @todo
+		 * Limiting option assignment. Review implementation
+		 */
+		// instance.setOption(option);
+		onClear = () => instance.clear();
 
 		return {
 			destroy() {
 				instance.off('datazoom', handleDataZoom);
 				window.removeEventListener('resize', handleResize);
 				instance.dispose();
-			},
-			update(config: EChartsConfig) {
-				instance.setOption({
-					...echartsConfig.option,
-					...config.option
-				});
 			}
+			/**
+			 * @todo
+			 * Limiting option assignment. Review implementation
+			 */
+			// update(config: EChartsConfig) {
+			// 	instance.setOption({
+			// 		...echartsConfig.option,
+			// 		...config.option
+			// 	});
+			// }
 		};
 	}
 
@@ -136,8 +142,7 @@
 		if (!instance || !option) return;
 		instance.setOption(option, {
 			notMerge: false,
-			lazyUpdate: true,
-			replaceMerge: ['series', 'dataset']
+			lazyUpdate: true
 		});
 	});
 </script>
