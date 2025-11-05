@@ -135,21 +135,22 @@
 	}
 
 	$effect(() => {
-		if (!instance) return;
-		if (loading) instance.showLoading();
-		else instance.hideLoading();
-	});
-
-	$effect(() => {
 		if (!instance || !option || !changes) return;
 		instance.setOption(option, {
-			notMerge: false,
+			notMerge: true,
 			lazyUpdate: true
 		});
 	});
 </script>
 
-<div id="chart" class="echarts" use:chartAction={{ renderer, theme, option }}></div>
+<div style="position: relative;">
+	{#if loading}
+		<div class="wrapper-loading">
+			<div class="spinner"></div>
+		</div>
+	{/if}
+	<div id="chart" class="echarts" use:chartAction={{ renderer, theme, option }}></div>
+</div>
 
 <style>
 	.echarts {
@@ -159,5 +160,33 @@
 		position: relative;
 		z-index: 1;
 		margin-top: 1rem;
+	}
+
+	.wrapper-loading {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		background-color: rgba(255, 255, 255, 0.5);
+		z-index: 2;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	.wrapper-loading .spinner {
+		width: 40px;
+		height: 40px;
+		border: 4px solid #ccc; /* Color del borde */
+		border-top-color: #1d72b8; /* Color del borde superior */
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite; /* Animación */
+		margin: auto; /* Centrar en el contenedor si es necesario */
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 </style>
