@@ -10,6 +10,7 @@
 	let duckChart: DuckChart;
 
 	let loading = false;
+	let changes = 0;
 
 	onMount(async () => {
 		console.log('Mounting SvelteTimeSeries...');
@@ -46,6 +47,7 @@
 		await duckChart.initDB(url);
 		await duckChart.load(url);
 		duckChart.option = { ...duckChart.option }; // Force Svelte reactivity
+		changes++;
 		loading = false;
 	};
 	$: if (url) {
@@ -54,5 +56,5 @@
 </script>
 
 {#if duckChart?.option}
-	<SVECharts bind:this={chart} option={duckChart?.option} {loading} />
+	<SVECharts bind:this={chart} option={duckChart?.option} {loading} {changes} />
 {/if}
