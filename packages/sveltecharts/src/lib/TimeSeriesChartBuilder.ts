@@ -60,68 +60,74 @@ export class TimeSeriesChartBuilder {
 	private yDimensions?: string[];
 	private yDimensionNames?: string[];
 
-	constructor() {
-		this.option = {
-			animation: false,
-			title: {
-				left: 'center',
-				top: 0
-			},
-			legend: {
-				top: '10%'
-			},
-			grid: {
-				top: '20%',
-				left: 150,
-				right: 150,
-				bottom: '15%'
-			},
-			dataZoom: [
-				{
-					type: 'inside',
-					filterMode: 'filter',
-					zoomOnMouseWheel: true,
-					moveOnMouseMove: true,
-					realtime: false,
-					start: 32,
-					end: 64
-				},
-				{
-					type: 'slider',
-					show: true,
-					filterMode: 'filter',
-					realtime: false
-				}
-			],
-			tooltip: {
-				trigger: 'axis',
-				axisPointer: { type: 'cross' }
-			},
-			xAxis: {
-				type: 'time',
-				axisLine: { show: true }
-			},
-			yAxis: [
-				{
-					type: 'value',
-					scale: true,
-					splitLine: { show: false },
-					axisLine: { show: true, lineStyle: { type: 'dashed' } }
-				},
-				{
-					type: 'value',
-					scale: true,
-					splitLine: { show: false },
-					axisLine: { show: true, lineStyle: { type: 'dashed' } },
-					axisLabel: {
-						formatter: (value) => `${value.toFixed(2)}%`
-					},
-					name: '%'
-				}
-			],
-			dataset: { source: [] },
-			series: []
+	constructor(options: EChartsOption) {
+		this.option = options;
+
+		this.option.animation = false;
+		this.option.title = {
+			left: 'center',
+			top: 0
 		};
+		this.option.legend = {
+			top: '10%'
+		};
+		this.option.grid = {
+			top: '20%',
+			left: 150,
+			right: 150,
+			bottom: '15%'
+		};
+
+		this.option.dataZoom = [
+			{
+				type: 'inside',
+				filterMode: 'filter',
+				zoomOnMouseWheel: true,
+				moveOnMouseMove: true,
+				realtime: false,
+				start: 32,
+				end: 64
+			},
+			{
+				type: 'slider',
+				show: true,
+				filterMode: 'filter',
+				realtime: false
+			}
+		];
+		this.option.tooltip = {
+			trigger: 'axis',
+			axisPointer: { type: 'cross' }
+		};
+
+		this.option.xAxis = {
+			type: 'time',
+			axisLine: { show: true }
+		};
+		this.option.yAxis = [
+			{
+				type: 'value',
+				scale: true,
+				splitLine: { show: false },
+				axisLine: { show: true, lineStyle: { type: 'dashed' } }
+			},
+			{
+				type: 'value',
+				scale: true,
+				splitLine: { show: false },
+				axisLine: { show: true, lineStyle: { type: 'dashed' } },
+				axisLabel: {
+					formatter: (value) => `${value.toFixed(2)}%`
+				},
+				name: '%'
+			}
+		];
+
+		this.option.dataset = {
+			dimensions: [],
+			source: []
+		};
+		this.option.series = [];
 	}
 
 	/**
@@ -154,6 +160,14 @@ export class TimeSeriesChartBuilder {
 
 		return this;
 	}
+
+	// appendDataset(data: any[]): this {
+	// 	(this.option.dataset as DatasetOption).source = [
+	// 		(this.option.dataset as DatasetOption).source,
+	// 		...data
+	// 	];
+	// 	return this;
+	// }
 
 	/**
 	 * Accepts data as rows: [timestamp, v1, v2, ...]
@@ -189,10 +203,10 @@ export class TimeSeriesChartBuilder {
 		 * Source     | 1658870400 |  32.4    |  32.7    |  32.8    |  32.9    |  32.5    |
 		 * --------------------------------------------------------------------------------
 		 */
-		this.option.dataset = {
-			dimensions: [timeDimensionKey, ...this.yDimensions],
-			source: data
-		};
+		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
+			this.option.dataset.dimensions = [timeDimensionKey, ...this.yDimensions];
+			this.option.dataset.source = data;
+		}
 
 		/** Automatically set line width based on number of columns */
 		this.createSeriesData(timeDimensionKey, timeDimensionKey);
@@ -224,10 +238,10 @@ export class TimeSeriesChartBuilder {
 		this.yDimensions = dimensionKeys;
 		this.yDimensionNames = dimensionsNames || dimensionKeys;
 
-		this.option.dataset = {
-			dimensions: [timeDimensionKey, ...this.yDimensions],
-			source: data
-		};
+		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
+			this.option.dataset.dimensions = [timeDimensionKey, ...this.yDimensions];
+			this.option.dataset.source = data;
+		}
 
 		this.createSeriesData(timeDimensionKey, timeDimensionName);
 		return this;
@@ -300,7 +314,7 @@ export class TimeSeriesChartBuilder {
 	 */
 	build(): EChartsOption {
 		// Shallow clone is fine for typical ECharts options here.
-		return { ...this.option };
+		return this.option;
 	}
 
 	/**
@@ -428,7 +442,7 @@ export class TimeSeriesChartBuilder {
 			timestamp: number;
 			name?: string;
 		},
-		options: Partial<MarkerPointOption>
+		options?: Partial<MarkerPointOption>
 	): this {
 		try {
 			const opt: MarkerPointOption = {
@@ -531,10 +545,12 @@ export class TimeSeriesChartBuilder {
 		const lineStyleWidth = 1;
 
 		this.option.xAxis = { type: 'time', name: timeDimensionName };
+
 		this.option.series = this.yDimensions.map((dim, inx) => {
 			const isPercentage = percentageFields.includes(dim);
 			return {
 				type: 'line',
+				animation: false,
 				id: dim,
 				name: this.yDimensionNames![inx],
 				encode: { x: timeDimensionKey, y: dim },
@@ -545,8 +561,8 @@ export class TimeSeriesChartBuilder {
 				smooth: false,
 				sampling: 'lttb',
 				showSymbol: false,
-				progressive: 1800,
-				progressiveThreshold: 100000,
+				progressive: 4000,
+				progressiveThreshold: 3000,
 				progressiveChunkMode: 'mod',
 				silent: true,
 				clip: true,
