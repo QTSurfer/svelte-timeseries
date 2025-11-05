@@ -57,12 +57,14 @@
 <script lang="ts">
 	let {
 		config = DEFAULT_CONFIG,
+		changes = $bindable(0),
 		option,
 		onDataZoom,
 		loading = $bindable(false),
 		onClear = $bindable()
 	}: {
 		config?: typeof DEFAULT_CONFIG;
+		changes?: number;
 		option: EChartsOption;
 		onDataZoom?: (event: DataZoomEventSingle) => void;
 		loading?: boolean;
@@ -139,7 +141,7 @@
 	});
 
 	$effect(() => {
-		if (!instance || !option) return;
+		if (!instance || !option || !changes) return;
 		instance.setOption(option, {
 			notMerge: false,
 			lazyUpdate: true
