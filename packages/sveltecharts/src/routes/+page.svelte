@@ -1,47 +1,24 @@
 <script lang="ts">
 	import { SVECharts, type EChartsOption } from '$lib';
 	import { TimeSeriesChartBuilder } from '$lib';
+	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
 	import { onMount } from 'svelte';
 
-	const createDataSet = (hours: number): number[][] => {
-		// Create random number between min and max
-		const random = (min = 45, max = 50): number => Math.random() * max + min;
-
-		const timeSeriesData = [];
-
-		// Create a date range
-		let startDate = new Date(2025, 9, 28, 14, 0, 0).getTime();
-
-		// Create random data per hour
-		for (let i = 0; i < hours; i++) {
-			// Add 1 hour
-			const time = new Date(startDate + i * 3600000).getTime();
-			timeSeriesData.push([time, random(), random(), random(), random(), random()]);
-		}
-
-		return timeSeriesData;
-	};
-	const timeSeries = new TimeSeriesChartBuilder();
-
 	let timeSeriesOption: EChartsOption = {};
+	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
+	let loading = $state(true);
+	let changes = $state(0);
 
-	onMount(() => {
-		const totalDays = 60;
-		let dataCount = 1;
-
-		const data = createDataSet(dataCount * totalDays);
-
-		const yDimensions = ['Column 1', 'Column 2', 'Column 3', 'Column 4', 'Column 5'];
-
+	onMount(async () => {
+		loading = true;
+		const totalHours = 700000;
+		const { data, yDimensionsNames } = createDataSet<number[]>(totalHours, 'array');
 		const marker: MarkerEvent[] = [
 			{
 				name: 'Event 1',
 				icon: 'circle',
-				xAxis: [
-					new Date(2025, 9, 28, 16, 0, 0).getTime(),
-					new Date(2025, 9, 28, 19, 0, 0).getTime()
-				],
+				xAxis: [data[400][0], data[450][0]],
 				color: '#ff0000'
 			}
 		];
@@ -49,45 +26,38 @@
 		const area: MarkArea[] = [
 			{
 				name: 'Event with name',
-				xAxis: [
-					new Date(2025, 9, 29, 16, 0, 0).getTime(),
-					new Date(2025, 9, 29, 19, 0, 0).getTime()
-				]
+				xAxis: [data[600][0], data[650][0]]
 			},
 			{
-				xAxis: [
-					new Date(2025, 9, 30, 15, 0, 0).getTime(),
-					new Date(2025, 9, 30, 19, 0, 0).getTime()
-				]
+				xAxis: [data[800][0], data[820][0]]
 			}
 		];
+
 		timeSeries
-			.setTitle('Time Series Data ARRAY', 'Last 24 hours')
-			.setDataset(data, yDimensions)
-			.setAxisTooltip()
+			.setTitle('Time Series Data ARRAY', 'hours')
+			.setDataset(data, yDimensionsNames)
 			.setLegendIcon('rect')
-			.setGrid({})
-			.setSeriesStyle({ smooth: false, symbol: 'none' })
 			.addMarkerEvents(marker)
 			.addMarkArea(area)
 			.addMarkerPoint({
 				dimName: 'Column 1',
-				timestamp: data[10][0],
+				timestamp: data[600][0],
 				name: 'Point 1'
 			});
 
-		timeSeriesOption = timeSeries.build();
+		await new Promise((r) => setTimeout(r, 3000));
+
+		changes++;
+		loading = false;
 	});
 </script>
 
 <main>
 	<div class="charts-container">
 		<div class="chart">
-			{#if timeSeriesOption.series}
-				<div class="chart-wrapper">
-					<SVECharts option={timeSeriesOption} />
-				</div>
-			{/if}
+			<div class="chart-wrapper">
+				<SVECharts option={timeSeriesOption} {loading} {changes} />
+			</div>
 		</div>
 	</div>
 </main>

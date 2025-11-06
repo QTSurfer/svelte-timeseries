@@ -1,10 +1,18 @@
 import { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
 import type { Schema } from 'apache-arrow';
 import { createAsyncDuckDB } from './duckdb-wasm';
+import { get } from 'svelte/store';
 
 export type SingleResult = string | number;
 
-type Tables = Record<string, string>;
+type MarkersTableOptions = {
+	table: string;
+	targetColumn: string;
+};
+type TablesType = string | MarkersTableOptions;
+
+type Tables = Record<string, TablesType>;
+
 type ColumsSchema = { name: string; type: string }[];
 
 type EpochUnit = 's' | 'ms' | 'us' | 'ns';
@@ -32,11 +40,12 @@ export class DuckDB<T extends Tables> {
 	private _conn?: AsyncDuckDBConnection;
 	private _schemas: Partial<Record<keyof T, Schema>> = {};
 	private _versionDb?: string;
+	private _markersColumn?: MarkersTableOptions & { name: string };
 
 	private constructor(
 		private db: AsyncDuckDB,
 		private _tables: T,
-		public debug: boolean,
+		public debug: boolean = false,
 		private _tsColumn: string = '_ts'
 	) {}
 
@@ -71,9 +80,9 @@ export class DuckDB<T extends Tables> {
 	}
 
 	/**
-	 * Get the URL for a table
+	 * Get data for a table
 	 */
-	getTableUrl(table: keyof T): string {
+	getTable(table: keyof T): TablesType {
 		return this._tables[table];
 	}
 
@@ -162,8 +171,20 @@ export class DuckDB<T extends Tables> {
 	 * Register the tables and schemas in the database
 	 */
 	private async registerData() {
-		for (const [name, url] of Object.entries(this._tables) as [keyof T, string][]) {
-			await this.buildTablesAndSchemas(name.toString(), url);
+		for (const [name, type] of Object.entries(this._tables) as [keyof T, TablesType][]) {
+			if (typeof type === 'object') {
+				this._markersColumn = {
+					...type,
+					name: String(name)
+				};
+				continue;
+			}
+
+			if (typeof type === 'string') {
+				const url = type;
+				await this.buildTablesAndSchemas(name.toString(), url);
+				continue;
+			}
 		}
 	}
 
@@ -204,6 +225,20 @@ export class DuckDB<T extends Tables> {
 			// Create final view
 			await conn.query(`CREATE OR REPLACE VIEW ${this.escapeIdent(viewName)} AS ${castedSelect}`);
 
+			// Create markers view if needed
+			if (this._markersColumn?.table === viewName) {
+				const columnesSelect = [
+					`${this.sqlTimestampFromEpoch(this._tsColumn, 'ms')} AS ${this._tsColumn}`,
+					`CAST(${this._markersColumn.targetColumn} AS JSON) AS ${this._markersColumn.targetColumn}`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.text') AS VARCHAR), '^"(.*)"$', '\\1') AS text`
+				];
+				const selectMarkers = `SELECT ${columnesSelect.join(', ')} FROM ${this.escapeIdent(tempViewName)} WHERE ${this._markersColumn.targetColumn} IS NOT NULL AND json_valid(${this._markersColumn.targetColumn})`;
+				await conn.query(`CREATE OR REPLACE VIEW ${this._markersColumn.name} AS ${selectMarkers}`);
+			}
+
 			// Get the final schema
 			const { schema: finalSchema } = await conn.query(
 				`SELECT * FROM ${this.escapeIdent(viewName)} LIMIT 0`
@@ -242,6 +277,16 @@ export class DuckDB<T extends Tables> {
 	 */
 	get tables() {
 		return this._tables;
+	}
+
+	async getMarkers() {
+		if (!this._markersColumn) {
+			throw new Error('Markers not found');
+		}
+		const sql = `SELECT * FROM ${this._markersColumn.name}`;
+
+		const result = await this.query(sql);
+		return result;
 	}
 
 	/**
@@ -287,19 +332,22 @@ export class DuckDB<T extends Tables> {
 		const casts: Record<string, TargetType> = {};
 
 		fields.forEach((f, idx) => {
-			if (idx === 0) {
+			if (f.name === this._tsColumn) {
 				// The first column is the timestamp
 				casts[f.name] = 'TIMESTAMP(ms)';
 				return;
 			}
 
-			if (f.name.endsWith('%')) {
-				casts[f.name] = 'DOUBLE';
+			if (f.name.startsWith('_')) {
 				return;
 			}
 
-			if (f.name === '_m') {
-				casts[f.name] = 'JSON';
+			if (f.name === this._markersColumn?.targetColumn) {
+				return;
+			}
+
+			if (f.name.endsWith('%')) {
+				casts[f.name] = 'DOUBLE';
 				return;
 			}
 
