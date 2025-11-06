@@ -143,7 +143,7 @@
 	});
 </script>
 
-<div style="position: relative;">
+<div style="position: relative; width: 100%; height: 100%;">
 	{#if loading}
 		<div class="wrapper-loading">
 			<div class="spinner"></div>
