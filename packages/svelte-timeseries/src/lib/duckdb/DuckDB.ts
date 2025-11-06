@@ -7,7 +7,7 @@ export type SingleResult = string | number;
 
 type MarkersTableOptions = {
 	table: string;
-	objetiveColumn: string;
+	targetColumn: string;
 };
 type TablesType = string | MarkersTableOptions;
 
@@ -229,13 +229,13 @@ export class DuckDB<T extends Tables> {
 			if (this._markersColumn?.table === viewName) {
 				const columnesSelect = [
 					`${this.sqlTimestampFromEpoch(this._tsColumn, 'ms')} AS ${this._tsColumn}`,
-					`CAST(${this._markersColumn.objetiveColumn} AS JSON) AS ${this._markersColumn.objetiveColumn}`,
-					`regexp_replace(CAST(json_extract(${this._markersColumn.objetiveColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
-					`regexp_replace(CAST(json_extract(${this._markersColumn.objetiveColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
-					`regexp_replace(CAST(json_extract(${this._markersColumn.objetiveColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
-					`regexp_replace(CAST(json_extract(${this._markersColumn.objetiveColumn}, '$.text') AS VARCHAR), '^"(.*)"$', '\\1') AS text`
+					`CAST(${this._markersColumn.targetColumn} AS JSON) AS ${this._markersColumn.targetColumn}`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
+					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.text') AS VARCHAR), '^"(.*)"$', '\\1') AS text`
 				];
-				const selectMarkers = `SELECT ${columnesSelect.join(', ')} FROM ${this.escapeIdent(tempViewName)} WHERE ${this._markersColumn.objetiveColumn} IS NOT NULL AND json_valid(${this._markersColumn.objetiveColumn})`;
+				const selectMarkers = `SELECT ${columnesSelect.join(', ')} FROM ${this.escapeIdent(tempViewName)} WHERE ${this._markersColumn.targetColumn} IS NOT NULL AND json_valid(${this._markersColumn.targetColumn})`;
 				await conn.query(`CREATE OR REPLACE VIEW ${this._markersColumn.name} AS ${selectMarkers}`);
 			}
 
@@ -279,7 +279,7 @@ export class DuckDB<T extends Tables> {
 		return this._tables;
 	}
 
-	async getMarkets() {
+	async getMarkers() {
 		if (!this._markersColumn) {
 			throw new Error('Markers not found');
 		}
@@ -342,7 +342,7 @@ export class DuckDB<T extends Tables> {
 				return;
 			}
 
-			if (f.name === this._markersColumn?.objetiveColumn) {
+			if (f.name === this._markersColumn?.targetColumn) {
 				return;
 			}
 

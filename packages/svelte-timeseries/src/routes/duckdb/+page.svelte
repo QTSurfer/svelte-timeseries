@@ -14,7 +14,7 @@
 	let tables = {
 		markers: {
 			table: 'signal',
-			objetiveColumn: '_m'
+			targetColumn: '_m'
 		},
 		signal: 'http://localhost:5173/signals.parquet'
 	};
@@ -31,7 +31,7 @@
 
 		timeSeries.setTitle('Price').setLegendIcon('rect');
 		const result = await duckDb.query(`SELECT _ts, price FROM signal WHERE price NOT NULL`);
-		const markers = await duckDb.getMarkets();
+		const markers = await duckDb.getMarkers();
 
 		const markersRows = markers.toArray();
 		const rows = result.toArray();
