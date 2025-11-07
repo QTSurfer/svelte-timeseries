@@ -9,9 +9,16 @@ type MarkersTableOptions = {
 	table: string;
 	targetColumn: string;
 };
+
 type TablesType = string | MarkersTableOptions;
 
-type Tables = Record<string, TablesType>;
+export type Tables =
+	| {
+			markers?: MarkersTableOptions;
+			query: string;
+			columnsSelect?: string[];
+	  }
+	| Record<string, string>;
 
 type ColumsSchema = { name: string; type: string }[];
 
@@ -82,7 +89,7 @@ export class DuckDB<T extends Tables> {
 	/**
 	 * Get data for a table
 	 */
-	getTable(table: keyof T): TablesType {
+	getTable(table: keyof T) {
 		return this._tables[table];
 	}
 
@@ -172,6 +179,10 @@ export class DuckDB<T extends Tables> {
 	 */
 	private async registerData() {
 		for (const [name, type] of Object.entries(this._tables) as [keyof T, TablesType][]) {
+			// Ignore the query table
+			if (name === 'query' || name === 'columnsSelect') {
+				continue;
+			}
 			if (typeof type === 'object') {
 				this._markersColumn = {
 					...type,
@@ -182,7 +193,7 @@ export class DuckDB<T extends Tables> {
 
 			if (typeof type === 'string') {
 				const url = type;
-				await this.buildTablesAndSchemas(name.toString(), url);
+				await this.buildTablesAndSchemas(name, url);
 				continue;
 			}
 		}
@@ -202,9 +213,15 @@ export class DuckDB<T extends Tables> {
 			const viewName = String(name);
 			const tempViewName = `__temp_${viewName}`;
 
+			const selectColumns = this._tables.columnsSelect
+				? `${[this._tables.columnsSelect]
+						.flat()
+						.map((c) => this.escapeIdent(c))
+						.join(', ')}`
+				: '*';
 			// Create temp view from parquet file
 			await conn.query(
-				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT * FROM parquet_scan('${url}')`
+				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT ${selectColumns} FROM parquet_scan('${url}')`
 			);
 
 			// detected the initial schema of the temp view
@@ -332,8 +349,8 @@ export class DuckDB<T extends Tables> {
 		const casts: Record<string, TargetType> = {};
 
 		fields.forEach((f, idx) => {
-			if (f.name === this._tsColumn) {
-				// The first column is the timestamp
+			if (['_ts', 'ts'].includes(f.name)) {
+				this._tsColumn = f.name;
 				casts[f.name] = 'TIMESTAMP(ms)';
 				return;
 			}
