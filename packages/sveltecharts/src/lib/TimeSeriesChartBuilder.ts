@@ -85,8 +85,8 @@ export class TimeSeriesChartBuilder {
 				zoomOnMouseWheel: true,
 				moveOnMouseMove: true,
 				realtime: false,
-				start: 32,
-				end: 64
+				start: 45,
+				end: 55
 			},
 			{
 				type: 'slider',
