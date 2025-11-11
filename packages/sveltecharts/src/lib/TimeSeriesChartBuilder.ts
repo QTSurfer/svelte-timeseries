@@ -693,7 +693,7 @@ export class TimeSeriesChartBuilder {
 		return percentFields;
 	}
 
-	private build() {
+	build() {
 		this.instance.setOption(this.option, {
 			lazyUpdate: true,
 			notMerge: false,
