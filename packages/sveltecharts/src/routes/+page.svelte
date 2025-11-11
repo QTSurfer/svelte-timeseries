@@ -1,18 +1,17 @@
 <script lang="ts">
-	import { SVECharts, type EChartsOption } from '$lib';
-	import { TimeSeriesChartBuilder } from '$lib';
+	import { SVECharts, type EChartsOption, type ECharts } from '$lib';
+	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
-	import { onMount } from 'svelte';
 
-	let timeSeriesOption: EChartsOption = {};
-	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
+	let timeSeriesOption = $state<EChartsOption>({});
 	let loading = $state(true);
 	let changes = $state(0);
 
-	onMount(async () => {
+	async function onLoad(instance: ECharts) {
 		loading = true;
 		const totalHours = 700000;
+		const timeSeries = new TimeSeriesChartBuilder(instance);
 		const { data, yDimensionsNames } = createDataSet<number[]>(totalHours, 'array');
 		const marker: MarkerEvent[] = [
 			{
@@ -33,30 +32,16 @@
 			}
 		];
 
-		timeSeries
-			.setTitle('Time Series Data ARRAY', 'hours')
-			.setDataset(data, yDimensionsNames)
-			.setLegendIcon('rect')
-			.addMarkerEvents(marker)
-			.addMarkArea(area)
-			.addMarkerPoint({
-				dimName: 'Column 1',
-				timestamp: data[600][0],
-				name: 'Point 1'
-			});
-
-		await new Promise((r) => setTimeout(r, 3000));
-
-		changes++;
+		timeSeries.setTitle('Time Series Data ARRAY', 'hours').setDataset(data, yDimensionsNames);
 		loading = false;
-	});
+	}
 </script>
 
 <main>
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">
-				<SVECharts option={timeSeriesOption} {loading} {changes} />
+				<SVECharts {onLoad} {loading} />
 			</div>
 		</div>
 	</div>
