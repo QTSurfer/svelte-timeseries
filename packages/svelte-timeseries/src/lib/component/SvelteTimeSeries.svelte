@@ -26,8 +26,8 @@
 
 	const onLoad = async (EChartInstance: ECharts) => {
 		loading = true;
-		duckDb = await DuckDB.create(table, markers, debug);
-		timeSeries = new TimeSeriesChartBuilder(EChartInstance, {
+		const duckDb = await DuckDB.create(table, markers, debug);
+		const timeSeries = new TimeSeriesChartBuilder(EChartInstance, {
 			externalManagerLegend: true
 		});
 
