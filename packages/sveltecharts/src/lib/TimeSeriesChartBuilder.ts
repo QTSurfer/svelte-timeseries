@@ -39,6 +39,15 @@ type MarkerPointOption = {
 type DatasetFormatObject = Record<string, any>[];
 type DatasetFormatArray = number[][];
 
+/**
+ *
+ * ConfigBuilder:
+ * externalManagerLegend: Hides EChart legends to allow external management
+ *
+ */
+type ConfigBuilder = {
+	externalManagerLegend?: boolean;
+};
 export type MarkerEvent = {
 	name?: string;
 	xAxis: number[];
@@ -54,12 +63,16 @@ export type MarkArea = {
 };
 export class TimeSeriesChartBuilder {
 	private instance: ECharts;
+	private builderConfig: ConfigBuilder = {
+		externalManagerLegend: false
+	};
 	private option: EChartsOption = {};
 	private yDimensions!: string[];
 	private yDimensionNames?: string[];
 
-	constructor(instance: ECharts) {
+	constructor(instance: ECharts, builderConfig?: ConfigBuilder) {
 		this.instance = instance;
+		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
 		this.option.animation = false;
 		this.option.title = {
@@ -67,10 +80,15 @@ export class TimeSeriesChartBuilder {
 			top: 0
 		};
 
-		this.option.legend = {
-			top: '10%',
-			selected: {}
-		};
+		this.option.legend = this.builderConfig.externalManagerLegend
+			? {
+					show: false,
+					selected: {}
+				}
+			: {
+					top: '10%',
+					selected: {}
+				};
 
 		this.option.grid = {
 			top: '20%',
