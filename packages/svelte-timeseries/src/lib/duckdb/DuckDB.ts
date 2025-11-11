@@ -1,24 +1,17 @@
 import { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import type { Schema } from 'apache-arrow';
+import type { Schema, Table } from 'apache-arrow';
 import { createAsyncDuckDB } from './duckdb-wasm';
-import { get } from 'svelte/store';
 
 export type SingleResult = string | number;
 
-type MarkersTableOptions = {
+export type MarkersTableOptions = {
 	table: string;
 	targetColumn: string;
+	targetDimension: string;
 };
 
-type TablesType = string | MarkersTableOptions;
-
-export type Tables =
-	| {
-			markers?: MarkersTableOptions;
-			query: string;
-			columnsSelect?: string[];
-	  }
-	| Record<string, string>;
+type TableData = { url: string; mainColumn: string; columnsSelect?: string[] };
+export type Tables = Record<string, TableData>;
 
 type ColumsSchema = { name: string; type: string }[];
 
@@ -47,24 +40,28 @@ export class DuckDB<T extends Tables> {
 	private _conn?: AsyncDuckDBConnection;
 	private _schemas: Partial<Record<keyof T, Schema>> = {};
 	private _versionDb?: string;
-	private _markersColumn?: MarkersTableOptions & { name: string };
 
 	private constructor(
 		private db: AsyncDuckDB,
 		private _tables: T,
-		public debug: boolean = false,
+		private _markersColumn?: MarkersTableOptions,
+		private debug: boolean = false,
 		private _tsColumn: string = '_ts'
 	) {}
 
 	/** Create a new DuckDB instance */
-	static async create<T extends Tables>(tables: T, debug: boolean = false): Promise<DuckDB<T>> {
+	static async create<T extends Tables>(
+		tables: T,
+		markers?: MarkersTableOptions,
+		debug: boolean = false
+	): Promise<DuckDB<T>> {
 		if (!window) throw new Error('DuckDB only works in a browser environment.');
 		if (!window.Worker) throw new Error('No worker support?');
 		if (debug) console.log('Loading DuckDB...');
 
 		const t0 = performance.now();
 		const db = await createAsyncDuckDB();
-		const instance = new DuckDB<T>(db, tables, debug);
+		const instance = new DuckDB<T>(db, tables, markers, debug);
 		await instance.load();
 		const t1 = performance.now();
 		if (debug) console.log(`DuckDB loaded in ${t1 - t0} ms.`);
@@ -89,7 +86,7 @@ export class DuckDB<T extends Tables> {
 	/**
 	 * Get data for a table
 	 */
-	getTable(table: keyof T) {
+	getTable<K extends keyof T>(table: K) {
 		return this._tables[table];
 	}
 
@@ -114,6 +111,25 @@ export class DuckDB<T extends Tables> {
 	 */
 	async queryBatch(statement: string) {
 		return this.execute((conn) => conn.send(statement), 'queryBatch');
+	}
+
+	/**
+	 *  get data by table
+	 */
+	async getMainDataByTable(table: keyof T, limit?: number) {
+		const dataTable = this.getTable(table);
+
+		const columnsSelect = dataTable.columnsSelect?.map((c) => this.escapeIdent(c)) ?? ['*'];
+
+		// Otherwise, if the user specifies a main column, only the data corresponding to the time and that main column will be retrieved.
+		const sql = [
+			`SELECT ${columnsSelect.join(', ')} FROM ${table.toString()} WHERE ${dataTable.mainColumn} NOT NULL`
+		];
+		if (limit) {
+			sql.push(`LIMIT ${limit}`);
+		}
+
+		return await this.execute((conn) => conn.query(sql.join(' ')), 'query');
 	}
 
 	/**
@@ -178,24 +194,10 @@ export class DuckDB<T extends Tables> {
 	 * Register the tables and schemas in the database
 	 */
 	private async registerData() {
-		for (const [name, type] of Object.entries(this._tables) as [keyof T, TablesType][]) {
-			// Ignore the query table
-			if (name === 'query' || name === 'columnsSelect') {
-				continue;
-			}
-			if (typeof type === 'object') {
-				this._markersColumn = {
-					...type,
-					name: String(name)
-				};
-				continue;
-			}
-
-			if (typeof type === 'string') {
-				const url = type;
-				await this.buildTablesAndSchemas(name, url);
-				continue;
-			}
+		for (const [name, data] of Object.entries(this._tables) as [keyof T, TableData][]) {
+			const { url, ...confg } = data;
+			await this.buildTablesAndSchemas(name, data.url, confg);
+			continue;
 		}
 	}
 
@@ -206,19 +208,27 @@ export class DuckDB<T extends Tables> {
 	 * @param url The url of the table
 	 * @private
 	 */
-	private async buildTablesAndSchemas(name: keyof T, url: string) {
+	private async buildTablesAndSchemas(
+		name: keyof T,
+		url: string,
+		tableConfiguration?: Pick<TableData, 'mainColumn' | 'columnsSelect'>
+	) {
 		return await this.execute(async (conn) => {
 			if (this.debug) console.log('Registering tables and schemas...');
 
 			const viewName = String(name);
 			const tempViewName = `__temp_${viewName}`;
 
-			const selectColumns = this._tables.columnsSelect
-				? `${[this._tables.columnsSelect]
-						.flat()
-						.map((c) => this.escapeIdent(c))
-						.join(', ')}`
-				: '*';
+			const columnsSelect = tableConfiguration?.columnsSelect?.map((c) => this.escapeIdent(c)) ?? [
+				'*'
+			];
+
+			if (this._markersColumn?.table === viewName) {
+				columnsSelect.push(this._markersColumn.targetColumn);
+			}
+
+			const selectColumns = columnsSelect.join(', ');
+
 			// Create temp view from parquet file
 			await conn.query(
 				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT ${selectColumns} FROM parquet_scan('${url}')`
@@ -246,14 +256,13 @@ export class DuckDB<T extends Tables> {
 			if (this._markersColumn?.table === viewName) {
 				const columnesSelect = [
 					`${this.sqlTimestampFromEpoch(this._tsColumn, 'ms')} AS ${this._tsColumn}`,
-					`CAST(${this._markersColumn.targetColumn} AS JSON) AS ${this._markersColumn.targetColumn}`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.text') AS VARCHAR), '^"(.*)"$', '\\1') AS text`
 				];
 				const selectMarkers = `SELECT ${columnesSelect.join(', ')} FROM ${this.escapeIdent(tempViewName)} WHERE ${this._markersColumn.targetColumn} IS NOT NULL AND json_valid(${this._markersColumn.targetColumn})`;
-				await conn.query(`CREATE OR REPLACE VIEW ${this._markersColumn.name} AS ${selectMarkers}`);
+				await conn.query(`CREATE OR REPLACE VIEW markers AS ${selectMarkers}`);
 			}
 
 			// Get the final schema
@@ -298,12 +307,12 @@ export class DuckDB<T extends Tables> {
 
 	async getMarkers() {
 		if (!this._markersColumn) {
-			throw new Error('Markers not found');
+			return [];
 		}
-		const sql = `SELECT * FROM ${this._markersColumn.name}`;
+		const sql = `SELECT * FROM markers`;
 
 		const result = await this.query(sql);
-		return result;
+		return result.toArray();
 	}
 
 	/**
@@ -405,5 +414,31 @@ export class DuckDB<T extends Tables> {
 
 		// Build the select
 		return `SELECT ${parts.join(', ')} FROM ${this.escapeIdent(tempViewName)}`;
+	}
+
+	transformTableToMatrix(table: Table): [number[][], string[]] {
+		const columns = table.schema.fields.map((f) => f.name);
+
+		const n = table.numRows;
+		const k = columns.length;
+
+		const vectors = new Array(k);
+		for (let j = 0; j < k; j++) vectors[j] = table.getChildAt(j);
+
+		const rows = new Array(n);
+		for (let i = 0; i < n; i++) {
+			const row = new Array(k);
+			for (let j = 0; j < k; j++) {
+				let value = vectors[j].get(i);
+				if (columns[j] === this._tsColumn) {
+					if (typeof value === 'bigint') value = Number(value);
+					else if (value instanceof Date) value = value.getTime();
+				}
+				row[j] = value;
+			}
+			rows[i] = row;
+		}
+
+		return [rows, columns];
 	}
 }
