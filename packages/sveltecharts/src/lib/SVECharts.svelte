@@ -48,7 +48,7 @@
 
 	export type DataZoomEvent = DataZoomEventBatch | DataZoomEventSingle;
 
-	const DEFAULT_CONFIG: Partial<EChartsConfig> = {
+	const DEFAULT_CONFIG: EChartsConfig = {
 		theme: undefined,
 		renderer: 'canvas',
 		option: {}
@@ -57,24 +57,26 @@
 
 <script lang="ts">
 	let {
-		config = DEFAULT_CONFIG,
-		option = $bindable({}),
+		onLoad,
+		config,
 		onDataZoom,
 		loading = $bindable(false),
-		onClear = $bindable(),
-		onLoad
+		onClear = $bindable()
 	}: {
-		config?: typeof DEFAULT_CONFIG;
-		option?: EChartsOption;
+		onLoad: (instance: ECharts) => Promise<void>;
+		config?: Partial<EChartsConfig>;
 		onDataZoom?: (event: DataZoomEventSingle) => void;
 		loading?: boolean;
 		onClear?: () => void;
-		onLoad: (instance: ECharts) => Promise<void>;
 	} = $props();
 
-	let { theme, renderer } = config;
-
 	let instance: ECharts;
+
+	const { theme, renderer, option } = {
+		...DEFAULT_CONFIG,
+		...config
+	};
+
 	const handleDataZoom = (zoomEvent: unknown) => {
 		if (!onDataZoom) {
 			return;
@@ -95,12 +97,7 @@
 		onDataZoom({ start, end });
 	};
 
-	function chartAction(element: HTMLElement, echartsConfig: EChartsConfig) {
-		const { theme, renderer } = {
-			...DEFAULT_CONFIG,
-			...echartsConfig
-		};
-
+	function chartAction(element: HTMLElement) {
 		instance = init(element, theme, { renderer });
 
 		const handleResize = () => {
@@ -109,11 +106,10 @@
 		window.addEventListener('resize', handleResize);
 		instance.on('datazoom', handleDataZoom);
 
-		/**
-		 * @todo
-		 * Limiting option assignment. Review implementation
-		 */
-		// instance.setOption(option);
+		if (Object.keys(option).length) {
+			instance.setOption(option);
+		}
+
 		onClear = () => instance.clear();
 
 		onLoad(instance);
@@ -143,7 +139,7 @@
 			<div class="spinner"></div>
 		</div>
 	{/if}
-	<div id="chart" class="echarts" use:chartAction={{ renderer, theme, option }}></div>
+	<div id="chart" class="echarts" use:chartAction></div>
 </div>
 
 <style>
