@@ -15,6 +15,7 @@
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
 	import type { ECharts, EChartsOption } from './types';
+
 	// Register the required components
 	use([
 		LineChart,
@@ -57,23 +58,23 @@
 <script lang="ts">
 	let {
 		config = DEFAULT_CONFIG,
-		changes = $bindable(0),
-		option,
+		option = $bindable({}),
 		onDataZoom,
 		loading = $bindable(false),
-		onClear = $bindable()
+		onClear = $bindable(),
+		onLoad
 	}: {
 		config?: typeof DEFAULT_CONFIG;
-		changes?: number;
-		option: EChartsOption;
+		option?: EChartsOption;
 		onDataZoom?: (event: DataZoomEventSingle) => void;
 		loading?: boolean;
 		onClear?: () => void;
+		onLoad: (instance: ECharts) => Promise<void>;
 	} = $props();
 
 	let { theme, renderer } = config;
-	let instance: ECharts;
 
+	let instance: ECharts;
 	const handleDataZoom = (zoomEvent: unknown) => {
 		if (!onDataZoom) {
 			return;
@@ -95,7 +96,7 @@
 	};
 
 	function chartAction(element: HTMLElement, echartsConfig: EChartsConfig) {
-		const { theme, renderer, option } = {
+		const { theme, renderer } = {
 			...DEFAULT_CONFIG,
 			...echartsConfig
 		};
@@ -115,6 +116,7 @@
 		// instance.setOption(option);
 		onClear = () => instance.clear();
 
+		onLoad(instance);
 		return {
 			destroy() {
 				instance.off('datazoom', handleDataZoom);
@@ -133,14 +135,6 @@
 			// }
 		};
 	}
-
-	$effect(() => {
-		if (!instance || !option || !changes) return;
-		instance.setOption(option, {
-			notMerge: true,
-			lazyUpdate: true
-		});
-	});
 </script>
 
 <div style="position: relative; width: 100%; height: 100%;">
