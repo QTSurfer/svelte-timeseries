@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { SVECharts, type ECharts } from '$lib';
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
+	import type { ECharts } from 'echarts/core';
+	import SVECharts from '$lib/SVECharts.svelte';
 
 	let loading = $state(true);
 
