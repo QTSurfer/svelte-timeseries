@@ -62,7 +62,7 @@ export type MarkArea = {
 	color?: ZRColor;
 };
 export class TimeSeriesChartBuilder {
-	private instance: ECharts;
+	public ECharts: ECharts;
 	private builderConfig: ConfigBuilder = {
 		externalManagerLegend: false
 	};
@@ -72,7 +72,7 @@ export class TimeSeriesChartBuilder {
 	private _tsColumn: string = '_ts';
 
 	constructor(instance: ECharts, builderConfig?: ConfigBuilder) {
-		this.instance = instance;
+		this.ECharts = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
 		this.option.animation = false;
@@ -180,9 +180,9 @@ export class TimeSeriesChartBuilder {
 	}
 
 	toggleLegend(column: string): this {
-		if (!column || !this.instance) return this;
+		if (!column || !this.ECharts) return this;
 
-		this.instance.dispatchAction({
+		this.ECharts.dispatchAction({
 			type: 'legendToggleSelect',
 			name: column
 		});
@@ -698,7 +698,7 @@ export class TimeSeriesChartBuilder {
 	}
 
 	build() {
-		this.instance.setOption(this.option, {
+		this.ECharts.setOption(this.option, {
 			lazyUpdate: true,
 			notMerge: false,
 			replaceMerge: ['series', 'legend']
@@ -708,8 +708,16 @@ export class TimeSeriesChartBuilder {
 
 	getDimensionKeys() {
 		return {
-			y: this.yDimensionNames,
+			y: this.yDimensionNames!,
 			x: this._tsColumn
 		};
+	}
+
+	getLegendStatus() {
+		if (this.option.legend && !Array.isArray(this.option.legend) && this.yDimensions.length > 1) {
+			return this.option.legend.selected;
+		}
+
+		return {};
 	}
 }
