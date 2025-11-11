@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { DuckDB, type MarkersTableOptions, type Tables } from '$lib/duckdb/DuckDB';
+	import { DuckDB, type MarkersTableOptions, type Tables } from '../duckdb/DuckDB';
 	import { type ECharts, SVECharts, TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
 
 	let {
@@ -15,11 +15,7 @@
 		initialQuery?: string;
 		initialTable?: keyof Tables;
 		debug: boolean;
-		readyHandler?: (
-			echart: ECharts,
-			timeSeries: TimeSeriesChartBuilder,
-			duckDb: DuckDB<Tables>
-		) => void;
+		readyHandler?: (timeSeries: TimeSeriesChartBuilder, duckDb: DuckDB<Tables>) => void;
 	} = $props();
 
 	let loading = $state(false);
@@ -63,7 +59,7 @@
 		}
 
 		loading = false;
-		readyHandler?.(EChartInstance, timeSeries, duckDb);
+		readyHandler?.(timeSeries, duckDb);
 	};
 </script>
 
