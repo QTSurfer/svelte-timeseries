@@ -1,9 +1,10 @@
 import {
-	type EChartsOption,
 	type SeriesOption,
 	type LineSeriesOption,
-	type DataZoomComponentOption
-} from 'echarts';
+	type DataZoomComponentOption,
+¿} from 'echarts';
+import { type EChartsOption, type ECharts } from '$lib';
+
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
 
@@ -56,21 +57,25 @@ export type MarkArea = {
 	color?: ZRColor;
 };
 export class TimeSeriesChartBuilder {
-	private option: EChartsOption;
-	private yDimensions?: string[];
+	private instance: ECharts;
+	private option: EChartsOption = {};
+	private yDimensions!: string[];
 	private yDimensionNames?: string[];
 
-	constructor(options: EChartsOption) {
-		this.option = options;
+	constructor(instance: ECharts) {
+		this.instance = instance;
 
 		this.option.animation = false;
 		this.option.title = {
 			left: 'center',
 			top: 0
 		};
+
 		this.option.legend = {
-			top: '10%'
+			top: '10%',
+			selected: {}
 		};
+
 		this.option.grid = {
 			top: '20%',
 			left: 150,
@@ -95,6 +100,7 @@ export class TimeSeriesChartBuilder {
 				realtime: false
 			}
 		];
+
 		this.option.tooltip = {
 			trigger: 'axis',
 			axisPointer: { type: 'cross' }
@@ -104,6 +110,7 @@ export class TimeSeriesChartBuilder {
 			type: 'time',
 			axisLine: { show: true }
 		};
+
 		this.option.yAxis = [
 			{
 				type: 'value',
@@ -134,11 +141,7 @@ export class TimeSeriesChartBuilder {
 	 * Accepts data as rows: [timestamp, v1, v2, ...]
 	 * Automatically generates line series for each value column (>=1).
 	 */
-	setDataset(
-		data: DatasetFormatArray | DatasetFormatObject,
-		yDimensionsNames?: string[],
-		xAxisName?: string
-	): this {
+	setDataset(data: DatasetFormatArray | DatasetFormatObject, yDimensionsNames?: string[]): this {
 		if (!Array.isArray(data)) {
 			throw new Error('Data must be an array');
 		}
@@ -151,32 +154,38 @@ export class TimeSeriesChartBuilder {
 			if (!yDimensionsNames?.length) {
 				throw new Error('Requires yDimensionsNames. e.g. ["v1", "v2", "v3"]');
 			}
-			this.setDatasetByArray(data, yDimensionsNames, xAxisName);
+			this.setDatasetByArray(data, yDimensionsNames);
 		} else if (this.isRecordArray(data)) {
-			this.setDataByObject(data, yDimensionsNames, xAxisName);
+			this.setDataByObject(data, yDimensionsNames);
 		} else {
 			throw new Error('Data must be an array');
 		}
 
+		return this.build();
+	}
+
+	toggleLegend(column: string): this {
+		if (!column || !this.instance) return this;
+
+		this.instance.dispatchAction({
+			type: 'legendToggleSelect',
+			name: column
+		});
 		return this;
 	}
 
-	// appendDataset(data: any[]): this {
-	// 	(this.option.dataset as DatasetOption).source = [
-	// 		(this.option.dataset as DatasetOption).source,
-	// 		...data
-	// 	];
-	// 	return this;
-	// }
-
 	/**
-	 * Accepts data as rows: [timestamp, v1, v2, ...]
-	 * Automatically generates line series for each value column (>=1).
+	 * data: [1658870400, 823, 95.8, ...]
+	 * dimensionsNames: ['_ts', 'price', 'otherColumn', ...]
 	 */
-	setDatasetByArray(data: DatasetFormatArray, dimensionsNames: string[], xAxisName?: string): this {
+	private setDatasetByArray(
+		data: DatasetFormatArray,
+		dimensionsNames: string[],
+		xAxisName?: string
+	) {
 		// Build series based on number of columns (minus the time column).
 		const columns = Array.isArray(data) && data.length > 0 ? data[0].length : 0;
-		const totalCol = Math.max(0, columns - 1);
+		const totalCol = Math.max(0, columns);
 
 		if (totalCol !== dimensionsNames?.length) {
 			throw new Error(
@@ -185,13 +194,28 @@ export class TimeSeriesChartBuilder {
 		}
 
 		/**
-		 * Dimensions are the column names.
+		 * First column is the time dimension.
+		 * ------
+		 * _ts  |
+		 * ------
+		 */
+		const timeDimensionKey = dimensionsNames.shift();
+
+		if (timeDimensionKey === undefined) {
+			throw new Error('No time dimension found.');
+		}
+
+		/**
+		 * TimeDimensionName is the name of the time dimension.
+		 */
+		const timeDimensionName = xAxisName || timeDimensionKey;
+
+		/**
+		 * YDimensions are the column names.
 		 * --------------------------------------------------------
-		 * Time | Column 1 | Column 2 | Column 3 | Column 4 | Column 5
+		 * Column 1 | Column 2 | Column 3 | Column 4 | Column 5
 		 * --------------------------------------------------------
 		 */
-		const timeDimensionKey = xAxisName || 'Time';
-
 		this.yDimensions = dimensionsNames;
 		this.yDimensionNames = dimensionsNames;
 
@@ -207,44 +231,51 @@ export class TimeSeriesChartBuilder {
 			this.option.dataset.dimensions = [timeDimensionKey, ...this.yDimensions];
 			this.option.dataset.source = data;
 		}
-
-		/** Automatically set line width based on number of columns */
-		this.createSeriesData(timeDimensionKey, timeDimensionKey);
-
-		return this;
+		this.createSeriesData(timeDimensionKey, timeDimensionName);
 	}
 
 	/**
 	 * Data is an array of objects.
 	 * [
-	 *	{_ts: 1658870400, count: 823, score: 95.8},
+	 *	{_ts: 1658870400, price: 823, otherColumn: 95.8},
 	 *  {...}
 	 * ]
 	 */
-	setDataByObject(data: DatasetFormatObject, dimensionsNames?: string[], xAxisName?: string): this {
+	private setDataByObject(data: DatasetFormatObject, dimensionsNames?: string[]) {
 		if (data.length < 2) {
 			throw new Error('Minimum data length is 2.');
 		}
 
-		// Get dimensions from first row
+		// All dimensions are obtained based on the keys of the first element in the array.
+		// The first dimension, corresponding to time, is separated.
 		const dimensionKeys = Object.keys(data[0]);
 		const timeDimensionKey = dimensionKeys.shift();
 
 		if (timeDimensionKey === undefined) {
 			throw new Error('No time dimension found.');
 		}
-		const timeDimensionName = xAxisName || timeDimensionKey;
 
+		// If custom dimension names are specified, those values will be used.
+		// By default, the dimensions will keep the same names as the original keys.
+		const timeDimensionName = dimensionsNames ? dimensionsNames.shift() : timeDimensionKey;
+
+		/**
+		 * `yDimensions` represents all data keys except the time dimension.
+		 * -------------------
+		 * price | otherColumn
+		 * -------------------
+		 */
 		this.yDimensions = dimensionKeys;
+
+		// If custom dimension names are specified, those values will be used.
+		// By default, the dimensions will keep the same names as the original keys.
 		this.yDimensionNames = dimensionsNames || dimensionKeys;
 
 		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
 			this.option.dataset.dimensions = [timeDimensionKey, ...this.yDimensions];
 			this.option.dataset.source = data;
 		}
-
 		this.createSeriesData(timeDimensionKey, timeDimensionName);
-		return this;
 	}
 
 	/**
@@ -310,14 +341,6 @@ export class TimeSeriesChartBuilder {
 	}
 
 	/**
-	 * Returns the built ECharts option.
-	 */
-	build(): EChartsOption {
-		// Shallow clone is fine for typical ECharts options here.
-		return this.option;
-	}
-
-	/**
 	 * Adds a marker event to the chart.
 	 */
 	addMarkerEvents(data: MarkerEvent[], widthLine: number = 1): this {
@@ -364,7 +387,7 @@ export class TimeSeriesChartBuilder {
 			});
 		}
 
-		return this;
+		return this.build();
 	}
 
 	/**
@@ -408,10 +431,10 @@ export class TimeSeriesChartBuilder {
 			1
 		);
 
-		return this;
+		return this.build();
 	}
 
-	getIcon(icon: IconType): string {
+	private getIcon(icon: IconType): string {
 		const arrowUpPath =
 			'path://M7.414 27.414l16.586-16.586v7.172c0 1.105 0.895 2 2 2s2-0.895 2-2v-12c0-0.809-0.487-1.538-1.235-1.848-0.248-0.103-0.508-0.151-0.765-0.151v-0.001h-12c-1.105 0-2 0.895-2 2s0.895 2 2 2h7.172l-16.586 16.586c-0.391 0.39-0.586 0.902-0.586 1.414s0.195 1.024 0.586 1.414c0.781 0.781 2.047 0.781 2.828 0z';
 
@@ -548,6 +571,14 @@ export class TimeSeriesChartBuilder {
 
 		this.option.series = this.yDimensions.map((dim, inx) => {
 			const isPercentage = percentageFields.includes(dim);
+
+			if (this.option.legend && !Array.isArray(this.option.legend) && this.yDimensions.length > 1) {
+				this.option.legend.selected = {
+					...this.option.legend.selected,
+					[this.yDimensionNames![inx]]: !(dim !== 'price')
+				};
+			}
+
 			return {
 				type: 'line',
 				animation: false,
@@ -555,7 +586,8 @@ export class TimeSeriesChartBuilder {
 				name: this.yDimensionNames![inx],
 				encode: { x: timeDimensionKey, y: dim },
 				emphasis: {
-					focus: 'series'
+					focus: 'none',
+					disabled: true
 				},
 				connectNulls: false,
 				smooth: false,
@@ -600,7 +632,6 @@ export class TimeSeriesChartBuilder {
 	/**
 	 * Search for the dimension key and timestamp
 	 */
-
 	private searchValueByDimensionKeyAndTimestamp(yDimKey: string, timestamp: number): any {
 		const dataset = this.option.dataset as {
 			source: DatasetFormatArray | DatasetFormatObject;
@@ -646,5 +677,14 @@ export class TimeSeriesChartBuilder {
 		);
 
 		return percentFields;
+	}
+
+	private build() {
+		this.instance.setOption(this.option, {
+			lazyUpdate: true,
+			notMerge: false,
+			replaceMerge: ['series', 'legend']
+		});
+		return this;
 	}
 }
