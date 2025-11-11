@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 
 	let selected = $state<number | null>(null);
-	let baseUrl = $state<string>(typeof window !== 'undefined' ? window.location.origin : '');
+	let baseUrl = $state<string>(typeof window !== 'undefined' ? window.location.href : '');
 
 	type ConfigurationType = {
 		duckDb?: {
