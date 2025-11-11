@@ -1,23 +1,23 @@
 <script lang="ts">
-	import { SVECharts, type EChartsOption, type ECharts } from '$lib';
+	import { SVECharts, type ECharts } from '$lib';
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
 
-	let timeSeriesOption = $state<EChartsOption>({});
 	let loading = $state(true);
-	let changes = $state(0);
 
 	async function onLoad(instance: ECharts) {
 		loading = true;
 		const totalHours = 700000;
-		const timeSeries = new TimeSeriesChartBuilder(instance);
+
 		const { data, yDimensionsNames } = createDataSet<number[]>(totalHours, 'array');
+
+		const timeSeries = new TimeSeriesChartBuilder(instance);
 		const marker: MarkerEvent[] = [
 			{
 				name: 'Event 1',
 				icon: 'circle',
-				xAxis: [data[400][0], data[450][0]],
+				xAxis: [data[320000][0], data[350000][0]],
 				color: '#ff0000'
 			}
 		];
@@ -25,14 +25,19 @@
 		const area: MarkArea[] = [
 			{
 				name: 'Event with name',
-				xAxis: [data[600][0], data[650][0]]
+				xAxis: [data[330000][0], data[340000][0]]
 			},
 			{
-				xAxis: [data[800][0], data[820][0]]
+				xAxis: [data[360000][0], data[380000][0]]
 			}
 		];
 
-		timeSeries.setTitle('Time Series Data ARRAY', 'hours').setDataset(data, yDimensionsNames);
+		timeSeries
+			.setTitle('Time Series Data ARRAY', 'hours')
+			.setDataset(data, yDimensionsNames)
+			.addMarkArea(area)
+			.addMarkerEvents(marker);
+
 		loading = false;
 	}
 </script>
