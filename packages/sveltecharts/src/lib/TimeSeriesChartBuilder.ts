@@ -1,8 +1,4 @@
-import {
-	type SeriesOption,
-	type LineSeriesOption,
-	type DataZoomComponentOption,
-¿} from 'echarts';
+import { type SeriesOption, type LineSeriesOption, type DataZoomComponentOption } from 'echarts';
 import { type EChartsOption, type ECharts } from '$lib';
 
 import type { GridOption } from 'echarts/types/dist/shared';
