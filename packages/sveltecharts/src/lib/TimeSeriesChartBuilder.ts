@@ -69,6 +69,7 @@ export class TimeSeriesChartBuilder {
 	private option: EChartsOption = {};
 	private yDimensions!: string[];
 	private yDimensionNames?: string[];
+	private _tsColumn: string = '_ts';
 
 	constructor(instance: ECharts, builderConfig?: ConfigBuilder) {
 		this.instance = instance;
@@ -219,10 +220,11 @@ export class TimeSeriesChartBuilder {
 			throw new Error('No time dimension found.');
 		}
 
+		this._tsColumn = timeDimensionKey;
 		/**
 		 * TimeDimensionName is the name of the time dimension.
 		 */
-		const timeDimensionName = xAxisName || timeDimensionKey;
+		const timeDimensionName = xAxisName || this._tsColumn;
 
 		/**
 		 * YDimensions are the column names.
@@ -245,7 +247,7 @@ export class TimeSeriesChartBuilder {
 			this.option.dataset.dimensions = [timeDimensionKey, ...this.yDimensions];
 			this.option.dataset.source = data;
 		}
-		this.createSeriesData(timeDimensionKey, timeDimensionName);
+		this.createSeriesData(this._tsColumn, timeDimensionName);
 	}
 
 	/**
@@ -269,9 +271,11 @@ export class TimeSeriesChartBuilder {
 			throw new Error('No time dimension found.');
 		}
 
+		this._tsColumn = timeDimensionKey;
+
 		// If custom dimension names are specified, those values will be used.
 		// By default, the dimensions will keep the same names as the original keys.
-		const timeDimensionName = dimensionsNames ? dimensionsNames.shift() : timeDimensionKey;
+		const timeDimensionName = dimensionsNames ? dimensionsNames.shift() : this._tsColumn;
 
 		/**
 		 * `yDimensions` represents all data keys except the time dimension.
@@ -286,10 +290,10 @@ export class TimeSeriesChartBuilder {
 		this.yDimensionNames = dimensionsNames || dimensionKeys;
 
 		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
-			this.option.dataset.dimensions = [timeDimensionKey, ...this.yDimensions];
+			this.option.dataset.dimensions = [this._tsColumn, ...this.yDimensions];
 			this.option.dataset.source = data;
 		}
-		this.createSeriesData(timeDimensionKey, timeDimensionName);
+		this.createSeriesData(this._tsColumn, timeDimensionName);
 	}
 
 	/**
@@ -668,7 +672,7 @@ export class TimeSeriesChartBuilder {
 			return dataFind[yDimensionKey];
 		} else if (this.isRecordArray(dataset.source)) {
 			const dataFind = dataset.source.find((row) => {
-				return row._ts === timestamp;
+				return row[this._tsColumn] === timestamp;
 			});
 			if (!dataFind) {
 				throw new Error(`No data found in timestamp ${timestamp}`);
