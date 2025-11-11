@@ -705,4 +705,11 @@ export class TimeSeriesChartBuilder {
 		});
 		return this;
 	}
+
+	getDimensionKeys() {
+		return {
+			y: this.yDimensionNames,
+			x: this._tsColumn
+		};
+	}
 }
