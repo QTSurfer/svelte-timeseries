@@ -1,104 +1,53 @@
 <script lang="ts">
-	import { SVECharts, type EChartsOption } from '$lib';
-	import { TimeSeriesChartBuilder } from '$lib';
+	import { SVECharts, type ECharts } from '$lib';
+	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
-	import { onMount } from 'svelte';
 
-	let timeSeriesOption: EChartsOption = {};
-	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
 	let loading = $state(true);
-	let changes = $state(0);
 
-	onMount(async () => {
+	async function onLoad(instance: ECharts) {
+		loading = true;
 		const totalHours = 700000;
 
-		const { data: object, yDimensionsNames } = createDataSet<Record<string, any>>(
-			totalHours,
-			'object'
-		);
+		const { data, yDimensionsNames } = createDataSet<Record<string, any>>(totalHours, 'object');
 
-		await new Promise((r) => setTimeout(r, 3000));
-
+		const timeSeries = new TimeSeriesChartBuilder(instance);
+		const timeKey = yDimensionsNames[0];
 		const marker: MarkerEvent[] = [
 			{
 				name: 'Event 1',
-				icon: 'arrowUp',
-				xAxis: [object[100]._ts, object[150]._ts],
-				color: 'green',
-				position: 'belowBar'
-			},
-			{
-				name: 'Event 2',
-				icon: 'arrowUp',
-				xAxis: [object[125]._ts],
-				color: 'black',
-				position: 'aboveBar'
+				icon: 'circle',
+				xAxis: [data[320000][timeKey], data[350000][timeKey]],
+				color: '#ff0000'
 			}
 		];
 
 		const area: MarkArea[] = [
 			{
 				name: 'Event with name',
-				xAxis: [object[300]._ts, object[320]._ts]
+				xAxis: [data[330000][timeKey], data[340000][timeKey]]
 			},
 			{
-				xAxis: [object[350]._ts, object[380]._ts]
+				xAxis: [data[360000][timeKey], data[380000][timeKey]]
 			}
 		];
-		timeSeries
-			.setTitle('Time Series Data OBJECT', 'Last 24 hours')
-			.setDataset(object, yDimensionsNames, 'TIME')
-			.setLegendIcon('rect')
-			.setSeriesStyle({ smooth: false, symbol: 'none' })
-			.addMarkerEvents(marker)
-			.addMarkArea(area);
 
 		timeSeries
-			.addMarkerPoint(
-				{
-					dimName: 'col1',
-					timestamp: object[600]._ts,
-					name: 'Point 1'
-				},
-				{
-					icon: 'arrowUp',
-					color: 'red'
-				}
-			)
-			.addMarkerPoint(
-				{
-					dimName: 'col1',
-					timestamp: object[700]._ts,
-					name: 'Point 2'
-				},
-				{
-					icon: 'arrowDown',
-					color: 'green'
-				}
-			)
-			.addMarkerPoint(
-				{
-					dimName: 'col1',
-					timestamp: object[750]._ts,
-					name: 'Point 3'
-				},
-				{
-					icon: 'circle',
-					color: 'green'
-				}
-			);
+			.setTitle('Time Series Data OBJECT', 'hours')
+			.setDataset(data, yDimensionsNames)
+			.addMarkArea(area)
+			.addMarkerEvents(marker);
 
-		changes++;
 		loading = false;
-	});
+	}
 </script>
 
 <main>
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">
-				<SVECharts option={timeSeriesOption} {loading} {changes} />
+				<SVECharts {onLoad} {loading} />
 			</div>
 		</div>
 	</div>

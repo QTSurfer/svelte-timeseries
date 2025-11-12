@@ -1,24 +1,24 @@
 <script lang="ts">
-	import { SVECharts, type EChartsOption } from '$lib';
-	import { TimeSeriesChartBuilder } from '$lib';
+	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
-	import { onMount } from 'svelte';
+	import type { ECharts } from 'echarts/core';
+	import SVECharts from '$lib/SVECharts.svelte';
 
-	let timeSeriesOption: EChartsOption = {};
-	const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
 	let loading = $state(true);
-	let changes = $state(0);
 
-	onMount(async () => {
+	async function onLoad(instance: ECharts) {
 		loading = true;
 		const totalHours = 700000;
+
 		const { data, yDimensionsNames } = createDataSet<number[]>(totalHours, 'array');
+
+		const timeSeries = new TimeSeriesChartBuilder(instance);
 		const marker: MarkerEvent[] = [
 			{
 				name: 'Event 1',
 				icon: 'circle',
-				xAxis: [data[400][0], data[450][0]],
+				xAxis: [data[320000][0], data[350000][0]],
 				color: '#ff0000'
 			}
 		];
@@ -26,37 +26,28 @@
 		const area: MarkArea[] = [
 			{
 				name: 'Event with name',
-				xAxis: [data[600][0], data[650][0]]
+				xAxis: [data[330000][0], data[340000][0]]
 			},
 			{
-				xAxis: [data[800][0], data[820][0]]
+				xAxis: [data[360000][0], data[380000][0]]
 			}
 		];
 
 		timeSeries
 			.setTitle('Time Series Data ARRAY', 'hours')
 			.setDataset(data, yDimensionsNames)
-			.setLegendIcon('rect')
-			.addMarkerEvents(marker)
 			.addMarkArea(area)
-			.addMarkerPoint({
-				dimName: 'Column 1',
-				timestamp: data[600][0],
-				name: 'Point 1'
-			});
+			.addMarkerEvents(marker);
 
-		await new Promise((r) => setTimeout(r, 3000));
-
-		changes++;
 		loading = false;
-	});
+	}
 </script>
 
 <main>
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">
-				<SVECharts option={timeSeriesOption} {loading} {changes} />
+				<SVECharts {onLoad} {loading} />
 			</div>
 		</div>
 	</div>

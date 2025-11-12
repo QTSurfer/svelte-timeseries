@@ -1,47 +1,51 @@
 <script lang="ts">
-	import { DuckDB, type Tables } from '$lib/duckdb/DuckDB';
-	import { type EChartsOption, SVECharts, TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
-	import { onMount } from 'svelte';
+	import { DuckDB, type MarkersTableOptions, type Tables } from '../duckdb/DuckDB';
+	import { type ECharts, SVECharts, TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
 
-	let { table, debug = true }: { table: Tables; debug: boolean } = $props();
+	let {
+		table,
+		markers,
+		initialQuery,
+		initialTable,
+		debug = true,
+		readyHandler
+	}: {
+		table: Tables;
+		markers?: MarkersTableOptions;
+		initialQuery?: string;
+		initialTable?: keyof Tables;
+		debug: boolean;
+		readyHandler?: (timeSeries: TimeSeriesChartBuilder, duckDb: DuckDB<Tables>) => void;
+	} = $props();
 
-	/**
-	 * The `_m` value represents the column where *markers* are stored, and its value indicates the associated table name.
-	 * You can assign either a Parquet file or a URL.
-	 * If a column is used, it will search for that column across all available tables.
-	 * Note that only one *markers* column can exist across all tables.
-	 */
-	// let tables = $derived<Tables>({
-	// 	markers: {
-	// 		table: 'signal',
-	// 		targetColumn: '_m'
-	// 	},
-	// 	signal: url
-	//  query: 'SELECT _ts, price FROM signal WHERE price NOT NULL'
-	// });
-
-	let timeSeriesOption = $state<EChartsOption>({});
-	let changes = $state(1);
 	let loading = $state(false);
 
-	async function load() {
+	const onLoad = async (EChartInstance: ECharts) => {
 		loading = true;
-		let duckDb = await DuckDB.create(table, debug);
-		const timeSeries = new TimeSeriesChartBuilder(timeSeriesOption);
+		const duckDb = await DuckDB.create(table, markers, debug);
+		const timeSeries = new TimeSeriesChartBuilder(EChartInstance, {
+			externalManagerLegend: true
+		});
+
+		const result = initialQuery
+			? await duckDb.query(initialQuery)
+			: await duckDb.getMainDataByTable(initialTable || Object.keys(table)[0]);
+
+		/**
+		 * Optimize data
+		 * Transform table object to matrix
+		 */
+		const [rows, yDimensionsNames] = duckDb.transformTableToMatrix(result);
+
 		timeSeries.setLegendIcon('rect');
+		timeSeries.setDataset(rows, yDimensionsNames);
 
-		const result = await duckDb.query(table.query);
-		const rows = result.toArray();
-
-		timeSeries.setDataset(rows);
-
-		if (table.markers) {
-			const markers = await duckDb.getMarkers();
-			const markersRows = markers.toArray();
+		if (markers) {
+			const markersRows = await duckDb.getMarkers();
 			for (const m of markersRows) {
 				timeSeries.addMarkerPoint(
 					{
-						dimName: 'price',
+						dimName: markers.targetDimension,
 						timestamp: m._ts,
 						name: m.text
 					},
@@ -51,15 +55,14 @@
 					}
 				);
 			}
+			timeSeries.build();
 		}
-		loading = false;
-	}
 
-	onMount(() => {
-		load();
-	});
+		loading = false;
+		readyHandler?.(timeSeries, duckDb);
+	};
 </script>
 
 <div class="container" style="height: 100%;">
-	<SVECharts option={timeSeriesOption} {loading} {changes} />
+	<SVECharts {onLoad} {loading} />
 </div>

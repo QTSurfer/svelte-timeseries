@@ -15,6 +15,7 @@
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
 	import type { ECharts, EChartsOption } from './types';
+
 	// Register the required components
 	use([
 		LineChart,
@@ -47,7 +48,7 @@
 
 	export type DataZoomEvent = DataZoomEventBatch | DataZoomEventSingle;
 
-	const DEFAULT_CONFIG: Partial<EChartsConfig> = {
+	const DEFAULT_CONFIG: EChartsConfig = {
 		theme: undefined,
 		renderer: 'canvas',
 		option: {}
@@ -56,23 +57,25 @@
 
 <script lang="ts">
 	let {
-		config = DEFAULT_CONFIG,
-		changes = $bindable(0),
-		option,
+		onLoad,
+		config,
 		onDataZoom,
 		loading = $bindable(false),
 		onClear = $bindable()
 	}: {
-		config?: typeof DEFAULT_CONFIG;
-		changes?: number;
-		option: EChartsOption;
+		onLoad: (instance: ECharts) => Promise<void>;
+		config?: Partial<EChartsConfig>;
 		onDataZoom?: (event: DataZoomEventSingle) => void;
 		loading?: boolean;
 		onClear?: () => void;
 	} = $props();
 
-	let { theme, renderer } = config;
 	let instance: ECharts;
+
+	const { theme, renderer, option } = {
+		...DEFAULT_CONFIG,
+		...config
+	};
 
 	const handleDataZoom = (zoomEvent: unknown) => {
 		if (!onDataZoom) {
@@ -94,12 +97,7 @@
 		onDataZoom({ start, end });
 	};
 
-	function chartAction(element: HTMLElement, echartsConfig: EChartsConfig) {
-		const { theme, renderer, option } = {
-			...DEFAULT_CONFIG,
-			...echartsConfig
-		};
-
+	function chartAction(element: HTMLElement) {
 		instance = init(element, theme, { renderer });
 
 		const handleResize = () => {
@@ -108,13 +106,13 @@
 		window.addEventListener('resize', handleResize);
 		instance.on('datazoom', handleDataZoom);
 
-		/**
-		 * @todo
-		 * Limiting option assignment. Review implementation
-		 */
-		// instance.setOption(option);
+		if (Object.keys(option).length) {
+			instance.setOption(option);
+		}
+
 		onClear = () => instance.clear();
 
+		onLoad(instance);
 		return {
 			destroy() {
 				instance.off('datazoom', handleDataZoom);
@@ -133,14 +131,6 @@
 			// }
 		};
 	}
-
-	$effect(() => {
-		if (!instance || !option || !changes) return;
-		instance.setOption(option, {
-			notMerge: true,
-			lazyUpdate: true
-		});
-	});
 </script>
 
 <div style="position: relative; width: 100%; height: 100%;">
@@ -149,7 +139,7 @@
 			<div class="spinner"></div>
 		</div>
 	{/if}
-	<div id="chart" class="echarts" use:chartAction={{ renderer, theme, option }}></div>
+	<div id="chart" class="echarts" use:chartAction></div>
 </div>
 
 <style>
