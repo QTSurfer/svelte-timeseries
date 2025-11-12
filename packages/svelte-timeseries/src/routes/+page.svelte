@@ -100,7 +100,7 @@
 	]);
 
 	onMount(async () => {
-		baseUrl = window.location.origin;
+		baseUrl = window.location.href;
 	});
 
 	let db = $state<DuckDB<Tables>>();
