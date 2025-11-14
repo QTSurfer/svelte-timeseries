@@ -3,191 +3,185 @@
 ![NPM Version](https://img.shields.io/npm/v/%40qtsurfer%2Fsvelte-timeseries?registry_uri=https%3A%2F%2Fregistry.npmjs.com&style=flat&logo=npm&label=QTSurfer%2Fsvelte-timeseries)
 [![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsvelte-timeseries?registry_uri=https%3A%2F%2Fregistry.npmjs.com&style=flat)](LICENSE.md)
 
-> Componente Svelte profesional para explorar **series temporales masivas** directamente en el navegador usando DuckDB-WASM, Apache Arrow y SVECharts.
+> Professional Svelte component to explore **huge time-series datasets** directly in the browser using DuckDB-WASM, Apache Arrow, and SVECharts.
 
-## Tabla de contenidos
+## Table of contents
 
-1. [Visión general](#visión-general)
-2. [Arquitectura base](#arquitectura-base)
-3. [Características clave](#características-clave)
-4. [Instalación](#instalación)
-5. [Primeros pasos](#primeros-pasos)
-6. [API del componente](#api-del-componente)
-7. [TimeSeriesFacade en la práctica](#timeseriesfacade-en-la-práctica)
-8. [APIs avanzadas](#apis-avanzadas)
-9. [Escenarios de referencia](#escenarios-de-referencia)
-10. [Desarrollo y pruebas](#desarrollo-y-pruebas)
-11. [Soporte y contribuciones](#soporte-y-contribuciones)
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+3. [Key features](#key-features)
+4. [Installation](#installation)
+5. [Getting started](#getting-started)
+6. [Component API](#component-api)
+7. [TimeSeriesFacade in practice](#timeseriesfacade-in-practice)
+8. [Advanced APIs](#advanced-apis)
+9. [Reference scenarios](#reference-scenarios)
+10. [Development & testing](#development--testing)
+11. [Support & contributions](#support--contributions)
 
-## Visión general
+## Overview
 
-`@qtsurfer/svelte-timeseries` empaqueta todo lo necesario para construir dashboards financieros, industriales o científicos con millones de puntos de datos. El componente trae:
+`@qtsurfer/svelte-timeseries` ships everything you need to build financial, industrial, or scientific dashboards with millions of data points. The component offers:
 
-- Lectura de archivos Parquet/Arrow mediante DuckDB-WASM directamente en el navegador.
-- Transformaciones columnar → ECharts listas para usar gracias a Apache Arrow.
-- Marcadores/eventos sincronizados con cualquier dimensión.
-- Personalización de paneles laterales con snippets de Svelte.
+- Parquet/Arrow ingestion via DuckDB-WASM right in the browser.
+- Columnar → ECharts transformations powered by Apache Arrow.
+- Marker/event overlays synchronized with any dimension.
+- Customizable side panels through Svelte snippets.
 
-## Arquitectura base
+## Architecture
 
-| Capa                     | Rol                                                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| DuckDB-WASM              | Ejecuta SQL sobre Parquet sin backend adicional y mantiene la data en memoria columnar.                          |
-| `TimeSeriesFacade`       | Coordina DuckDB + `TimeSeriesChartBuilder`, maneja la carga incremental de columnas y expone el estado de la UI. |
-| `@qtsurfer/sveltecharts` | Fachada que arma y actualiza instancias de ECharts de manera declarativa.                                        |
-| SvelteKit                | Aloja el componente, snippets y páginas demo.                                                                    |
+| Layer                   | Role                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| DuckDB-WASM             | Runs SQL against Parquet without any backend and keeps data in columnar memory.                                   |
+| `TimeSeriesFacade`      | Coordinates DuckDB + `TimeSeriesChartBuilder`, handles incremental column loads, and exposes UI state.            |
+| `@qtsurfer/sveltecharts` | Facade that builds and updates ECharts instances declaratively.                                                   |
+| SvelteKit               | Hosts the component, snippets, and demo routes.                                                                   |
 
-## Características clave
+## Key features
 
-- **Escala en el navegador**: probado con datasets de más de 10 millones de valores sin recargar la página.
-- **Carga diferida**: columnas adicionales se descargan sólo cuando el usuario las activa.
-- **Marcadores nativos**: señales de trading, alertas o anotaciones se renderizan con íconos y colores personalizados.
-- **Paneles reemplazables**: provee snippets para columnas y métricas, pero puedes inyectar tu propia UI.
-- **Modo depuración**: logs de la inicialización DuckDB/ECharts para diagnósticos entre navegadores.
+- **Browser-scale**: battle-tested with datasets above 10M values without page reloads.
+- **Lazy dimensions**: additional columns download only when the user toggles them on.
+- **Native markers**: trading signals, alerts, or annotations rendered with custom icons and colors.
+- **Replaceable panels**: default column/performance panels can be swapped with your own snippets.
+- **Debug mode**: detailed DuckDB/ECharts logs to diagnose cross-browser performance.
 
-## Instalación
+## Installation
 
 ```bash
 pnpm add @qtsurfer/svelte-timeseries
-# o
+# or
 npm install @qtsurfer/svelte-timeseries
 yarn add @qtsurfer/svelte-timeseries
 ```
 
-Requisitos:
+Requirements:
 
-- Proyecto SvelteKit con TypeScript.
-- Posibilidad de servir archivos Parquet/Arrow (local o CDN).
+- SvelteKit project with TypeScript enabled.
+- Ability to serve Parquet/Arrow files (local assets or CDN).
 
-## Primeros pasos
+## Getting started
 
 ```svelte
 <script lang="ts">
-    import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
+	import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
 
-    const tables = {
-        temps: {
-            url: '/temps_gzip.parquet',
-            mainColumn: 'temp'
-        }
-    };
+	const tables = {
+		temps: {
+			url: '/temps_gzip.parquet',
+			mainColumn: 'temp'
+		}
+	};
 
-    const markers = {
-        table: 'temps',
-        targetColumn: '_signal',
-        targetDimension: 'temp'
-    };
+	const markers = {
+		table: 'temps',
+		targetColumn: '_signal',
+		targetDimension: 'temp'
+	};
 </script>
 
 <SvelteTimeSeries table={tables} {markers} debug={false} />
 ```
 
-## API del componente
+## Component API
 
-| Propiedad             | Tipo                                                                            | Descripción                                                                                                  |
+| Prop                  | Type                                                                            | Description                                                                                                  |
 | --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `table`               | `Record<string, { url: string; mainColumn: string; columnsSelect?: string[] }>` | Define las tablas Parquet y su columna principal; la clave del objeto se usa como nombre de vista en DuckDB. |
-| `markers?`            | `MarkersTableOptions`                                                           | Tabla y columna JSON para generar la vista `markers` con `shape`, `color`, `position` y `text`.              |
-| `debug?`              | `boolean` (default `true`)                                                      | Habilita logs detallados de carga DuckDB y builder.                                                          |
-| `columnsSnippet?`     | `Snippet<[ColumnsProps]>`                                                       | Sobrescribe el panel de columnas.                                                                            |
-| `performanceSnippet?` | `Snippet<[PerformanceProps]>`                                                   | Sobrescribe el panel de métricas/rendimiento.                                                                |
+| `table`               | `Record<string, { url: string; mainColumn: string; columnsSelect?: string[] }>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name.           |
+| `markers?`            | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).               |
+| `debug?`              | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                                      |
+| `columnsSnippet?`     | `Snippet<[ColumnsProps]>`                                                       | Overrides the column toggle panel.                                                                           |
+| `performanceSnippet?` | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                                     |
 
-## TimeSeriesFacade en la práctica
+## TimeSeriesFacade in practice
 
-`TimeSeriesFacade` (ver `src/lib/TimeSeriesFacade.ts`) concentra la lógica del componente:
+`TimeSeriesFacade` (see `src/lib/TimeSeriesFacade.ts`) encapsulates the component logic:
 
-1. **Inicialización** (`initialize`) – descarga la columna principal, arma el dataset y establece íconos/leyendas.
-2. **Carga incremental** (`addDimension` / `toggleColumn`) – consulta nuevas columnas sólo cuando el usuario lo solicita.
-3. **Marcadores** (`loadMarkers`) – lee la vista `markers` y añade anotaciones en ECharts.
-4. **Estado observable** (`getColumns`, `describe`, `getLegendStatus`) – entrega datos listos para paneles personalizados.
+1. **Initialization** (`initialize`) – downloads the primary column, builds the dataset, and configures legends/icons.
+2. **Incremental loading** (`addDimension` / `toggleColumn`) – fetches new columns only when requested.
+3. **Markers** (`loadMarkers`) – reads the `markers` view and adds annotations to ECharts.
+4. **Observable state** (`getColumns`, `describe`, `getLegendStatus`) – provides data for custom panels without touching DuckDB again.
 
-Puedes importar la clase para construir dashboards a medida reutilizando toda la canalización DuckDB → Arrow → ECharts.
+Import the class directly to craft bespoke dashboards while reusing the DuckDB → Arrow → ECharts pipeline.
 
-## APIs avanzadas
+## Advanced APIs
 
 ### 1. DuckDB
 
-Usa la misma instancia que el componente para ejecutar SQL específico antes/después del render.
+Reuse the same instance to run bespoke SQL before/after chart rendering.
 
 ```ts
-import { DuckDB } from "@qtsurfer/svelte-timeseries";
+import { DuckDB } from '@qtsurfer/svelte-timeseries';
 
 const duck = await DuckDB.create(
-  {
-    signal: {
-      url: "/signals.parquet",
-      mainColumn: "price",
-    },
-  },
-  undefined,
-  true
+	{
+		signal: {
+			url: '/signals.parquet',
+			mainColumn: 'price'
+		}
+	},
+	undefined,
+	true
 );
 
-const rows = await duck.getRangeData(
-  "signal",
-  "2024-01-01",
-  "2024-01-31",
-  1000
-);
+const rows = await duck.getRangeData('signal', '2024-01-01', '2024-01-31', 1000);
 await duck.closeConnection();
 ```
 
-Implementaciones destacadas (`src/lib/duckdb/DuckDB.ts`):
+Key implementations (`src/lib/duckdb/DuckDB.ts`):
 
-- `DuckDB.create` valida `window + Worker`, registra las vistas y mide el tiempo de carga.
-- `getSingleDimension` normaliza timestamps a milisegundos y devuelve arreglos Arrow listos para `TimeSeriesChartBuilder`.
-- `buildTablesAndSchemas` detecta tipos (castea porcentajes a `DOUBLE`, ignora columnas auxiliares, genera vista `markers`).
-- `transformTableToMatrix` convierte resultados Arrow en matrices `[rows, columns]` amigables para cualquier UI.
+- `DuckDB.create` validates `window + Worker`, registers Parquet views, and reports load time.
+- `getSingleDimension` normalizes timestamps (ms) and returns Arrow arrays ready for `TimeSeriesChartBuilder`.
+- `buildTablesAndSchemas` auto-detects types (casts `%` columns to `DOUBLE`, skips helper fields, builds the `markers` view).
+- `transformTableToMatrix` converts Arrow results into `[rows, columns]` matrices consumable by any UI.
 
 ### 2. TimeSeriesChartBuilder
 
-Construye layouts ECharts totalmente personalizados reutilizando la lógica de leyendas, marcadores y métricas.
+Craft fully custom ECharts layouts while reusing legend, marker, and metrics logic.
 
 ```ts
-import { TimeSeriesChartBuilder } from "@qtsurfer/svelte-timeseries";
+import { TimeSeriesChartBuilder } from '@qtsurfer/svelte-timeseries';
 
 const builder = new TimeSeriesChartBuilder(echartsInstance, {
-  externalManagerLegend: true,
+	externalManagerLegend: true
 });
 
-builder.setLegendIcon("circle");
-builder.setDataset({ _ts: timestamps, price: prices, ema20: ema20Series }, [
-  "_ts",
-  "price",
-  "ema20",
-]);
+builder.setLegendIcon('circle');
+builder.setDataset(
+	{ _ts: timestamps, price: prices, ema20: ema20Series },
+	['_ts', 'price', 'ema20']
+);
 
 builder.addMarkerPoint(
-  { dimName: "price", timestamp: timestamps[100], name: "Breakout" },
-  { icon: "pin", color: "#FF7F50" }
+	{ dimName: 'price', timestamp: timestamps[100], name: 'Breakout' },
+	{ icon: 'pin', color: '#FF7F50' }
 );
 
 builder.build();
 ```
 
-## Escenarios de referencia
+## Reference scenarios
 
-Tomados del demo en `packages/svelte-timeseries/src/routes/+page.svelte`:
+Taken from the demo at `packages/svelte-timeseries/src/routes/+page.svelte`:
 
-1. **Datos mínimos** (`temps_gzip_mini.parquet`): perfecta para pruebas rápidas o dashboards embebidos.
-2. **1 millón de filas** (`temps_gzip.parquet`): prueba de estrés para navegadores modernos sin degradar UX.
-3. **Dataset parcial (1.807.956 valores)**: uso de `columnsSelect` para reducir peso inicial y habilitar toggles progresivos.
-4. **Dataset completo (10.245.084 valores)**: muestra la capacidad de manejar estrategias cuantitativas densas.
-5. **Marcadores sincronizados**: aplica en los dos últimos escenarios para superponer señales `_m` sobre `price`.
+1. **Minimal data** (`temps_gzip_mini.parquet`): ideal for embedded dashboards or smoke tests.
+2. **1 million rows** (`temps_gzip.parquet`): browser stress test without compromising UX.
+3. **Partial dataset (1,807,956 values)**: leverages `columnsSelect` to keep the initial payload slim and load indicators on demand.
+4. **Full dataset (10,245,084 values)**: showcases dense quantitative strategies with every column available.
+5. **Synchronized markers**: active in the last two scenarios to overlay `_m` signals on top of `price`.
 
-## Desarrollo y pruebas
+## Development & testing
 
 ```bash
 pnpm install
 pnpm dev --filter svelte-timeseries
 ```
 
-- Los archivos de ejemplo (`*.parquet`) viven en `packages/svelte-timeseries/static`. Ajusta `baseUrl` en el demo cuando publiques en un CDN.
-- Métodos útiles para depuración en `DuckDB.ts`: `closeConnection`, `getRangeData`, `getMarkers`.
-- Usa `debug={true}` en el componente para medir tiempos reales de carga en cada navegador.
+- Sample Parquet files live in `packages/svelte-timeseries/static`. Adjust the demo `baseUrl` when publishing behind a CDN.
+- Useful debugging helpers in `DuckDB.ts`: `closeConnection`, `getRangeData`, `getMarkers`.
+- Pass `debug={true}` to measure real load times per browser.
 
-## Soporte y contribuciones
+## Support & contributions
 
-- ¿Necesitas cubrir otro caso (datos en streaming, agregaciones intradía)? Abre un issue describiendo el escenario.
-- Los PRs son bienvenidos: incluye pasos de reproducción, dataset de ejemplo y capturas animadas si afectan la UI.
-- Si tu empresa utiliza el componente en producción, comparte el caso para incluirlo en la documentación.
+- Need another scenario (streaming feeds, intraday aggregations)? Open an issue describing it.
+- PRs are welcome—include reproduction steps, sample datasets, and screen captures when UI changes are involved.
+- Using the component in production? Share your story so we can showcase it here.
