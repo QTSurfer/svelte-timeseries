@@ -1,6 +1,6 @@
 import { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
-import type { Schema, Table } from 'apache-arrow';
 import { createAsyncDuckDB } from './duckdb-wasm';
+import { Schema, Table } from 'apache-arrow';
 
 export type SingleResult = string | number;
 
@@ -68,6 +68,10 @@ export class DuckDB<T extends Tables> {
 		return instance;
 	}
 
+	get tsColumnQuery() {
+		return `epoch_ms("${this._tsColumn}")::DOUBLE as ${this._tsColumn}`;
+	}
+
 	/**
 	 * Get the schema for a table
 	 */
@@ -80,7 +84,9 @@ export class DuckDB<T extends Tables> {
 	 * Get the column names for a table
 	 */
 	getColumns(table: keyof T): string[] {
-		return this.getSchema(table).fields.map((f) => f.name);
+		return this.getSchema(table)
+			.fields.filter((f) => f.name !== this._tsColumn)
+			.map((f) => f.name);
 	}
 
 	/**
@@ -116,20 +122,45 @@ export class DuckDB<T extends Tables> {
 	/**
 	 *  get data by table
 	 */
-	async getMainDataByTable(table: keyof T, limit?: number) {
-		const dataTable = this.getTable(table);
+	async getSingleDimension(table: keyof T, selectColumn: string, omitTimestamp = true) {
+		const columnsSelect = [this.tsColumnQuery, this.escapeIdent(selectColumn)];
 
-		const columnsSelect = dataTable.columnsSelect?.map((c) => this.escapeIdent(c)) ?? ['*'];
+		const sql = `SELECT ${columnsSelect.join(', ')} FROM ${table.toString()} WHERE ${this.escapeIdent(selectColumn)} NOT NULL`;
 
-		// Otherwise, if the user specifies a main column, only the data corresponding to the time and that main column will be retrieved.
-		const sql = [
-			`SELECT ${columnsSelect.join(', ')} FROM ${table.toString()} WHERE ${dataTable.mainColumn} NOT NULL`
-		];
-		if (limit) {
-			sql.push(`LIMIT ${limit}`);
+		const result = await this.queryBatch(sql);
+		const tsKey = this._tsColumn;
+
+		const tsValues: number[] = [];
+		const selectValues: any[] = [];
+
+		for await (const table of result) {
+			const tsVector = table.getChild(tsKey);
+			const colVector = table.getChild(selectColumn);
+
+			if (!tsVector || !colVector) {
+				throw new Error(`Column not found: ${!tsVector ? tsKey : selectColumn}`);
+			}
+
+			for (let i = 0; i < table.numRows; i++) {
+				const valRaw = colVector.get(i);
+				selectValues.push(valRaw);
+
+				if (!omitTimestamp) {
+					const tsRaw = tsVector.get(i);
+					tsValues.push(tsRaw);
+				}
+			}
 		}
-
-		return await this.execute((conn) => conn.query(sql.join(' ')), 'query');
+		if (omitTimestamp) {
+			return {
+				[selectColumn]: selectValues
+			};
+		} else {
+			return {
+				[this._tsColumn]: tsValues,
+				[selectColumn]: selectValues
+			};
+		}
 	}
 
 	/**
@@ -235,11 +266,9 @@ export class DuckDB<T extends Tables> {
 			);
 
 			// detected the initial schema of the temp view
-			const initialSchemaData = await conn.query(`
-						SELECT column_name AS name, data_type AS type
-						FROM information_schema.columns
-						WHERE table_name = '${tempViewName}'
-						`);
+			const initialSchemaData = await conn.query(
+				`SELECT column_name AS name, data_type AS type FROM information_schema.columns WHERE table_name = '${tempViewName}'`
+			);
 
 			const initialSchema: ColumsSchema = initialSchemaData.toArray();
 
@@ -359,7 +388,6 @@ export class DuckDB<T extends Tables> {
 
 		fields.forEach((f, idx) => {
 			if (['_ts', 'ts'].includes(f.name)) {
-				this._tsColumn = f.name;
 				casts[f.name] = 'TIMESTAMP(ms)';
 				return;
 			}
@@ -398,7 +426,8 @@ export class DuckDB<T extends Tables> {
 			const m = typeof target === 'string' ? target.match(/^TIMESTAMP\((s|ms|us|ns)\)$/i) : null;
 			if (m) {
 				const unit = m[1].toLowerCase() as EpochUnit;
-				parts.push(`${this.sqlTimestampFromEpoch(colSQL, unit)} AS ${colSQL}`);
+				const sql = `${this.sqlTimestampFromEpoch(colSQL, unit)} AS ${this._tsColumn}`;
+				parts.push(sql);
 				continue;
 			}
 
