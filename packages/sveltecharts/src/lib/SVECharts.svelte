@@ -149,7 +149,6 @@
 		min-height: 300px;
 		position: relative;
 		z-index: 1;
-		margin-top: 1rem;
 	}
 
 	.wrapper-loading {
