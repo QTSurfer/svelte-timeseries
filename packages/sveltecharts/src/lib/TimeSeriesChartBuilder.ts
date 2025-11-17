@@ -111,7 +111,7 @@ export class TimeSeriesChartBuilder {
 				filterMode: 'filter',
 				zoomOnMouseWheel: true,
 				moveOnMouseMove: true,
-				realtime: false,
+				realtime: true,
 				start: 45,
 				end: 55
 			},
@@ -777,10 +777,21 @@ export class TimeSeriesChartBuilder {
 	}
 
 	build() {
+		const option = this.ECharts.getOption();
+		if (
+			option &&
+			option.dataZoom &&
+			Array.isArray(option.dataZoom) &&
+			Array.isArray(this.option.dataZoom)
+		) {
+			this.option.dataZoom[0].start = option.dataZoom[0].start;
+			this.option.dataZoom[0].end = option.dataZoom[0].end;
+		}
+
 		this.ECharts.setOption(this.option, {
 			lazyUpdate: true,
 			notMerge: false,
-			replaceMerge: ['legend']
+			replaceMerge: ['dataset']
 		});
 		return this;
 	}
