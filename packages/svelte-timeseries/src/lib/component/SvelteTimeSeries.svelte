@@ -233,13 +233,7 @@
 										height="1.2em"
 										viewBox="0 0 14 14"
 									>
-										<g
-											fill="none"
-											stroke="currentColor"
-											strokeLinecap="round"
-											strokeLinejoin="round"
-											strokeWidth={1}
-										>
+										<g fill="none" stroke="currentColor">
 											<path
 												d="M10.165 10.745C12.011 9.571 13.25 7.7 13.25 7c0-1.05-2.798-4.75-6.25-4.75c-1.449 0-2.782.652-3.842 1.486m5.006 7.876A5 5 0 0 1 7 11.75C3.548 11.75.75 8.05.75 7c0-.362.332-1.037.908-1.768"
 											></path>
