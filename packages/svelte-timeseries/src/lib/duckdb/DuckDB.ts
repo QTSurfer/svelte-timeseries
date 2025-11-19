@@ -13,6 +13,24 @@ export type MarkersTableOptions = {
 type TableData = { url: string; mainColumn: string; columnsSelect?: string[] };
 export type Tables = Record<string, TableData>;
 
+type IconType =
+	| 'circle'
+	| 'rect'
+	| 'roundRect'
+	| 'triangle'
+	| 'diamond'
+	| 'pin'
+	| 'arrowUp'
+	| 'arrowDown'
+	| 'none';
+
+export type MarkersTable = {
+	_ts: number;
+	shape: IconType;
+	color: string;
+	position: string;
+	text: string;
+};
 type ColumsSchema = { name: string; type: string }[];
 
 type EpochUnit = 's' | 'ms' | 'us' | 'ns';
@@ -334,7 +352,7 @@ export class DuckDB<T extends Tables> {
 		return this._tables;
 	}
 
-	async getMarkers() {
+	async getMarkers(): Promise<MarkersTable[]> {
 		if (!this._markersColumn) {
 			return [];
 		}
