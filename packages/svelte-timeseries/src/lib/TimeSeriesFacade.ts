@@ -1,4 +1,4 @@
-import { TimeSeriesChartBuilder, type ECharts } from '@qtsurfer/sveltecharts';
+import { TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
 import { DuckDB, Tables } from './duckdb/DuckDB';
 
 export type Columns = { name: string; checked: boolean }[];
@@ -18,8 +18,9 @@ export default class timeSeriesFacade {
 	async loadMarkers(targetDimension: string) {
 		const markersRows = await this.duckDb.getMarkers();
 
-		for (const m of markersRows) {
+		for (const [i, m] of markersRows.entries()) {
 			this.timeSeriesChartBuilder.addMarkerPoint(
+				i,
 				{
 					dimName: targetDimension,
 					timestamp: m._ts,
@@ -32,6 +33,7 @@ export default class timeSeriesFacade {
 			);
 		}
 		this.timeSeriesChartBuilder.build();
+		return markersRows;
 	}
 
 	async addDimension(table: string, columnesSelect: string) {
@@ -60,9 +62,20 @@ export default class timeSeriesFacade {
 		return this.getColumns(table);
 	}
 
+	goToTime(ts: number) {
+		const [min, max] = this.timeSeriesChartBuilder.getRangeValues();
+		const percent = ((ts - min) / (max - min)) * 100;
+
+		this.timeSeriesChartBuilder.goToZoom(Math.max(0, percent - 1), Math.min(100, percent + 1));
+	}
+
 	describe() {
 		const legendsActives = this.timeSeriesChartBuilder.getLegendStatus();
 		const countData = this.timeSeriesChartBuilder.getTotalRows();
 		return [Object.keys(legendsActives).length, countData];
+	}
+
+	async toggleMarker(id: number, table: string, shape: string) {
+		this.timeSeriesChartBuilder.toggleMarkers(id, table, shape);
 	}
 }

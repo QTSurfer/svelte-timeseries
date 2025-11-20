@@ -8,6 +8,7 @@ import { type EChartsOption, type ECharts } from '$lib';
 
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
+import type { MarkPointDataItemOption } from 'echarts/types/src/component/marker/MarkPointModel.js';
 
 type IconType =
 	| 'circle'
@@ -111,7 +112,7 @@ export class TimeSeriesChartBuilder {
 				filterMode: 'filter',
 				zoomOnMouseWheel: true,
 				moveOnMouseMove: true,
-				realtime: false,
+				realtime: true,
 				start: 45,
 				end: 55
 			},
@@ -200,6 +201,17 @@ export class TimeSeriesChartBuilder {
 			type: 'legendToggleSelect',
 			name: column
 		});
+		return this;
+	}
+
+	goToZoom(start: number, end: number): this {
+		this.ECharts.dispatchAction({
+			type: 'dataZoom',
+			dataZoomIndex: 0,
+			start,
+			end
+		});
+
 		return this;
 	}
 
@@ -608,6 +620,7 @@ export class TimeSeriesChartBuilder {
 	}
 
 	addMarkerPoint(
+		id: number,
 		data: {
 			dimName: string;
 			timestamp: number;
@@ -648,6 +661,7 @@ export class TimeSeriesChartBuilder {
 			 */
 			const dataPoint = () => {
 				return {
+					name: `markerpoint-${id}`,
 					coord: [data.timestamp, value],
 					symbol: this.getIcon(opt.icon),
 					symbolSize: opt.symbolSize,
@@ -689,9 +703,6 @@ export class TimeSeriesChartBuilder {
 		return this;
 	}
 
-	private isRecordArray(arr: any[]): arr is DatasetFormatObject {
-		return !Array.isArray(arr[0]) && typeof arr === 'object';
-	}
 	private isNumberArray(arr: any[]): arr is DatasetFormatArray {
 		return Array.isArray(arr[0]);
 	}
@@ -777,10 +788,21 @@ export class TimeSeriesChartBuilder {
 	}
 
 	build() {
+		const option = this.ECharts.getOption();
+		if (
+			option &&
+			option.dataZoom &&
+			Array.isArray(option.dataZoom) &&
+			Array.isArray(this.option.dataZoom)
+		) {
+			this.option.dataZoom[0].start = option.dataZoom[0].start;
+			this.option.dataZoom[0].end = option.dataZoom[0].end;
+		}
+
 		this.ECharts.setOption(this.option, {
 			lazyUpdate: true,
 			notMerge: false,
-			replaceMerge: ['legend']
+			replaceMerge: ['dataset']
 		});
 		return this;
 	}
@@ -806,5 +828,97 @@ export class TimeSeriesChartBuilder {
 		} else {
 			return dataset.source[this._tsColumn].length;
 		}
+	}
+
+	private isSimpleObject(
+		s: DatasetFormatArray | DatasetFormatObject | DatasetFormatSimpleObject
+	): s is DatasetFormatSimpleObject {
+		return !Array.isArray(s) && typeof s === 'object' && s !== null;
+	}
+
+	private isRecordArray(
+		source: DatasetFormatArray | DatasetFormatObject | DatasetFormatSimpleObject
+	): source is DatasetFormatObject {
+		return Array.isArray(source) && (source.length === 0 || !Array.isArray(source[0]));
+	}
+
+	private isNumberMatrix(
+		source: DatasetFormatArray | DatasetFormatObject | DatasetFormatSimpleObject
+	): source is DatasetFormatArray {
+		return Array.isArray(source) && (source.length === 0 || Array.isArray(source[0]));
+	}
+
+	getRangeValues() {
+		const dataset = this.option.dataset as {
+			source: DatasetFormatArray | DatasetFormatObject | DatasetFormatSimpleObject;
+			dimensions: string[];
+		};
+
+		const source = dataset.source;
+
+		// ---- Record<string, any>[] ----
+		if (this.isRecordArray(source)) {
+			if (!source.length) return [0, 0];
+			const objSource = source as DatasetFormatObject;
+
+			const firstRow = objSource[0];
+			const lastRow = objSource[objSource.length - 1];
+
+			const first = firstRow[this._tsColumn];
+			const last = lastRow[this._tsColumn];
+			return [first, last];
+		}
+
+		// ---- number[][] ----
+		if (this.isNumberMatrix(source)) {
+			if (!source.length) return [0, 0];
+			const matrixSource = source as DatasetFormatArray;
+
+			const tsIndex = dataset.dimensions.indexOf(this._tsColumn);
+			const idx = tsIndex === -1 ? 0 : tsIndex;
+
+			const firstRow = matrixSource[0];
+			const lastRow = matrixSource[matrixSource.length - 1];
+
+			const first = firstRow[idx];
+			const last = lastRow[idx];
+			return [first, last];
+		}
+
+		// ---- Record<string, number[]> ----
+		if (this.isSimpleObject(source)) {
+			const col = source[this._tsColumn];
+			if (!col?.length) return [0, 0];
+			return [col[0], col[col.length - 1]];
+		}
+
+		return [0, 0];
+	}
+
+	toggleMarkers(id: number, dimName: string, shape: string) {
+		if (!Array.isArray(this.option.series)) {
+			throw new Error('Series must be an array');
+		}
+
+		if (Array.isArray(this.option.dataset)) {
+			throw new Error('Series must be an array');
+		}
+
+		// Search for the dimension
+		const seriesDimension = this.option.series.find((s: any) => {
+			return s.encode && s.encode.y && s.encode.y === dimName;
+		});
+
+		const markerPoints = seriesDimension?.markPoint.data as MarkPointDataItemOption[];
+		const point = markerPoints.find((mp) => mp.name === `markerpoint-${id}`);
+
+		if (!point) {
+			return;
+		}
+
+		point.symbol = point.symbol === 'none' ? this.getIcon(shape as IconType) : 'none';
+
+		this.build();
+		return this;
 	}
 }

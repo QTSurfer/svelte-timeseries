@@ -2,29 +2,26 @@
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import type { ECharts } from 'echarts/core';
 	import SVECharts from '$lib/SVECharts.svelte';
+	import { createDataSet } from '$lib/mockDataSet';
 
 	let loading = $state(true);
 
 	async function onLoad(instance: ECharts) {
 		loading = true;
-		const totalData = 1000000;
-		const data = {
-			ts: new Array(totalData).fill(0).map((_, i) => 1763040933000 + i * 1000),
-			price: new Array(totalData).fill(0).map((_, i) => i * 10)
-		};
 
-		const data2 = {
-			count: new Array(totalData).fill(0).map((_, i) => i * 11.1)
+		const totalHours = 700000;
+		const { data, yDimensionsNames } = createDataSet<Record<string, any>>(totalHours, 'object');
+
+		const dataset = {
+			_ts: data.map((d) => d._ts),
+			price: data.map((d) => d.price),
+			volumen: data.map((d) => d.col2)
 		};
 
 		const timeSeries = new TimeSeriesChartBuilder(instance);
 
 		timeSeries.setTitle('Time Series Data', 'hours');
-		timeSeries.setDataset(data).build();
-		loading = false;
-
-		await new Promise((resolve) => setTimeout(resolve, 5000));
-		timeSeries.addDimension(data2, 'count');
+		timeSeries.setDataset(dataset).build();
 		loading = false;
 	}
 </script>
