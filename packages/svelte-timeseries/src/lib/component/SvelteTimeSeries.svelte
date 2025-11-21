@@ -8,8 +8,6 @@
 		type Tables
 	} from '../duckdb/DuckDB';
 	import { type ECharts, SVECharts, TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
-	import EyeIcon from '$lib/icon/EyeIcon.svelte';
-	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
 
 	type DataColumnsProps = {
 		columns: Columns;
@@ -97,11 +95,7 @@
 	);
 </script>
 
-{#if performanceTimmer}
-	{@render (performanceSnippet ?? renderPerformance)({ time: performanceTimmer, matrix })}
-{/if}
-
-<div class="flex h-full overflow-hidden">
+<div id="svelte-timeseries" class="flex h-full overflow-hidden">
 	<div class="flex flex-col w-1/6 min-w-[200px] gap-2 p-2">
 		{@render (columnsSnippet ?? renderColumns)({
 			columns,
@@ -120,40 +114,29 @@
 	<div class="w-full p-4">
 		<SVECharts {onLoad} {loading} />
 	</div>
+	{#if performanceTimmer}
+		{@render (performanceSnippet ?? renderPerformance)({ time: performanceTimmer, matrix })}
+	{/if}
 </div>
 
 {#snippet renderColumns(props: DataColumnsProps)}
 	{#if props.columns.length > 0}
-		<details
-			class="collapse collapse-arrow bg-base-300 border border-base-300 min-h-[3.6rem] max-h-full"
-			name="data"
-			open
-		>
-			<summary class="collapse-title font-semibold"> SCHEMA </summary>
-			<div class="collapse-content text-sm p-0">
-				<ul class="list overflow-auto h-full bg-base-100">
+		<details class="sts-details">
+			<summary> SCHEMA </summary>
+			<div>
+				<ul>
 					{#each props.columns as column}
-						<li class="list-row">
-							<div class="list-col-grow">
+						<li>
+							<div>
 								{column.name}
 							</div>
 							<div>
 								<label>
 									<input
 										type="checkbox"
-										hidden
 										checked={column.checked}
 										onchange={() => props.toggleColumn(column.name)}
 									/>
-									{#if column.checked}
-										<div class="swap-on">
-											<EyeIcon />
-										</div>
-									{:else}
-										<div class="swap-off">
-											<EyeOffIcon />
-										</div>
-									{/if}
 								</label>
 							</div>
 						</li>
@@ -165,50 +148,35 @@
 {/snippet}
 
 {#snippet renderMarkers(props: MarkersProps)}
-	<details
-		class="collapse collapse-arrow bg-base-300 border border-base-300 min-h-[3.6rem] max-h-full"
-		name="data"
-		open
-	>
-		<summary class="collapse-title font-semibold"> MARKERS </summary>
-		<div class="collapse-content text-sm p-0">
-			<ul class="list overflow-auto h-full bg-base-100">
-				{#each props.markers as marker, i}
-					<li class="list-row">
-						<div class="flex items-center">
-							<button class="btn btn-primary btn-xs" onclick={() => props.goToMarker(marker._ts)}>
-								Go to
-							</button>
-						</div>
-						<div class="list-col-grow">
-							<div class="font-bold">{marker.text}</div>
-						</div>
-						<div class="flex items-center">
-							<label class="swap">
-								<input
-									type="checkbox"
-									checked={true}
-									onchange={() => props.toggleMarker(i, marker.shape)}
-								/>
+	<details class="sts-details">
+		<summary> MARKERS </summary>
+		<ul>
+			{#each props.markers as marker, i}
+				<li>
+					<div>
+						<b>{marker.text}</b>
+					</div>
 
-								<div class="swap-on">
-									<EyeIcon />
-								</div>
-								<div class="swap-off">
-									<EyeOffIcon />
-								</div>
-							</label>
-						</div>
-					</li>
-				{/each}
-			</ul>
-		</div>
+					<div>
+						<label>
+							<input
+								type="checkbox"
+								checked={true}
+								onchange={() => props.toggleMarker(i, marker.shape)}
+							/>
+						</label>
+
+						<button onclick={() => props.goToMarker(marker._ts)}> Go to </button>
+					</div>
+				</li>
+			{/each}
+		</ul>
 	</details>
 {/snippet}
 
 {#snippet renderPerformance(props: PerformanceProps)}
-	<div class="absolute bottom-4 w-full z-10 text-sm pointer-events-none">
-		<div class="mx-auto w-lg text-center py-4 bg-base-300 z-10 p-2 rounded-2xl shadow-md">
+	<div class="sts-loading">
+		<div>
 			Initial Loading {props.time.toFixed(2)} s | Load Dimensions [{props.matrix[0]} x {props.matrix[1].toLocaleString(
 				'es-AR'
 			)}]
