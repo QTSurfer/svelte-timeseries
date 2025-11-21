@@ -24,7 +24,7 @@ jobs:
           registry-url: "https://registry.npmjs.org/"
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm ci:install
 
       - name: Check typings in All Packages
         run: pnpm check

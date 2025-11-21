@@ -1,80 +1,77 @@
 {
-	"name": "@qtsurfer/sveltecharts",
-	"version": "0.3.6",
-	"author": {
-		"name": "QTSurfer",
-		"url": "https://github.com/QTSurfer"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
-		"directory": "packages/sveltecharts"
-	},
-	"bugs": {
-		"url": "https://github.com/QTSurfer/svelte-timeseries/issues"
-	},
-	"license": "Apache-2.0",
-	"homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
-	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build && npm run package",
-		"preview": "vite preview",
-		"package": "svelte-kit sync && svelte-package && publint",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"test": "vitest",
-		"lint": "prettier --check . && eslint .",
-		"format": "prettier --write .",
-		"publishd": "pnpm publish --dry-run --no-git-checks",
-		"prepublishOnly": "pnpm build",
-		"knip": "pnpm dlx knip"
-	},
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"svelte": "./dist/index.js"
-		}
-	},
-	"files": [
-		"package.json",
-		"README.md",
-		"LICENSE",
-		"dist",
-		"!dist/**/*.test.*",
-		"!dist/**/*.spec.*"
-	],
-	"peerDependencies": {
-		"echarts": "^5.6.0",
-		"svelte": "^4.0.0"
-	},
-	"devDependencies": {
-		"@eslint/eslintrc": "^3.3.1",
-		"@eslint/js": "^9.39.1",
-		"@sveltejs/adapter-auto": "^7.0.0",
-		"@sveltejs/kit": "^2.48.6",
-		"@sveltejs/package": "^2.5.5",
-		"@sveltejs/vite-plugin-svelte": "^6.2.1",
-		"@types/eslint": "^9.6.1",
-		"@types/node": "^24.10.1",
-		"@typescript-eslint/eslint-plugin": "^8.47.0",
-		"@typescript-eslint/parser": "^8.47.0",
-		"eslint": "^9.39.1",
-		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-svelte": "^3.13.0",
-		"globals": "^16.5.0",
-		"prettier": "^3.6.2",
-		"prettier-plugin-svelte": "^3.4.0",
-		"publint": "^0.3.15",
-		"svelte": "^5.43.13",
-		"svelte-check": "^4.3.4",
-		"typescript": "^5.9.3",
-		"vite": "^7.2.4",
-		"vitest": "^4.0.12"
-	},
-	"dependencies": {
-		"echarts": "^6.0.0"
-	},
-	"svelte": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"type": "module"
+  "name": "@qtsurfer/sveltecharts",
+  "version": "0.3.6",
+  "license": "Apache-2.0",
+  "author": "QTSurfer (https://github.com/QTSurfer)",
+  "homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
+    "directory": "packages/sveltecharts"
+  },
+  "bugs": {
+    "url": "https://github.com/QTSurfer/svelte-timeseries/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.spec.*",
+    "!dist/**/*.test.*"
+  ],
+  "scripts": {
+    "build": "vite build && npm run package",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "dev": "vite dev",
+    "format": "run-p format:all format:package",
+    "format:all": "prettier -l --write .",
+    "format:package": "npx prettier-package-json --write ./package.json",
+    "knip": "pnpm dlx knip",
+    "lint": "prettier --check . && eslint .",
+    "package": "svelte-kit sync && svelte-package && publint",
+    "preview": "vite preview",
+    "prepublishOnly": "pnpm build",
+    "publishd": "pnpm publish --dry-run --no-git-checks",
+    "test": "vitest"
+  },
+  "types": "./dist/index.d.ts",
+  "dependencies": {
+    "echarts": "^6.0.0"
+  },
+  "peerDependencies": {
+    "echarts": "^5.6.0",
+    "svelte": "^4.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.39.1",
+    "@sveltejs/adapter-auto": "^7.0.0",
+    "@sveltejs/kit": "^2.48.6",
+    "@sveltejs/package": "^2.5.6",
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@types/eslint": "^9.6.1",
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.13.0",
+    "globals": "^16.5.0",
+    "npm-run-all2": "^8.0.4",
+    "prettier": "^3.6.2",
+    "prettier-plugin-svelte": "^3.4.0",
+    "publint": "^0.3.15",
+    "svelte": "^5.43.14",
+    "svelte-check": "^4.3.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4",
+    "vitest": "^4.0.12"
+  },
+  "svelte": "./dist/index.js"
 }

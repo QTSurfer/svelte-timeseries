@@ -12,3 +12,6 @@ onlyBuiltDependencies:
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - '@qtsurfer/*'
+# Exclude Svelte packages from minimum release age temporalily to allow faster releases
+  - '@sveltejs/*'
+  - 'svelte'
