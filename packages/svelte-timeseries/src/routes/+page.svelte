@@ -4,6 +4,8 @@
 	import { type MarkersTableOptions, type Tables } from '$lib/duckdb/DuckDB';
 	import { Schema } from 'apache-arrow';
 	import { onMount } from 'svelte';
+	import EyeIcon from '$lib/icon/EyeIcon.svelte';
+	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
 
 	let selected = $state<number | null>(null);
 	let baseUrl = $state<string>(typeof window !== 'undefined' ? window.location.href : '');
@@ -108,7 +110,105 @@
 					table={configuration.tables}
 					markers={configuration.markers}
 					debug={false}
-				/>
+				>
+					{#snippet columnsSnippet(props)}
+						{#if props.columns.length > 0}
+							<details
+								class="collapse collapse-arrow bg-base-300 border border-base-300 min-h-[3.6rem] max-h-full"
+								name="data"
+								open
+							>
+								<summary class="collapse-title font-semibold"> SCHEMA </summary>
+								<div class="collapse-content text-sm p-0">
+									<ul class="list overflow-auto h-full bg-base-100">
+										{#each props.columns as column}
+											<li class="list-row">
+												<div class="list-col-grow">
+													{column.name}
+												</div>
+												<div>
+													<label>
+														<input
+															type="checkbox"
+															hidden
+															checked={column.checked}
+															onchange={() => props.toggleColumn(column.name)}
+														/>
+														{#if column.checked}
+															<div class="swap-on">
+																<EyeIcon />
+															</div>
+														{:else}
+															<div class="swap-off">
+																<EyeOffIcon />
+															</div>
+														{/if}
+													</label>
+												</div>
+											</li>
+										{/each}
+									</ul>
+								</div>
+							</details>
+						{/if}
+					{/snippet}
+
+					{#snippet markersSnippet(props)}
+						<details
+							class="collapse collapse-arrow bg-base-300 border border-base-300 min-h-[3.6rem] max-h-full"
+							name="data"
+							open
+						>
+							<summary class="collapse-title font-semibold"> MARKERS </summary>
+							<div class="collapse-content text-sm p-0">
+								<ul class="list overflow-auto h-full bg-base-100">
+									{#each props.markers as marker, i}
+										<li class="list-row">
+											<div class="flex items-center">
+												<button
+													class="btn btn-primary btn-xs"
+													onclick={() => props.goToMarker(marker._ts)}
+												>
+													Go to
+												</button>
+											</div>
+											<div class="list-col-grow">
+												<div class="font-bold">{marker.text}</div>
+											</div>
+											<div class="flex items-center">
+												<label class="swap">
+													<input
+														type="checkbox"
+														checked={true}
+														onchange={() => props.toggleMarker(i, marker.shape)}
+													/>
+
+													<div class="swap-on">
+														<EyeIcon />
+													</div>
+													<div class="swap-off">
+														<EyeOffIcon />
+													</div>
+												</label>
+											</div>
+										</li>
+									{/each}
+								</ul>
+							</div>
+						</details>
+					{/snippet}
+
+					{#snippet performanceSnippet(props)}
+						<div class="absolute bottom-4 w-full z-10 text-sm pointer-events-none">
+							<div class="mx-auto w-lg text-center py-4 bg-base-300 z-10 p-2 rounded-2xl shadow-md">
+								Initial Loading {props.time.toFixed(2)} s | Load Dimensions [{props.matrix[0]} x {props.matrix[1].toLocaleString(
+									'es-AR'
+								)}]
+								<b>{(props.matrix[0] * props.matrix[1]).toLocaleString('es-AR')} values</b>
+							</div>
+						</div>
+					{/snippet}
+				</SvelteTimeSeries>
 			{/key}
 		{:else}
 			<dvi class="flex items-center justify-center size-full">
