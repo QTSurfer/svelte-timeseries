@@ -8,3 +8,7 @@ onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
   - svelte-preprocess
+
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - '@qtsurfer/*'
