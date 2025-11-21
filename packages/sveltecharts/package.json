@@ -1,4 +1,5 @@
 {
+  "private": false,
   "name": "@qtsurfer/sveltecharts",
   "version": "0.3.6",
   "license": "Apache-2.0",
@@ -41,12 +42,9 @@
     "test": "vitest"
   },
   "types": "./dist/index.d.ts",
-  "dependencies": {
-    "echarts": "^6.0.0"
-  },
   "peerDependencies": {
-    "echarts": "^5.6.0",
-    "svelte": "^4.0.0"
+    "echarts": "^6.0.0",
+    "svelte": "^5.43.14"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -59,6 +57,7 @@
     "@types/node": "^24.10.1",
     "@typescript-eslint/eslint-plugin": "^8.47.0",
     "@typescript-eslint/parser": "^8.47.0",
+    "echarts": "^6.0.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.13.0",
@@ -72,6 +71,9 @@
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
     "vitest": "^4.0.12"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "svelte": "./dist/index.js"
 }
