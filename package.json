@@ -45,6 +45,7 @@
     "visualization"
   ],
   "engines": {
-    "pnpm": "^10.0.0 || ^9.0.0"
-  }
+    "pnpm": ">=10.18.0"
+  },
+  "packageManager": "pnpm@10.18.0"
 }
