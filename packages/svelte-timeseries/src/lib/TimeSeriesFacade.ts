@@ -3,7 +3,7 @@ import { DuckDB, Tables } from './duckdb/DuckDB';
 
 export type Columns = { name: string; checked: boolean }[];
 
-export default class timeSeriesFacade {
+export default class TimeSeriesFacade {
 	constructor(
 		private duckDb: DuckDB<Tables>,
 		private timeSeriesChartBuilder: TimeSeriesChartBuilder
