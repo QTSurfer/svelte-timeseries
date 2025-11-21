@@ -1,63 +1,62 @@
 {
-	"name": "@qtsurfer/svelte-timeseries",
-	"version": "0.3.5-beta.5",
-	"author": {
-		"name": "QTSurfer",
-		"url": "https://github.com/QTSurfer"
-	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
-		"directory": "packages/svelte-timeseries"
-	},
-	"bugs": {
-		"url": "https://github.com/QTSurfer/svelte-timeseries/issues"
-	},
-	"license": "Apache-2.0",
-	"homepage": "https://github.com/QTSurfer/svelte-timeseries",
-	"scripts": {
-		"clear:": "rimraf node_modules",
-		"clean": "run-s vite:clean sk:clean sk:sync",
-		"dev": "vite dev",
-		"dev-lan": "vite dev --host 0.0.0.0",
-		"build": "vite build",
-		"preview": "vite preview",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-		"lint": "prettier --check . && eslint .",
-		"format": "prettier --write .",
-		"sk:clean": "rimraf .svelte-kit",
-		"sk:sync": "svelte-kit sync",
-		"vite:clean": "rimraf node_modules/.vite vite.config.ts.*"
-	},
-	"devDependencies": {
-		"@qtsurfer/sveltecharts": "workspace:*",
-		"@sveltejs/adapter-auto": "^7.0.0",
-		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.48.6",
-		"@sveltejs/vite-plugin-svelte": "^6.2.1",
-		"@types/eslint": "9.6.1",
-		"@typescript-eslint/eslint-plugin": "^8.47.0",
-		"@typescript-eslint/parser": "^8.47.0",
-		"eslint": "^9.39.1",
-		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-svelte": "^3.13.0",
-		"npm-run-all": "^4.1.5",
-		"prettier": "^3.6.2",
-		"prettier-plugin-svelte": "^3.4.0",
-		"rimraf": "^6.1.2",
-		"svelte": "^5.43.13",
-		"svelte-check": "^4.3.4",
-		"tslib": "^2.8.1",
-		"typescript": "^5.9.3",
-		"vite": "^7.2.4"
-	},
-	"type": "module",
-	"dependencies": {
-		"@duckdb/duckdb-wasm": "1.30.0",
-		"@tailwindcss/vite": "^4.1.17",
-		"apache-arrow": "^21.1.0",
-		"daisyui": "^5.5.5",
-		"tailwindcss": "^4.1.17"
-	}
+  "name": "@qtsurfer/svelte-timeseries",
+  "version": "0.3.5-beta.5",
+  "license": "Apache-2.0",
+  "author": "QTSurfer (https://github.com/QTSurfer)",
+  "homepage": "https://github.com/QTSurfer/svelte-timeseries",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
+    "directory": "packages/svelte-timeseries"
+  },
+  "bugs": {
+    "url": "https://github.com/QTSurfer/svelte-timeseries/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "clean": "run-s vite:clean sk:clean sk:sync",
+    "clear:": "rimraf node_modules",
+    "dev": "vite dev",
+    "dev-lan": "vite dev --host 0.0.0.0",
+    "format": "run-p format:all format:package",
+    "format:all": "prettier -l --write .",
+    "format:package": "npx prettier-package-json --write ./package.json",
+    "lint": "prettier --check . && eslint .",
+    "preview": "vite preview",
+    "sk:clean": "rimraf .svelte-kit",
+    "sk:sync": "svelte-kit sync",
+    "vite:clean": "rimraf node_modules/.vite vite.config.ts.*"
+  },
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "1.30.0",
+    "@tailwindcss/vite": "^4.1.17",
+    "apache-arrow": "^21.1.0",
+    "daisyui": "^5.5.5",
+    "tailwindcss": "^4.1.17"
+  },
+  "devDependencies": {
+    "@qtsurfer/sveltecharts": "workspace:*",
+    "@sveltejs/adapter-auto": "^7.0.0",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.48.6",
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@types/eslint": "9.6.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-svelte": "^3.13.0",
+    "npm-run-all2": "^8.0.4",
+    "prettier": "^3.6.2",
+    "prettier-plugin-svelte": "^3.4.0",
+    "rimraf": "^6.1.2",
+    "svelte": "^5.43.14",
+    "svelte-check": "^4.3.4",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.4"
+  }
 }
