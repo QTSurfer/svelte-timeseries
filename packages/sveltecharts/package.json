@@ -1,7 +1,7 @@
 {
   "private": false,
   "name": "@qtsurfer/sveltecharts",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "author": "QTSurfer (https://github.com/QTSurfer)",
   "homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
