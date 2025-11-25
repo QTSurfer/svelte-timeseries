@@ -2,7 +2,8 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: "**"
+    branches: 
+      - "**"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,6 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: latest
           run_install: false
 
       - name: Install Node.js
