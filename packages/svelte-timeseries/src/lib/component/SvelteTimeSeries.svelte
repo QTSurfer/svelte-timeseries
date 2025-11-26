@@ -205,11 +205,11 @@
 	.wrapper-loading .spinner {
 		width: 40px;
 		height: 40px;
-		border: 4px solid #ccc; /* Color del borde */
-		border-top-color: #1d72b8; /* Color del borde superior */
+		border: 4px solid #ccc;
+		border-top-color: #1d72b8;
 		border-radius: 50%;
-		animation: spin 0.8s linear infinite; /* Animación */
-		margin: auto; /* Centrar en el contenedor si es necesario */
+		animation: spin 0.8s linear infinite;
+		margin: auto;
 	}
 
 	@keyframes spin {
