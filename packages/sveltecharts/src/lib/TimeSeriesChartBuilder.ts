@@ -84,10 +84,6 @@ export class TimeSeriesChartBuilder {
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
 		this.option.animation = false;
-		// this.option.title = {
-		// 	left: 'center',
-		// 	top: 0
-		// };
 
 		this.option.legend = this.builderConfig.externalManagerLegend
 			? {
@@ -95,15 +91,16 @@ export class TimeSeriesChartBuilder {
 					selected: {}
 				}
 			: {
-					top: '10%',
+					top: '5%',
 					selected: {}
 				};
 
 		this.option.grid = {
 			top: '10%',
-			left: 150,
-			right: 150,
-			bottom: '30%'
+			left: '3%',
+			right: '4%',
+			bottom: '15%',
+			containLabel: true
 		};
 
 		this.option.dataZoom = [
@@ -117,8 +114,10 @@ export class TimeSeriesChartBuilder {
 				end: 55
 			},
 			{
-				top: '75%',
-				bottom: '10%',
+				top: '86%',
+				left: '8%',
+				right: '8%',
+				bottom: '5%',
 				type: 'slider',
 				show: true,
 				filterMode: 'filter',
