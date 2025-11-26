@@ -15,6 +15,7 @@
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
 	import type { ECharts, EChartsOption } from './types';
+	import 'echarts/theme/dark.js';
 
 	// Register the required components
 	use([
@@ -61,13 +62,15 @@
 		config,
 		onDataZoom,
 		loading = $bindable(false),
-		onClear = $bindable()
+		onClear = $bindable(),
+		isDark = false
 	}: {
 		onLoad: (instance: ECharts) => Promise<void>;
 		config?: Partial<EChartsConfig>;
 		onDataZoom?: (event: DataZoomEventSingle) => void;
 		loading?: boolean;
 		onClear?: () => void;
+		isDark?: boolean;
 	} = $props();
 
 	let instance: ECharts;
@@ -98,7 +101,7 @@
 	};
 
 	function chartAction(element: HTMLElement) {
-		instance = init(element, theme, { renderer });
+		instance = init(element, isDark ? 'dark' : undefined, { renderer });
 
 		const handleResize = () => {
 			instance.resize();
@@ -113,6 +116,7 @@
 		onClear = () => instance.clear();
 
 		onLoad(instance);
+
 		return {
 			destroy() {
 				instance.off('datazoom', handleDataZoom);
@@ -131,14 +135,15 @@
 			// }
 		};
 	}
+
+	$effect(() => {
+		if (instance) {
+			instance.setTheme({ backgroundColor: isDark ? '#100c2a' : '#fff' });
+		}
+	});
 </script>
 
 <div style="position: relative; width: 100%; height: 100%;">
-	{#if loading}
-		<div class="wrapper-loading">
-			<div class="spinner"></div>
-		</div>
-	{/if}
 	<div id="chart" class="echarts" use:chartAction></div>
 </div>
 
@@ -149,33 +154,5 @@
 		min-height: 300px;
 		position: relative;
 		z-index: 1;
-	}
-
-	.wrapper-loading {
-		position: absolute;
-		left: 0;
-		right: 0;
-		top: 0;
-		bottom: 0;
-		background-color: rgba(255, 255, 255, 0.5);
-		z-index: 2;
-		display: flex;
-		justify-content: center;
-		align-items: center;
-	}
-	.wrapper-loading .spinner {
-		width: 40px;
-		height: 40px;
-		border: 4px solid #ccc; /* Color del borde */
-		border-top-color: #1d72b8; /* Color del borde superior */
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite; /* Animación */
-		margin: auto; /* Centrar en el contenedor si es necesario */
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 </style>
