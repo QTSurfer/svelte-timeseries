@@ -31,7 +31,11 @@
 		debug = true,
 		columnsSnippet,
 		markersSnippet,
-		performanceSnippet
+		performanceSnippet,
+		containerClass,
+		snippetclass,
+		chartClass,
+		isDark
 	}: {
 		table: Tables;
 		markers?: MarkersTableOptions;
@@ -39,6 +43,10 @@
 		columnsSnippet?: Snippet<[DataColumnsProps]>;
 		markersSnippet?: Snippet<[MarkersProps]>;
 		performanceSnippet?: Snippet<[PerformanceProps]>;
+		containerClass?: string;
+		snippetclass?: string;
+		chartClass?: string;
+		isDark?: boolean;
 	} = $props();
 
 	let loading = $state(false);
@@ -95,8 +103,12 @@
 	);
 </script>
 
-<div id="svelte-timeseries" class="flex h-full overflow-hidden">
-	<div class="flex flex-col w-1/6 min-w-[200px] gap-2 p-2">
+<div id="svelte-timeseries" class={containerClass}>
+	<div class={snippetclass}>
+		{#if performanceTimmer}
+			{@render performanceSnippet?.({ time: performanceTimmer, matrix })}
+		{/if}
+
 		{@render (columnsSnippet ?? renderColumns)({
 			columns,
 			toggleColumn,
@@ -111,11 +123,14 @@
 			})}
 		{/if}
 	</div>
-	<div class="w-full p-4">
-		<SVECharts {onLoad} {loading} />
+
+	<div class={chartClass}>
+		<SVECharts {onLoad} {loading} {isDark} />
 	</div>
-	{#if performanceTimmer}
-		{@render (performanceSnippet ?? renderPerformance)({ time: performanceTimmer, matrix })}
+	{#if loading}
+		<div class="wrapper-loading">
+			<div class="spinner"></div>
+		</div>
 	{/if}
 </div>
 
@@ -174,13 +189,32 @@
 	</details>
 {/snippet}
 
-{#snippet renderPerformance(props: PerformanceProps)}
-	<div class="sts-loading">
-		<div>
-			Initial Loading {props.time.toFixed(2)} s | Load Dimensions [{props.matrix[0]} x {props.matrix[1].toLocaleString(
-				'es-AR'
-			)}]
-			<b>{(props.matrix[0] * props.matrix[1]).toLocaleString('es-AR')} values</b>
-		</div>
-	</div>
-{/snippet}
+<style>
+	.wrapper-loading {
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 0;
+		bottom: 0;
+		background-color: rgba(255, 255, 255, 0.5);
+		z-index: 2;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+	.wrapper-loading .spinner {
+		width: 40px;
+		height: 40px;
+		border: 4px solid #ccc; /* Color del borde */
+		border-top-color: #1d72b8; /* Color del borde superior */
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite; /* Animación */
+		margin: auto; /* Centrar en el contenedor si es necesario */
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>
