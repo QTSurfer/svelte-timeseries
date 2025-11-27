@@ -36,6 +36,7 @@
     "knip": "pnpm dlx knip",
     "lint": "prettier --check . && eslint .",
     "package": "svelte-kit sync && svelte-package && publint",
+    "prepare": "run-s build",
     "preview": "vite preview",
     "prepublishOnly": "pnpm build",
     "publishd": "pnpm publish --dry-run --no-git-checks",
