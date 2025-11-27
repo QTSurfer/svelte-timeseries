@@ -3,7 +3,7 @@ name: Publish Monorepo to npmjs.com
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -15,19 +15,22 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           run_install: false
-          
+
       - uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version-file: ".nvmrc"
           cache: pnpm
           registry-url: "https://registry.npmjs.org/"
 
       - name: Install Dependencies
         run: pnpm ci:install
 
+      - name: Run build
+        run: pnpm build
+
       - name: Check typings in All Packages
         run: pnpm check
-        
+
       #- name: Run Tests in All Packages
       #  run: pnpm test
 

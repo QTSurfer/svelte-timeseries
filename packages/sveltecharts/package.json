@@ -26,7 +26,7 @@
     "!dist/**/*.test.*"
   ],
   "scripts": {
-    "build": "vite build && npm run package",
+    "build": "run-s vite:build package",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "dev": "vite dev",
@@ -40,7 +40,8 @@
     "preview": "vite preview",
     "prepublishOnly": "pnpm build",
     "publishd": "pnpm publish --dry-run --no-git-checks",
-    "test": "vitest"
+    "test": "vitest",
+    "vite:build": "vite build"
   },
   "types": "./dist/index.d.ts",
   "peerDependencies": {
