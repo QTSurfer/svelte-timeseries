@@ -86,7 +86,7 @@
 	});
 </script>
 
-<div class="grid grid-rows-[auto_1fr] h-screen">
+<div class="grid grid-rows-[auto_1fr] h-screen relative">
 	<div class="bg-primary">
 		<div class="text-primary-content text-center text-4xl mt-4 py-4 font-extrabold">
 			SvelteTimeSeries <span class="font-extralight text-sm">DEMO</span>
@@ -110,6 +110,9 @@
 					table={configuration.tables}
 					markers={configuration.markers}
 					debug={false}
+					containerClass="relative grid grid-cols-[200px_1fr] size-full"
+					snippetclass="flex flex-col p-2 gap-2 overflow-hidden"
+					chartClass="w-full h-full"
 				>
 					{#snippet columnsSnippet(props)}
 						{#if props.columns.length > 0}
@@ -119,7 +122,7 @@
 								open
 							>
 								<summary class="collapse-title font-semibold"> SCHEMA </summary>
-								<div class="collapse-content text-sm p-0">
+								<div class="collapse-content text-sm p-0 h-100">
 									<ul class="list overflow-auto h-full bg-base-100">
 										{#each props.columns as column}
 											<li class="list-row">
@@ -199,7 +202,7 @@
 					{/snippet}
 
 					{#snippet performanceSnippet(props)}
-						<div class="absolute bottom-4 w-full z-10 text-sm pointer-events-none">
+						<div class="absolute bottom-4 w-full z-10 text-sm pointer-events-none left-0 right-0">
 							<div class="mx-auto w-lg text-center py-4 bg-base-300 z-10 p-2 rounded-2xl shadow-md">
 								Initial Loading {props.time.toFixed(2)} s | Load Dimensions [{props.matrix[0]} x {props.matrix[1].toLocaleString(
 									'es-AR'

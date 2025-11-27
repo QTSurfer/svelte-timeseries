@@ -34,7 +34,7 @@
 		];
 
 		timeSeries
-			.setTitle('Time Series Data ARRAY', 'hours')
+			// .setTitle('Time Series Data ARRAY', 'hours')
 			.setDataset(data, yDimensionsNames)
 			.addMarkArea(area)
 			.addMarkerEvents(marker);
@@ -47,7 +47,7 @@
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">
-				<SVECharts {onLoad} {loading} />
+				<SVECharts {onLoad} {loading} isDark={false} />
 			</div>
 		</div>
 	</div>
@@ -67,7 +67,6 @@
 	}
 	.chart {
 		background: white;
-		padding: 1rem;
 		border-radius: 12px;
 		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 		transition:
