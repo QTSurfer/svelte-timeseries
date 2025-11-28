@@ -54,6 +54,48 @@ npm install @qtsurfer/svelte-timeseries
 yarn add @qtsurfer/svelte-timeseries
 ```
 
+**Vite / SvelteKit configuration**
+
+This library uses DuckDB-WASM under the hood, which relies on Web Workers and WASM binaries.
+To ensure proper behavior in development and SSR (Server-Side Rendering), you must update your Vite configuration.
+
+Add the following to your vite.config.ts (or vite.config.js):
+
+```ts
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+	plugins: [sveltekit()],
+
+	ssr: {
+		// Prevent SvelteKit from externalizing this library during SSR.
+		// This ensures Vite processes special imports like `...?url`
+		// which are required for DuckDB worker files.
+		noExternal: ['@qtsurfer/svelte-timeseries']
+	},
+
+	optimizeDeps: {
+		// Avoid pre-bundling these packages with esbuild.
+		// esbuild cannot handle WASM + Web Worker imports used by DuckDB.
+		exclude: ['@qtsurfer/svelte-timeseries', '@duckdb/duckdb-wasm']
+	}
+});
+```
+
+**Explanation**
+
+Forces Vite to include this library in the SSR build pipeline.
+
+- `ssr.noExternal`\
+  This allows Vite to correctly transform imports like:\
+  \
+  `import worker from '...worker.js?url'`\
+  which DuckDB uses for its Web Worker runtime.
+
+- `optimizeDeps.exclude`\
+  Prevents Vite from trying to pre-bundle this library and DuckDB-WASM using esbuild. esbuild does not understand WASM and Worker imports, so excluding these packages avoids “Cannot read file ...?url” and similar errors.
+
 Requirements:
 
 - SvelteKit project with TypeScript enabled.
