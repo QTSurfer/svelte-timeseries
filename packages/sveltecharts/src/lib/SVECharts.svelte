@@ -15,7 +15,6 @@
 	import { LabelLayout } from 'echarts/features';
 	import { CanvasRenderer } from 'echarts/renderers';
 	import type { ECharts, EChartsOption } from './types';
-	import 'echarts/theme/dark.js';
 
 	// Register the required components
 	use([
@@ -101,7 +100,7 @@
 	};
 
 	function chartAction(element: HTMLElement) {
-		instance = init(element, isDark ? 'dark' : undefined, { renderer });
+		instance = init(element, undefined, { renderer });
 
 		const handleResize = () => {
 			instance.resize();
