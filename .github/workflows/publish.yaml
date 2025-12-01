@@ -6,8 +6,13 @@ on:
       - "v*.*.*"
 jobs:
   publish:
+    # prevents this action from running on forks
+    if: github.repository == 'qtsurfer/svelte-timeseries'
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write # to create release (changesets/action)
+      id-token: write # OpenID Connect token needed for provenance
+      pull-requests: write # to create pull request (changesets/action)
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -34,10 +39,18 @@ jobs:
       #- name: Run Tests in All Packages
       #  run: pnpm test
 
-      - name: Format All Packages
-        run: pnpm format
+      #- name: Publish Packages to npm
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #   run: pnpm run publish --provenance
 
-      - name: Publish Packages to npm
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset:version
+          publish: pnpm changeset:publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm run publish
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
