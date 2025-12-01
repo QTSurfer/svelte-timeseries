@@ -6,8 +6,9 @@
 	import { onMount } from 'svelte';
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
+	import Icon from '@iconify/svelte';
 
-	let selected = $state<number | null>(null);
+	let selected = $state<number | null>(2);
 	let baseUrl = $state<string>(typeof window !== 'undefined' ? window.location.href : '');
 
 	type ConfigurationType = {
@@ -87,13 +88,15 @@
 </script>
 
 <div class="grid grid-rows-[auto_1fr] h-screen relative">
-	<div class="bg-primary">
-		<div class="text-primary-content text-center text-4xl mt-4 py-4 font-extrabold">
-			SvelteTimeSeries <span class="font-extralight text-sm">DEMO</span>
+	<div class="navbar shadow-sm bg-primary">
+		<div class="navbar-start text-primary-content">
+			<div class="flex gap-2 items-baseline text-2xl font-bold">
+				SvelteTimeSeries <span class="font-extralight text-sm">DEMO</span>
+			</div>
 		</div>
-		<div class="max-w-md mx-auto py-4">
+
+		<div class="navbar-center">
 			<select class="select w-full max-w-md" bind:value={selected}>
-				<option value={null}>Select a table</option>
 				{#each configurations as config, i}
 					<option value={i}>
 						{config.name}
@@ -101,7 +104,25 @@
 				{/each}
 			</select>
 		</div>
+		<div class="navbar-end">
+			<div class="flex gap-8 text-primary-content px-4">
+				<a href="https://github.com/QTSurfer/svelte-timeseries" target="_blank">
+					<Icon icon="fa6-brands:github" width="1.5em" height="1.5em" />
+				</a>
+				<a href="https://x.com/QTSurfer" target="_blank" class="tooltip tooltip-bottom z-10">
+					<Icon icon="fa6-brands:x-twitter" width="1.5em" height="1.5em" />
+				</a>
+				<a
+					href="https://www.npmjs.com/package/@qtsurfer/svelte-timeseries"
+					target="_blank"
+					class="tooltip tooltip-bottom z-10 flex gap-2"
+				>
+					<img src="https://img.shields.io/npm/dt/@qtsurfer/svelte-timeseries" alt="" />
+				</a>
+			</div>
+		</div>
 	</div>
+
 	<div class="size-full overflow-hidden">
 		{#if selected !== null}
 			{#key selected}
@@ -110,7 +131,7 @@
 					table={configuration.tables}
 					markers={configuration.markers}
 					debug={false}
-					containerClass="relative grid grid-cols-[200px_1fr] size-full"
+					containerClass="relative grid grid-cols-[300px_1fr] size-full"
 					snippetclass="flex flex-col p-2 gap-2 overflow-hidden"
 					chartClass="w-full h-full"
 				>
