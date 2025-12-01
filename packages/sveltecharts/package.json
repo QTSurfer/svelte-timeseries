@@ -74,6 +74,14 @@
     "vite": "^7.2.4",
     "vitest": "^4.0.12"
   },
+  "keywords": [
+    "apache-echarts",
+    "charts",
+    "echarts",
+    "svelte",
+    "sveltekit",
+    "visualization"
+  ],
   "publishConfig": {
     "access": "public"
   },

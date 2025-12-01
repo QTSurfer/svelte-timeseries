@@ -4,7 +4,7 @@
   "version": "0.4.1",
   "license": "Apache-2.0",
   "author": "QTSurfer (https://github.com/QTSurfer)",
-  "homepage": "https://github.com/QTSurfer/svelte-timeseries",
+  "homepage": "https://qtsurfer.github.io/svelte-timeseries",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
@@ -79,6 +79,18 @@
     "typescript": "^5.9.3",
     "vite": "^7.2.4"
   },
+  "keywords": [
+    "apache-arrow",
+    "apache-echarts",
+    "apache-parquet",
+    "charts",
+    "duckdb",
+    "finance",
+    "svelte",
+    "sveltekit",
+    "timeseries",
+    "visualization"
+  ],
   "publishConfig": {
     "access": "public"
   },

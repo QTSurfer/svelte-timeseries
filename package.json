@@ -1,10 +1,11 @@
 {
   "private": true,
   "name": "qtsurfer-svelte-timeseries",
-  "version": "0.0.1",
+  "version": "0.4.1",
   "description": "QTSurfer svelte timeseries ui monorepo",
   "license": "Apache-2.0",
   "author": "QTSurfer (https://github.com/QTSurfer)",
+  "homepage": "https://qtsurfer.github.io/svelte-timeseries",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/QTSurfer/svelte-timeseries.git"
