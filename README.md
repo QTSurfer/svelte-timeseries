@@ -172,7 +172,7 @@ Taken from the demo at `packages/svelte-timeseries/src/routes/+page.svelte`:
 ## Development & testing
 
 ```bash
-pnpm install
+pnpm ci:install
 pnpm dev --filter svelte-timeseries
 ```
 

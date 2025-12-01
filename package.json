@@ -18,7 +18,6 @@
     "changeset:status": "changeset status",
     "changeset:version": "changeset version",
     "check": "pnpm -r check",
-    "ci:all": "run-s ci:install changeset:status",
     "ci:install": "pnpm install --frozen-lockfile --prefer-offline",
     "clean": "pnpm -r clean",
     "clear": "pnpm -r clear",

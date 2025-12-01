@@ -29,8 +29,8 @@ jobs:
           cache: pnpm
           registry-url: "https://registry.npmjs.org/"
 
-      - name: Exec all CI scripts (Install Dependencies, check changesets)
-        run: pnpm ci:all
+      - name: Install dependencies
+        run: pnpm ci:install
 
       - name: Run build
         run: pnpm build
