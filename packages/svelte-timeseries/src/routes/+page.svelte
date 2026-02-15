@@ -113,7 +113,7 @@
 					<Icon icon="fa6-brands:x-twitter" width="1.5em" height="1.5em" />
 				</a>
 				<a
-					href="https://www.npmjs.com/package/@qtsurfer/svelte-timeseries"
+					href="https://npmjs.com/package/@qtsurfer/svelte-timeseries"
 					target="_blank"
 					class="tooltip tooltip-bottom z-10 flex gap-2 items-center"
 				>

@@ -1,7 +1,7 @@
 # qtsurfer-svelte-timeseries
 
 ![NPM Version](https://img.shields.io/npm/v/%40qtsurfer%2Fsvelte-timeseries?label=version&style=flat-square)
-[![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsvelte-timeseries?style=flat-square)](LICENSE.md)
+[![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsvelte-timeseries?style=flat-square)](https://npmjs.com/package/@qtsurfer/svelte-timeseries)
 
 > Professional Svelte component to explore **huge time-series datasets** directly in the browser using DuckDB-WASM, Apache Arrow, and SVECharts.
 
