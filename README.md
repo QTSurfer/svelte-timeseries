@@ -1,7 +1,8 @@
 # qtsurfer-svelte-timeseries
 
-![NPM Version](https://img.shields.io/npm/v/%40qtsurfer%2Fsvelte-timeseries?registry_uri=https%3A%2F%2Fregistry.npmjs.com&style=flat&logo=npm&label=QTSurfer%2Fsvelte-timeseries)
-[![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsvelte-timeseries?registry_uri=https%3A%2F%2Fregistry.npmjs.com&style=flat)](LICENSE.md)[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/QTSurfer/svelte-timeseries)
+![NPM Version](https://img.shields.io/npm/v/%40qtsurfer%2Fsvelte-timeseries?label=version&style=flat-square)
+![npm downloads](https://img.shields.io/npm/dt/%40qtsurfer%2Fsvelte-timeseries?label=downloads&style=flat-square)
+[![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsvelte-timeseries?style=flat-square)](LICENSE.md)
 
 > Professional Svelte component to explore **huge time-series datasets** directly in the browser using DuckDB-WASM, Apache Arrow, and SVECharts.
 
@@ -30,12 +31,12 @@
 
 ## Architecture
 
-| Layer                   | Role                                                                                                              |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| DuckDB-WASM             | Runs SQL against Parquet without any backend and keeps data in columnar memory.                                   |
-| `TimeSeriesFacade`      | Coordinates DuckDB + `TimeSeriesChartBuilder`, handles incremental column loads, and exposes UI state.            |
-| `@qtsurfer/sveltecharts` | Facade that builds and updates ECharts instances declaratively.                                                   |
-| SvelteKit               | Hosts the component, snippets, and demo routes.                                                                   |
+| Layer                    | Role                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| DuckDB-WASM              | Runs SQL against Parquet without any backend and keeps data in columnar memory.                        |
+| `TimeSeriesFacade`       | Coordinates DuckDB + `TimeSeriesChartBuilder`, handles incremental column loads, and exposes UI state. |
+| `@qtsurfer/sveltecharts` | Facade that builds and updates ECharts instances declaratively.                                        |
+| SvelteKit                | Hosts the component, snippets, and demo routes.                                                        |
 
 ## Key features
 
@@ -84,13 +85,13 @@ Requirements:
 
 ## Component API
 
-| Prop                  | Type                                                                            | Description                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `table`               | `Record<string, { url: string; mainColumn: string; columnsSelect?: string[] }>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name.           |
-| `markers?`            | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).               |
-| `debug?`              | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                                      |
-| `columnsSnippet?`     | `Snippet<[ColumnsProps]>`                                                       | Overrides the column toggle panel.                                                                           |
-| `performanceSnippet?` | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                                     |
+| Prop                  | Type                                                                            | Description                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `table`               | `Record<string, { url: string; mainColumn: string; columnsSelect?: string[] }>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name. |
+| `markers?`            | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).     |
+| `debug?`              | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                            |
+| `columnsSnippet?`     | `Snippet<[ColumnsProps]>`                                                       | Overrides the column toggle panel.                                                                 |
+| `performanceSnippet?` | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                           |
 
 ## TimeSeriesFacade in practice
 
@@ -110,20 +111,25 @@ Import the class directly to craft bespoke dashboards while reusing the DuckDB â
 Reuse the same instance to run bespoke SQL before/after chart rendering.
 
 ```ts
-import { DuckDB } from '@qtsurfer/svelte-timeseries';
+import { DuckDB } from "@qtsurfer/svelte-timeseries";
 
 const duck = await DuckDB.create(
-	{
-		signal: {
-			url: '/signals.parquet',
-			mainColumn: 'price'
-		}
-	},
-	undefined,
-	true
+  {
+    signal: {
+      url: "/signals.parquet",
+      mainColumn: "price",
+    },
+  },
+  undefined,
+  true,
 );
 
-const rows = await duck.getRangeData('signal', '2024-01-01', '2024-01-31', 1000);
+const rows = await duck.getRangeData(
+  "signal",
+  "2024-01-01",
+  "2024-01-31",
+  1000,
+);
 await duck.closeConnection();
 ```
 
@@ -139,21 +145,22 @@ Key implementations (`src/lib/duckdb/DuckDB.ts`):
 Craft fully custom ECharts layouts while reusing legend, marker, and metrics logic.
 
 ```ts
-import { TimeSeriesChartBuilder } from '@qtsurfer/svelte-timeseries';
+import { TimeSeriesChartBuilder } from "@qtsurfer/svelte-timeseries";
 
 const builder = new TimeSeriesChartBuilder(echartsInstance, {
-	externalManagerLegend: true
+  externalManagerLegend: true,
 });
 
-builder.setLegendIcon('circle');
-builder.setDataset(
-	{ _ts: timestamps, price: prices, ema20: ema20Series },
-	['_ts', 'price', 'ema20']
-);
+builder.setLegendIcon("circle");
+builder.setDataset({ _ts: timestamps, price: prices, ema20: ema20Series }, [
+  "_ts",
+  "price",
+  "ema20",
+]);
 
 builder.addMarkerPoint(
-	{ dimName: 'price', timestamp: timestamps[100], name: 'Breakout' },
-	{ icon: 'pin', color: '#FF7F50' }
+  { dimName: "price", timestamp: timestamps[100], name: "Breakout" },
+  { icon: "pin", color: "#FF7F50" },
 );
 
 builder.build();

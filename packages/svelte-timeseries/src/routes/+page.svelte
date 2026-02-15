@@ -115,9 +115,16 @@
 				<a
 					href="https://www.npmjs.com/package/@qtsurfer/svelte-timeseries"
 					target="_blank"
-					class="tooltip tooltip-bottom z-10 flex gap-2"
+					class="tooltip tooltip-bottom z-10 flex gap-2 items-center"
 				>
-					<img src="https://img.shields.io/npm/dt/@qtsurfer/svelte-timeseries" alt="" />
+					<img
+						src="https://img.shields.io/npm/v/%40qtsurfer%2Fsvelte-timeseries?label=version&style=flat-square"
+						alt="version"
+					/>
+					<img
+						src="https://img.shields.io/npm/dt/%40qtsurfer%2Fsvelte-timeseries?label=downloads&style=flat-square"
+						alt="downloads"
+					/>
 				</a>
 			</div>
 		</div>
