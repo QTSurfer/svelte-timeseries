@@ -3,7 +3,12 @@
     "allow": [
       "Bash(grep:*)",
       "Bash(pnpm lint:*)",
-      "Bash(pnpm prettier:*)"
+      "Bash(pnpm prettier:*)",
+      "Bash(pnpm eslint:*)",
+      "Bash(pnpm --filter @qtsurfer/svelte-timeseries prettier --check:*)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm --filter @qtsurfer/sveltecharts list vitest:*)",
+      "Bash(pnpm --filter @qtsurfer/sveltecharts test)"
     ]
   }
 }
