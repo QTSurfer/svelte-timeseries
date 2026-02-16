@@ -2,8 +2,8 @@ name: Publish Monorepo to npmjs.com
 
 on:
   push:
-    tags:
-      - "v*.*.*"
+    branches: [ main ]
+    #tags: ["v*.*.*"]
 jobs:
   publish:
     # prevents this action from running on forks
@@ -53,4 +53,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
+          #NPM_CONFIG_PROVENANCE: true

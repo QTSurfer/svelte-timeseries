@@ -4,10 +4,10 @@
   "version": "0.4.2",
   "license": "Apache-2.0",
   "author": "QTSurfer (https://github.com/QTSurfer)",
-  "homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
+  "homepage": "https://github.com/qtsurfer/svelte-timeseries/tree/main/packages/sveltecharts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
+    "url": "git+https://github.com/qtsurfer/svelte-timeseries.git",
     "directory": "packages/sveltecharts"
   },
   "bugs": {
