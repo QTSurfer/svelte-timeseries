@@ -86,6 +86,11 @@ pnpm changeset:publish
 - Rendered as annotations on ECharts
 - Customizable icons, colors, and positions
 
+### Svelte & Runtime
+- **Svelte 5** (`^5.43.14`) with runes API (`$state`, `$derived`, `$effect`, etc.)
+- **ECharts 6** (`^6.0.0`)
+- Do NOT use legacy Svelte 4 reactive syntax (`$:`, `export let`, stores)
+
 ### Performance Features
 - Columnar data processing with Apache Arrow
 - ECharts sampling and progressive rendering
@@ -118,11 +123,135 @@ packages/
 4. **Interaction**: User actions trigger lazy loading of additional columns
 5. **Updates**: Chart updates via ECharts `setOption()` with incremental data
 
-## Sample Parquet Files
+---
 
-Located in `packages/svelte-timeseries/static/`:
-- `temps_gzip_mini.parquet` - Minimal dataset for testing
-- `temps_gzip.parquet` - 1M rows performance test
-- Larger datasets for full-scale testing
+## Agent Rules (MANDATORY)
 
-Adjust the demo `baseUrl` when publishing behind a CDN.
+Agents must:
+
+- Preserve public APIs unless explicitly instructed
+- Prefer minimal, localized diffs
+- Run `pnpm check` and `pnpm build` after implementing changes, before proposing them
+- Preserve lazy loading architecture
+- Keep clear separation between:
+  - DuckDB layer
+  - Facade logic
+  - Chart rendering
+  - UI components
+- Assume browser-only runtime (no Node APIs)
+- Avoid unnecessary memory materialization
+- Maintain incremental chart updates
+
+Agents must NOT:
+
+- Add backend services
+- Replace DuckDB
+- Replace ECharts
+- Remove facade pattern
+- Load full datasets eagerly
+- Introduce blocking UI work
+
+---
+
+## Development Workflow for Agents
+
+When implementing a change:
+
+1. Identify affected package(s)
+2. Implement modification
+3. Update demo routes if behavior changes
+4. Validate:
+```bash
+pnpm check
+pnpm build
+```
+5. Verify:
+
+- Component renders correctly
+- Lazy loading still functions
+- Chart updates incrementally
+- No full re-render regressions
+
+---
+
+## Testing Expectations
+
+There is no automated test suite for svelte-timeseries. Verification is manual via demo routes (`pnpm dev:ts`, `pnpm dev:charts`).
+
+All changes must preserve:
+
+- Rendering with `temps_gzip_mini.parquet`
+- Lazy column toggle behavior
+- Progressive rendering performance
+- Incremental ECharts updates
+- Marker rendering behavior
+
+---
+
+## Refactoring Guidelines
+
+Allowed:
+
+- Extract pure TypeScript logic
+- Improve structure and readability
+- Improve type safety
+- Reduce coupling
+
+Not allowed:
+
+- Breaking public exports
+- Removing facade layer
+- Mixing DuckDB and UI logic
+- Heavy synchronous UI work
+
+---
+
+## Performance Constraints (CRITICAL)
+
+This system is performance-sensitive.
+
+Agents must ensure:
+
+- No full Arrow table materialization unless required
+- Prefer incremental / streaming queries
+- No UI thread blocking
+- Preserve ECharts progressive rendering
+- Avoid unnecessary memory copies
+
+---
+
+## Tooling Context
+
+- Package manager: pnpm (workspace aware)
+- Monorepo filtering required
+- DuckDB runs in WASM
+- Browser-only execution
+- ECharts updates must use incremental `setOption()`
+
+---
+
+## Common Agent Tasks
+Add new column visualization:
+1. Extend TimeSeriesFacade toggle logic
+2. Extend ChartBuilder series config
+3. Ensure lazy loading query
+4. Verify incremental chart update
+
+Add marker type:
+1. Extend marker schema
+2. Add renderer in sveltecharts
+3. Validate overlay rendering
+
+Modify query logic:
+1. Update DuckDB wrapper
+2. Preserve Arrow compatibility
+3. Maintain incremental data loading
+
+---
+
+## Decision Policy When Uncertain
+
+Prefer:
+- Minimal change
+- Architectural preservation
+- Performance safety
