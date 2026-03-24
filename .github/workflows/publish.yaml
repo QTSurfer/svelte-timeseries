@@ -3,19 +3,19 @@ name: Publish Monorepo to npmjs.com
 on:
   push:
     branches: [ main ]
-    #tags: ["v*.*.*"]
+
 jobs:
   publish:
-    # prevents this action from running on forks
     if: github.repository == 'QTSurfer/svelte-timeseries'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to create release (changesets/action)
-      id-token: write # OpenID Connect token needed for provenance
-      pull-requests: write # to create pull request (changesets/action)
+      contents: write
+      id-token: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:
@@ -36,18 +36,36 @@ jobs:
       - name: Check typings in All Packages
         run: pnpm check
 
-      #- name: Run Tests in All Packages
-      #  run: pnpm test
+      - name: Version packages (if changesets present)
+        run: |
+          if ls .changeset/*.md 1>/dev/null 2>&1; then
+            pnpm changeset:version
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore: version packages" || echo "No changes to commit"
+            git push
+          else
+            echo "No changesets found, checking for unpublished versions..."
+          fi
 
-      - name: Create Release Pull Request or Publish to npm
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          version: pnpm changeset:version
-          publish: pnpm changeset:publish
-          title: "chore: version packages"
-          commit: "chore: version packages"
+      - name: Publish to npm
+        run: pnpm changeset:publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+      - name: Create GitHub Release
+        if: success()
+        run: |
+          VERSION=$(node -p "require('./packages/svelte-timeseries/package.json').version")
+          CURRENT_TAG="v${VERSION}"
+          if ! git tag -l "$CURRENT_TAG" | grep -q .; then
+            git tag "$CURRENT_TAG"
+            git push origin "$CURRENT_TAG"
+            gh release create "$CURRENT_TAG" --title "$CURRENT_TAG" --generate-notes || echo "Release already exists"
+          else
+            echo "Tag $CURRENT_TAG already exists, skipping release"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
