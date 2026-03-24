@@ -48,6 +48,8 @@ jobs:
           else
             echo "No changesets found, checking for unpublished versions..."
           fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to npm
         run: pnpm changeset:publish
