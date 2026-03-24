@@ -8,7 +8,7 @@
   "homepage": "https://qtsurfer.github.io/svelte-timeseries",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qtsurfer/svelte-timeseries.git"
+    "url": "git+https://github.com/QTSurfer/svelte-timeseries.git"
   },
   "type": "module",
   "main": "index.js",
