@@ -36,22 +36,7 @@ jobs:
       - name: Check typings in All Packages
         run: pnpm check
 
-      - name: Version packages (if changesets present)
-        run: |
-          if ls .changeset/*.md 1>/dev/null 2>&1; then
-            pnpm changeset:version
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "chore: version packages" || echo "No changes to commit"
-            git push
-          else
-            echo "No changesets found, checking for unpublished versions..."
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish to npm
+      - name: Publish to npm (if unpublished versions exist)
         run: pnpm changeset:publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
