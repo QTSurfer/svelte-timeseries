@@ -1,5 +1,14 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.4.3
+
+### Patch Changes
+
+- [`2159251`](https://github.com/QTSurfer/svelte-timeseries/commit/2159251ffea839a3c6833d44ad99b7f647813916) Thanks [@mrmx](https://github.com/mrmx)! - Update dependencies: Svelte 5.55, SvelteKit 2.55, Tailwind 4.2, DaisyUI 5.5.19, Prettier 3.8, svelte-check 4.4.5
+
+- Updated dependencies [[`2159251`](https://github.com/QTSurfer/svelte-timeseries/commit/2159251ffea839a3c6833d44ad99b7f647813916)]:
+  - @qtsurfer/sveltecharts@0.4.3
+
 ## 0.4.2
 
 ### Patch Changes
