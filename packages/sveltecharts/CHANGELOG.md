@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.4.4
+
+### Patch Changes
+
+- Fix SVECharts config reactivity bug, update DuckDB-WASM 1.30→1.32, add 30 unit tests, update deps
+
 ## 0.4.3
 
 ### Patch Changes
