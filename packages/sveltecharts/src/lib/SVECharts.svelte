@@ -74,10 +74,10 @@
 
 	let instance: ECharts;
 
-	const { theme, renderer, option } = {
-		...DEFAULT_CONFIG,
-		...config
-	};
+	const mergedConfig = $derived({ ...DEFAULT_CONFIG, ...config });
+	const theme = $derived(mergedConfig.theme);
+	const renderer = $derived(mergedConfig.renderer);
+	const option = $derived(mergedConfig.option);
 
 	const handleDataZoom = (zoomEvent: unknown) => {
 		if (!onDataZoom) {
