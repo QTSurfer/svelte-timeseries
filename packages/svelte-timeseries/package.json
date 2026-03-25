@@ -46,7 +46,7 @@
   },
   "types": "./dist/index.d.ts",
   "dependencies": {
-    "@duckdb/duckdb-wasm": "1.30.0",
+    "@duckdb/duckdb-wasm": "1.32.0",
     "@qtsurfer/sveltecharts": "workspace:*"
   },
   "peerDependencies": {
