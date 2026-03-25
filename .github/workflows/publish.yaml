@@ -50,7 +50,20 @@ jobs:
           if ! git tag -l "$CURRENT_TAG" | grep -q .; then
             git tag "$CURRENT_TAG"
             git push origin "$CURRENT_TAG"
-            gh release create "$CURRENT_TAG" --title "$CURRENT_TAG" --generate-notes || echo "Release already exists"
+
+            # Extract release notes from CHANGELOG.md (current version section)
+            NOTES=$(awk '/^## '"$VERSION"'/{found=1; next} /^## [0-9]/{if(found) exit} found{print}' packages/svelte-timeseries/CHANGELOG.md)
+
+            BODY="## @qtsurfer/svelte-timeseries@${VERSION}
+
+            ${NOTES}
+
+            ---
+
+            **npm:** [\`@qtsurfer/svelte-timeseries@${VERSION}\`](https://www.npmjs.com/package/@qtsurfer/svelte-timeseries/v/${VERSION}) | [\`@qtsurfer/sveltecharts@${VERSION}\`](https://www.npmjs.com/package/@qtsurfer/sveltecharts/v/${VERSION})
+            **Install:** \`pnpm add @qtsurfer/svelte-timeseries@${VERSION}\`"
+
+            gh release create "$CURRENT_TAG" --title "$CURRENT_TAG" --notes "$BODY" || echo "Release already exists"
           else
             echo "Tag $CURRENT_TAG already exists, skipping release"
           fi
