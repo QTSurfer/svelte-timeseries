@@ -35,7 +35,8 @@
 		containerClass,
 		snippetclass,
 		chartClass,
-		isDark
+		isDark,
+		onFacadeReady
 	}: {
 		table: Tables;
 		markers?: MarkersTableOptions;
@@ -47,6 +48,7 @@
 		snippetclass?: string;
 		chartClass?: string;
 		isDark?: boolean;
+		onFacadeReady?: (facade: TimeSeriesFacade) => void;
 	} = $props();
 
 	let loading = $state(false);
@@ -78,6 +80,7 @@
 
 		timer.end = performance.now();
 		columns = timeSeriesFacade.getColumns(tableName);
+		onFacadeReady?.(timeSeriesFacade);
 		matrix = timeSeriesFacade.describe();
 	};
 

@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.4.5
+
+### Patch Changes
+
+- Expose TimeSeriesFacade via onFacadeReady callback, add getDuckDB() and getChartBuilder() accessors
+
 ## 0.4.4
 
 ### Patch Changes

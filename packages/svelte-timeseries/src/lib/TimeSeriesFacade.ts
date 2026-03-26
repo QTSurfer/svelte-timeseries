@@ -78,4 +78,19 @@ export default class TimeSeriesFacade {
 	async toggleMarker(id: number, table: string, shape: string) {
 		this.timeSeriesChartBuilder.toggleMarkers(id, table, shape);
 	}
+
+	/**
+	 * Returns the DuckDB instance for direct queries.
+	 * Useful for extracting raw data for external processing (e.g., backtesting).
+	 */
+	getDuckDB(): DuckDB<Tables> {
+		return this.duckDb;
+	}
+
+	/**
+	 * Returns the chart builder for programmatic chart updates.
+	 */
+	getChartBuilder(): TimeSeriesChartBuilder {
+		return this.timeSeriesChartBuilder;
+	}
 }
