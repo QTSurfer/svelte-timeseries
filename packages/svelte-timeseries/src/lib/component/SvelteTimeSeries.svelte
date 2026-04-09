@@ -29,6 +29,7 @@
 		table,
 		markers,
 		debug = true,
+		externalManagerLegend = true,
 		columnsSnippet,
 		markersSnippet,
 		performanceSnippet,
@@ -41,6 +42,7 @@
 		table: Tables;
 		markers?: MarkersTableOptions;
 		debug: boolean;
+		externalManagerLegend?: boolean;
 		columnsSnippet?: Snippet<[DataColumnsProps]>;
 		markersSnippet?: Snippet<[MarkersProps]>;
 		performanceSnippet?: Snippet<[PerformanceProps]>;
@@ -65,19 +67,21 @@
 		loading = true;
 		const duckDb = await DuckDB.create(table, markers, debug);
 		const timeSeriesBuilder = new TimeSeriesChartBuilder(EChartInstance, {
-			externalManagerLegend: true
+			externalManagerLegend
 		});
 		timeSeriesFacade = new TimeSeriesFacade(duckDb, timeSeriesBuilder);
 
 		const columnsSelect = table[tableName].mainColumn;
 		await timeSeriesFacade.initialize(tableName, columnsSelect);
-
-		loading = false;
+		if (!externalManagerLegend) {
+			await timeSeriesFacade.loadAllColumns(tableName, [columnsSelect]);
+		}
 
 		if (markers) {
 			markersData = await timeSeriesFacade.loadMarkers(markers.targetDimension);
 		}
 
+		loading = false;
 		timer.end = performance.now();
 		columns = timeSeriesFacade.getColumns(tableName);
 		onFacadeReady?.(timeSeriesFacade);
