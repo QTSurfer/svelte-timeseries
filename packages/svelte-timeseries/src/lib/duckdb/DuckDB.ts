@@ -1,8 +1,4 @@
-import {
-	AsyncDuckDB,
-	AsyncDuckDBConnection,
-	DuckDBDataProtocol
-} from '@duckdb/duckdb-wasm';
+import { AsyncDuckDB, AsyncDuckDBConnection, DuckDBDataProtocol } from '@duckdb/duckdb-wasm';
 import { createAsyncDuckDB } from './duckdb-wasm';
 import { Schema, Table } from 'apache-arrow';
 
@@ -278,10 +274,7 @@ export class DuckDB<T extends Tables> {
 	 * @param url The url of the table
 	 * @private
 	 */
-	private async buildTablesAndSchemas(
-		name: keyof T,
-		tableConfiguration: TableData
-	) {
+	private async buildTablesAndSchemas(name: keyof T, tableConfiguration: TableData) {
 		return await this.execute(async (conn) => {
 			if (this.debug) console.log('Registering tables and schemas...');
 
@@ -356,7 +349,10 @@ export class DuckDB<T extends Tables> {
 		}, 'buildTablesAndSchemas - ' + name.toString());
 	}
 
-	private async registerParquetSource(viewName: string, tableConfiguration: TableData): Promise<string> {
+	private async registerParquetSource(
+		viewName: string,
+		tableConfiguration: TableData
+	): Promise<string> {
 		if (tableConfiguration.url !== undefined) {
 			return tableConfiguration.url;
 		}
@@ -473,7 +469,9 @@ export class DuckDB<T extends Tables> {
 		const casts: Record<string, TargetType> = {};
 
 		fields.forEach((f, idx) => {
-			if (TIMESTAMP_COLUMN_CANDIDATES.includes(f.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number])) {
+			if (
+				TIMESTAMP_COLUMN_CANDIDATES.includes(f.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number])
+			) {
 				casts[f.name] = this.isTimestampLikeType(f.type) ? 'TIMESTAMP' : 'TIMESTAMP(ms)';
 				return;
 			}

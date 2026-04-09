@@ -82,16 +82,12 @@ describe('TimeSeriesChartBuilder', () => {
 				[2000, 101, 201]
 			];
 
-			expect(() => builder.setDataset(data, ['_ts', 'price'])).toThrow(
-				'Dimensions length'
-			);
+			expect(() => builder.setDataset(data, ['_ts', 'price'])).toThrow('Dimensions length');
 		});
 
 		it('throws with less than 2 rows', () => {
 			const data = [[1000, 100]];
-			expect(() => builder.setDataset(data, ['_ts', 'price'])).toThrow(
-				'Minimum data length is 2'
-			);
+			expect(() => builder.setDataset(data, ['_ts', 'price'])).toThrow('Minimum data length is 2');
 		});
 	});
 
@@ -285,9 +281,7 @@ describe('TimeSeriesChartBuilder', () => {
 				price: [100, 101]
 			});
 
-			builder.addMarkerEvents([
-				{ xAxis: [1000, 2000], color: 'red', name: 'Event' }
-			]);
+			builder.addMarkerEvents([{ xAxis: [1000, 2000], color: 'red', name: 'Event' }]);
 
 			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls;
 			const lastCall = opts[opts.length - 1][0];
@@ -304,11 +298,15 @@ describe('TimeSeriesChartBuilder', () => {
 				price: [100, 101, 102]
 			});
 
-			builder.addMarkerPoint(0, {
-				dimName: 'price',
-				timestamp: 2000,
-				name: 'Buy'
-			}, { icon: 'pin', color: 'green' });
+			builder.addMarkerPoint(
+				0,
+				{
+					dimName: 'price',
+					timestamp: 2000,
+					name: 'Buy'
+				},
+				{ icon: 'pin', color: 'green' }
+			);
 
 			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
 			const priceSeries = opts.series.find((s: any) => s.id === 'price');

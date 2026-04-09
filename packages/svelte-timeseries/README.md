@@ -110,11 +110,11 @@ Requirements:
 <script lang="ts">
 	import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
 
-const tables = {
-	temps: {
-		url: '/temps_gzip.parquet',
-		mainColumn: 'temp'
-	}
+	const tables = {
+		temps: {
+			url: '/temps_gzip.parquet',
+			mainColumn: 'temp'
+		}
 	};
 
 	const markers = {
@@ -124,12 +124,7 @@ const tables = {
 	};
 </script>
 
-<SvelteTimeSeries
-	table={tables}
-	{markers}
-	debug={false}
-	externalManagerLegend={true}
-/>
+<SvelteTimeSeries table={tables} {markers} debug={false} externalManagerLegend={true} />
 ```
 
 You can also pass a Parquet file directly instead of a URL:
@@ -150,7 +145,11 @@ You can also pass a Parquet file directly instead of a URL:
 		: {};
 </script>
 
-<input type="file" accept=".parquet" onchange={(event) => (parquetFile = event.currentTarget.files?.[0] ?? null)} />
+<input
+	type="file"
+	accept=".parquet"
+	onchange={(event) => (parquetFile = event.currentTarget.files?.[0] ?? null)}
+/>
 
 {#if parquetFile}
 	<SvelteTimeSeries table={tables} />
@@ -159,14 +158,14 @@ You can also pass a Parquet file directly instead of a URL:
 
 ## Component API
 
-| Prop                  | Type                                                                            | Description                                                                                        |
-| --------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `table`               | `Record<string, { mainColumn: string; columnsSelect?: string[] } & ({ url: string } \| { parquet: Blob \| File \| ArrayBuffer \| Uint8Array })>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name. |
-| `markers?`            | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).     |
-| `debug?`              | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                            |
-| `externalManagerLegend?` | `boolean` (default `true`)                                                   | Passes `externalManagerLegend` to `TimeSeriesChartBuilder`. Disable it to let the chart manage the legend internally. |
-| `columnsSnippet?`     | `Snippet<[ColumnsProps]>`                                                       | Overrides the column toggle panel.                                                                 |
-| `performanceSnippet?` | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                           |
+| Prop                     | Type                                                                                                                                             | Description                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `table`                  | `Record<string, { mainColumn: string; columnsSelect?: string[] } & ({ url: string } \| { parquet: Blob \| File \| ArrayBuffer \| Uint8Array })>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name.                    |
+| `markers?`               | `MarkersTableOptions`                                                                                                                            | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).                        |
+| `debug?`                 | `boolean` (default `true`)                                                                                                                       | Enables verbose DuckDB/builder logging.                                                                               |
+| `externalManagerLegend?` | `boolean` (default `true`)                                                                                                                       | Passes `externalManagerLegend` to `TimeSeriesChartBuilder`. Disable it to let the chart manage the legend internally. |
+| `columnsSnippet?`        | `Snippet<[ColumnsProps]>`                                                                                                                        | Overrides the column toggle panel.                                                                                    |
+| `performanceSnippet?`    | `Snippet<[PerformanceProps]>`                                                                                                                    | Overrides the performance/metrics panel.                                                                              |
 
 ## TimeSeriesFacade in practice
 

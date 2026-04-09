@@ -84,7 +84,7 @@
 	const activeConfiguration = $derived<DemoConfiguration | null>(
 		selected === CUSTOM_CONFIGURATION_ID
 			? loadedCustomConfiguration
-			: configurations[Number(selected.replace('preset:', ''))] ?? null
+			: (configurations[Number(selected.replace('preset:', ''))] ?? null)
 	);
 
 	const renderKey = $derived(
@@ -353,9 +353,7 @@
 								bind:value={customMainColumn}
 								disabled={inspectingCustomFile || customColumns.length === 0}
 							>
-								<option value="" disabled selected={!customMainColumn}>
-									Select column
-								</option>
+								<option value="" disabled selected={!customMainColumn}> Select column </option>
 								{#each customColumns as column}
 									<option value={column}>{column}</option>
 								{/each}
@@ -369,11 +367,9 @@
 				<button
 					class="btn btn-primary"
 					onclick={loadCustomSource}
-					disabled={
-						sourceMode === 'url'
-							? !customUrl.trim() || !customMainColumn.trim()
-							: !customFile || !customMainColumn || inspectingCustomFile
-					}
+					disabled={sourceMode === 'url'
+						? !customUrl.trim() || !customMainColumn.trim()
+						: !customFile || !customMainColumn || inspectingCustomFile}
 				>
 					{inspectingCustomFile ? 'Reading parquet...' : 'Load'}
 				</button>
@@ -383,8 +379,8 @@
 		{#if selected === CUSTOM_CONFIGURATION_ID}
 			<div class="mt-3 text-sm text-base-content/70">
 				The parquet file can provide the time column as <code>_ts</code>, <code>ts</code>,
-				<code>_t</code>, or <code>t</code>. In file mode: 1. select the parquet file, 2. choose
-				the <code>mainColumn</code>, 3. press <code>Load</code>.
+				<code>_t</code>, or <code>t</code>. In file mode: 1. select the parquet file, 2. choose the
+				<code>mainColumn</code>, 3. press <code>Load</code>.
 			</div>
 		{/if}
 
@@ -515,7 +511,9 @@
 			<div class="flex items-center justify-center size-full">
 				<div class="text-center">
 					<div class="text-4xl font-light text-stone-400">Configure a source</div>
-					<div class="mt-2 text-stone-500">Select `Custom source`, complete the inputs, and press `Load`.</div>
+					<div class="mt-2 text-stone-500">
+						Select `Custom source`, complete the inputs, and press `Load`.
+					</div>
 				</div>
 			</div>
 		{/if}
