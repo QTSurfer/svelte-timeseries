@@ -1,5 +1,23 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.5.0
+
+### Minor Changes
+
+- Add direct Parquet input support and demo improvements
+  - Support passing Parquet data directly via `Blob`, `File`, `ArrayBuffer`, or `Uint8Array` (in addition to URL)
+  - Add `externalManagerLegend` prop (default `true`) to control legend management
+  - Auto-detect time columns named `_ts`, `ts`, `_t`, or `t`
+  - Normalize timestamp handling for epoch and native timestamp types
+  - Add `loadAllColumns()` to `TimeSeriesFacade` for internal legend mode
+  - Demo: add custom source panel with URL/File modes, column inspection, and legend toggle
+  - SVECharts: add `ResizeObserver` for dynamic resizing, configurable theme prop
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @qtsurfer/sveltecharts@0.5.0
+
 ## 0.4.5
 
 ### Patch Changes
