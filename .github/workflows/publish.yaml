@@ -1,12 +1,18 @@
 name: Publish Monorepo to npmjs.com
 
 on:
+  workflow_run:
+    workflows: ["CI workflow"]
+    branches: [main]
+    types: [completed]
   push:
-    branches: [ main ]
+    tags: ["v*"]
 
 jobs:
   publish:
-    if: github.repository == 'QTSurfer/svelte-timeseries'
+    if: |
+      github.repository == 'QTSurfer/svelte-timeseries' &&
+      (github.event_name == 'push' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
