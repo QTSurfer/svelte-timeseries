@@ -78,6 +78,7 @@
 	const theme = $derived(mergedConfig.theme);
 	const renderer = $derived(mergedConfig.renderer);
 	const option = $derived(mergedConfig.option);
+	const resolvedTheme = $derived(theme ?? { backgroundColor: isDark ? '#100c2a' : '#fff' });
 
 	const handleDataZoom = (zoomEvent: unknown) => {
 		if (!onDataZoom) {
@@ -100,11 +101,15 @@
 	};
 
 	function chartAction(element: HTMLElement) {
-		instance = init(element, undefined, { renderer });
+		instance = init(element, resolvedTheme, { renderer });
 
 		const handleResize = () => {
 			instance.resize();
 		};
+		const resizeObserver =
+			typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(handleResize);
+
+		resizeObserver?.observe(element);
 		window.addEventListener('resize', handleResize);
 		instance.on('datazoom', handleDataZoom);
 
@@ -112,6 +117,7 @@
 			instance.setOption(option);
 		}
 
+		handleResize();
 		onClear = () => instance.clear();
 
 		onLoad(instance);
@@ -120,6 +126,7 @@
 			destroy() {
 				instance.off('datazoom', handleDataZoom);
 				window.removeEventListener('resize', handleResize);
+				resizeObserver?.disconnect();
 				instance.dispose();
 			}
 			/**
@@ -137,7 +144,7 @@
 
 	$effect(() => {
 		if (instance) {
-			instance.setTheme({ backgroundColor: isDark ? '#100c2a' : '#fff' });
+			instance.setTheme(resolvedTheme);
 		}
 	});
 </script>
@@ -150,7 +157,7 @@
 	.echarts {
 		width: 100%;
 		height: 100%;
-		min-height: 300px;
+		min-height: 100px;
 		position: relative;
 		z-index: 1;
 	}
