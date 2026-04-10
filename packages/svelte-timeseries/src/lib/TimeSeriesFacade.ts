@@ -41,6 +41,20 @@ export default class TimeSeriesFacade {
 		this.timeSeriesChartBuilder.addDimension(result, columnesSelect);
 	}
 
+	async loadAllColumns(table: string, excludeColumns: string[] = []): Promise<Columns> {
+		const excluded = new Set(excludeColumns);
+		const columns = this.duckDb.getColumns(table);
+
+		for (const column of columns) {
+			if (excluded.has(column) || this.isLoadedColumns(column)) {
+				continue;
+			}
+			await this.addDimension(table, column);
+		}
+
+		return this.getColumns(table);
+	}
+
 	getColumns(table: string): Columns {
 		const columns = this.duckDb.getColumns(table);
 		const selected = this.timeSeriesChartBuilder.getLegendStatus();

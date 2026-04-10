@@ -1,4 +1,4 @@
-import { AsyncDuckDB, AsyncDuckDBConnection } from '@duckdb/duckdb-wasm';
+import { AsyncDuckDB, AsyncDuckDBConnection, DuckDBDataProtocol } from '@duckdb/duckdb-wasm';
 import { createAsyncDuckDB } from './duckdb-wasm';
 import { Schema, Table } from 'apache-arrow';
 
@@ -10,7 +10,24 @@ export type MarkersTableOptions = {
 	targetDimension: string;
 };
 
-type TableData = { url: string; mainColumn: string; columnsSelect?: string[] };
+export type ParquetSource = Blob | ArrayBuffer | Uint8Array;
+
+type TableDataBase = {
+	mainColumn: string;
+	columnsSelect?: string[];
+};
+
+type TableDataFromUrl = TableDataBase & {
+	url: string;
+	parquet?: never;
+};
+
+type TableDataFromParquet = TableDataBase & {
+	url?: never;
+	parquet: ParquetSource;
+};
+
+export type TableData = TableDataFromUrl | TableDataFromParquet;
 export type Tables = Record<string, TableData>;
 
 type IconType =
@@ -53,6 +70,7 @@ type DuckDBType =
 
 // Allows you to specify TIMESTAMP with unit: 'TIMESTAMP(ms)' etc.
 type TargetType = DuckDBType | `TIMESTAMP(${EpochUnit})`;
+const TIMESTAMP_COLUMN_CANDIDATES = ['_ts', 'ts', '_t', 't'] as const;
 
 export class DuckDB<T extends Tables> {
 	private _conn?: AsyncDuckDBConnection;
@@ -87,7 +105,7 @@ export class DuckDB<T extends Tables> {
 	}
 
 	get tsColumnQuery() {
-		return `epoch_ms("${this._tsColumn}")::DOUBLE as ${this._tsColumn}`;
+		return this.escapeIdent(this._tsColumn);
 	}
 
 	/**
@@ -165,7 +183,7 @@ export class DuckDB<T extends Tables> {
 
 				if (!omitTimestamp) {
 					const tsRaw = tsVector.get(i);
-					tsValues.push(tsRaw);
+					tsValues.push(this.normalizeTimestampValue(tsRaw));
 				}
 			}
 		}
@@ -244,8 +262,7 @@ export class DuckDB<T extends Tables> {
 	 */
 	private async registerData() {
 		for (const [name, data] of Object.entries(this._tables) as [keyof T, TableData][]) {
-			const { url, ...confg } = data;
-			await this.buildTablesAndSchemas(name, data.url, confg);
+			await this.buildTablesAndSchemas(name, data);
 			continue;
 		}
 	}
@@ -257,16 +274,13 @@ export class DuckDB<T extends Tables> {
 	 * @param url The url of the table
 	 * @private
 	 */
-	private async buildTablesAndSchemas(
-		name: keyof T,
-		url: string,
-		tableConfiguration?: Pick<TableData, 'mainColumn' | 'columnsSelect'>
-	) {
+	private async buildTablesAndSchemas(name: keyof T, tableConfiguration: TableData) {
 		return await this.execute(async (conn) => {
 			if (this.debug) console.log('Registering tables and schemas...');
 
 			const viewName = String(name);
 			const tempViewName = `__temp_${viewName}`;
+			const sourcePath = await this.registerParquetSource(viewName, tableConfiguration);
 
 			const columnsSelect = tableConfiguration?.columnsSelect?.map((c) => this.escapeIdent(c)) ?? [
 				'*'
@@ -280,7 +294,7 @@ export class DuckDB<T extends Tables> {
 
 			// Create temp view from parquet file
 			await conn.query(
-				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT ${selectColumns} FROM parquet_scan('${url}')`
+				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT ${selectColumns} FROM parquet_scan('${sourcePath}')`
 			);
 
 			// detected the initial schema of the temp view
@@ -289,6 +303,13 @@ export class DuckDB<T extends Tables> {
 			);
 
 			const initialSchema: ColumsSchema = initialSchemaData.toArray();
+			const sourceTimestampField = this.getTimestampSourceField(initialSchema);
+
+			if (!sourceTimestampField) {
+				throw new Error(
+					`Time column not found in "${viewName}". Expected one of: ${TIMESTAMP_COLUMN_CANDIDATES.join(', ')}`
+				);
+			}
 
 			// use the initial schema to build the casted select
 			const targetCasts = this.autoDetectFields(initialSchema);
@@ -302,7 +323,7 @@ export class DuckDB<T extends Tables> {
 			// Create markers view if needed
 			if (this._markersColumn?.table === viewName) {
 				const columnesSelect = [
-					`${this.sqlTimestampFromEpoch(this._tsColumn, 'ms')} AS ${this._tsColumn}`,
+					`${this.buildTimestampSelect(sourceTimestampField)} AS ${this._tsColumn}`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
@@ -326,6 +347,46 @@ export class DuckDB<T extends Tables> {
 			// Store the final schema
 			return finalSchema;
 		}, 'buildTablesAndSchemas - ' + name.toString());
+	}
+
+	private async registerParquetSource(
+		viewName: string,
+		tableConfiguration: TableData
+	): Promise<string> {
+		if (tableConfiguration.url !== undefined) {
+			return tableConfiguration.url;
+		}
+
+		const registeredFileName = `${viewName}.parquet`;
+		const parquet = tableConfiguration.parquet;
+
+		if (parquet instanceof Uint8Array) {
+			await this.db.registerFileBuffer(registeredFileName, parquet);
+			return registeredFileName;
+		}
+
+		if (parquet instanceof ArrayBuffer) {
+			await this.db.registerFileBuffer(registeredFileName, new Uint8Array(parquet));
+			return registeredFileName;
+		}
+
+		if (parquet instanceof Blob) {
+			if (typeof File !== 'undefined' && parquet instanceof File) {
+				await this.db.registerFileHandle(
+					registeredFileName,
+					parquet,
+					DuckDBDataProtocol.BROWSER_FILEREADER,
+					true
+				);
+				return registeredFileName;
+			}
+
+			const buffer = new Uint8Array(await parquet.arrayBuffer());
+			await this.db.registerFileBuffer(registeredFileName, buffer);
+			return registeredFileName;
+		}
+
+		throw new Error('Unsupported parquet source. Use url, Blob/File, ArrayBuffer, or Uint8Array.');
 	}
 
 	/**
@@ -359,7 +420,10 @@ export class DuckDB<T extends Tables> {
 		const sql = `SELECT * FROM markers`;
 
 		const result = await this.query(sql);
-		return result.toArray();
+		return result.toArray().map((row) => ({
+			...row,
+			_ts: this.normalizeTimestampValue(row._ts)
+		}));
 	}
 
 	/**
@@ -405,8 +469,10 @@ export class DuckDB<T extends Tables> {
 		const casts: Record<string, TargetType> = {};
 
 		fields.forEach((f, idx) => {
-			if (['_ts', 'ts'].includes(f.name)) {
-				casts[f.name] = 'TIMESTAMP(ms)';
+			if (
+				TIMESTAMP_COLUMN_CANDIDATES.includes(f.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number])
+			) {
+				casts[f.name] = this.isTimestampLikeType(f.type) ? 'TIMESTAMP' : 'TIMESTAMP(ms)';
 				return;
 			}
 
@@ -430,6 +496,38 @@ export class DuckDB<T extends Tables> {
 		return casts;
 	}
 
+	private getTimestampSourceField(fields: ColumsSchema): ColumsSchema[number] | undefined {
+		return fields.find((field) =>
+			TIMESTAMP_COLUMN_CANDIDATES.includes(
+				field.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number]
+			)
+		);
+	}
+
+	private isTimestampLikeType(type: string): boolean {
+		return type.toUpperCase().includes('TIMESTAMP') || type.toUpperCase() === 'DATE';
+	}
+
+	private buildTimestampSelect(field: ColumsSchema[number]): string {
+		const column = this.escapeIdent(field.name);
+		if (this.isTimestampLikeType(field.type)) {
+			return field.type.toUpperCase() === 'DATE' ? `CAST(${column} AS TIMESTAMP)` : column;
+		}
+		return this.sqlTimestampFromEpoch(column, 'ms');
+	}
+
+	private normalizeTimestampValue(value: unknown): number {
+		if (value instanceof Date) {
+			return value.getTime();
+		}
+
+		if (typeof value === 'bigint') {
+			return Number(value);
+		}
+
+		return Number(value);
+	}
+
 	/**
 	 * Build the casted type
 	 */
@@ -439,6 +537,9 @@ export class DuckDB<T extends Tables> {
 
 		for (const [col, target] of Object.entries(casts)) {
 			const colSQL = this.escapeIdent(col);
+			const isTimestampColumn = TIMESTAMP_COLUMN_CANDIDATES.includes(
+				col as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number]
+			);
 
 			// Timestamp with unit
 			const m = typeof target === 'string' ? target.match(/^TIMESTAMP\((s|ms|us|ns)\)$/i) : null;
@@ -451,7 +552,7 @@ export class DuckDB<T extends Tables> {
 
 			// TIMESTAMP Without unit
 			if (target === 'TIMESTAMP') {
-				parts.push(`${colSQL} AS ${colSQL}`);
+				parts.push(`${colSQL} AS ${isTimestampColumn ? this._tsColumn : colSQL}`);
 				continue;
 			}
 

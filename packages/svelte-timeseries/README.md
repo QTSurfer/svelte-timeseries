@@ -102,7 +102,7 @@ Forces Vite to include this library in the SSR build pipeline.
 Requirements:
 
 - SvelteKit project with TypeScript enabled.
-- Ability to serve Parquet/Arrow files (local assets or CDN).
+- Ability to provide Parquet files either by URL or directly in memory.
 
 ## Getting started
 
@@ -124,18 +124,48 @@ Requirements:
 	};
 </script>
 
-<SvelteTimeSeries table={tables} {markers} debug={false} />
+<SvelteTimeSeries table={tables} {markers} debug={false} externalManagerLegend={true} />
+```
+
+You can also pass a Parquet file directly instead of a URL:
+
+```svelte
+<script lang="ts">
+	import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
+
+	let parquetFile: File | null = null;
+
+	$: tables = parquetFile
+		? {
+				temps: {
+					parquet: parquetFile,
+					mainColumn: 'temp'
+				}
+			}
+		: {};
+</script>
+
+<input
+	type="file"
+	accept=".parquet"
+	onchange={(event) => (parquetFile = event.currentTarget.files?.[0] ?? null)}
+/>
+
+{#if parquetFile}
+	<SvelteTimeSeries table={tables} />
+{/if}
 ```
 
 ## Component API
 
-| Prop                  | Type                                                                            | Description                                                                                        |
-| --------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `table`               | `Record<string, { url: string; mainColumn: string; columnsSelect?: string[] }>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name. |
-| `markers?`            | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).     |
-| `debug?`              | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                            |
-| `columnsSnippet?`     | `Snippet<[ColumnsProps]>`                                                       | Overrides the column toggle panel.                                                                 |
-| `performanceSnippet?` | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                           |
+| Prop                     | Type                                                                                                                                             | Description                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `table`                  | `Record<string, { mainColumn: string; columnsSelect?: string[] } & ({ url: string } \| { parquet: Blob \| File \| ArrayBuffer \| Uint8Array })>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name.                    |
+| `markers?`               | `MarkersTableOptions`                                                                                                                            | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).                        |
+| `debug?`                 | `boolean` (default `true`)                                                                                                                       | Enables verbose DuckDB/builder logging.                                                                               |
+| `externalManagerLegend?` | `boolean` (default `true`)                                                                                                                       | Passes `externalManagerLegend` to `TimeSeriesChartBuilder`. Disable it to let the chart manage the legend internally. |
+| `columnsSnippet?`        | `Snippet<[ColumnsProps]>`                                                                                                                        | Overrides the column toggle panel.                                                                                    |
+| `performanceSnippet?`    | `Snippet<[PerformanceProps]>`                                                                                                                    | Overrides the performance/metrics panel.                                                                              |
 
 ## TimeSeriesFacade in practice
 
