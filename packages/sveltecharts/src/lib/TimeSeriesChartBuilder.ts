@@ -138,25 +138,12 @@ export class TimeSeriesChartBuilder {
 
 		this.option.tooltip = {
 			trigger: 'axis',
-			axisPointer: { type: 'cross' },
-			valueFormatter: (value: number, _dataIndex?: number, dataType?: string) => {
-				if (dataType === 'x' || dataType === 'time') {
-					const d = new Date(value);
-					return d.toTimeString().slice(0, 8);
-				}
-				return typeof value === 'number' ? value.toFixed(2) : String(value);
-			}
+			axisPointer: { type: 'cross' }
 		};
 
 		this.option.xAxis = {
 			type: 'time',
-			axisLine: { show: true },
-			axisLabel: {
-				formatter: (value: number) => {
-					const d = new Date(value);
-					return d.toTimeString().slice(0, 8);
-				}
-			}
+			axisLine: { show: true }
 		};
 
 		this.option.yAxis = [
@@ -781,13 +768,7 @@ export class TimeSeriesChartBuilder {
 
 		this.option.xAxis = {
 			type: 'time',
-			name: timeDimensionName,
-			axisLabel: {
-				formatter: (value: number) => {
-					const d = new Date(value);
-					return d.toTimeString().slice(0, 8);
-				}
-			}
+			axisLine: { show: true }
 		};
 		this.yDimensions.map((dim, inx) =>
 			this.addSeries(
