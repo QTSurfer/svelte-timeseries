@@ -226,10 +226,19 @@ export class TimeSeriesChartBuilder {
 	}
 
 	scrollToTime(timestamp: number): this {
+		const [min, max] = this.getRangeValues();
+		if (!min || !max) return this;
+
+		const range = max - min;
+		const targetPercent = ((timestamp - min) / range) * 100;
+		const windowSize = 5;
+		const start = Math.max(0, targetPercent - windowSize / 2);
+		const end = Math.min(100, targetPercent + windowSize / 2);
+
 		this.ECharts.dispatchAction({
 			type: 'dataZoom',
-			start: 0,
-			end: 100
+			start,
+			end
 		});
 
 		setTimeout(() => {
