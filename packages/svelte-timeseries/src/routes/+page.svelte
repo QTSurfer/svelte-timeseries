@@ -15,6 +15,7 @@
 
 	type SourceMode = 'url' | 'file';
 	type LegendMode = 'external' | 'internal';
+	type ChartLibrary = 'echarts' | 'lightweight';
 
 	const CUSTOM_CONFIGURATION_ID = 'custom';
 
@@ -22,6 +23,7 @@
 	let baseUrl = $state<string>(typeof window !== 'undefined' ? window.location.href : '');
 	let sourceMode = $state<SourceMode>('file');
 	let legendMode = $state<LegendMode>('external');
+	let chartLibrary = $state<ChartLibrary>('echarts');
 	let customUrl = $state('');
 	let customFile = $state<File | null>(null);
 	let customColumns = $state<string[]>([]);
@@ -89,10 +91,16 @@
 
 	const renderKey = $derived(
 		selected === CUSTOM_CONFIGURATION_ID
-			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}-${legendMode}`
-			: `${selected}-${legendMode}`
+			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}-${legendMode}-${chartLibrary}`
+			: `${selected}-${legendMode}-${chartLibrary}`
 	);
 	const showCustomSidebar = $derived(legendMode === 'external');
+
+	$effect(() => {
+		if (chartLibrary === 'lightweight' && legendMode === 'internal') {
+			legendMode = 'external';
+		}
+	});
 
 	function setSourceMode(mode: SourceMode) {
 		sourceMode = mode;
@@ -286,7 +294,17 @@
 				</div>
 				<select class="select select-bordered" bind:value={legendMode}>
 					<option value="external">External</option>
-					<option value="internal">Internal</option>
+					<option value="internal" disabled={chartLibrary === 'lightweight'}>Internal</option>
+				</select>
+			</label>
+
+			<label class="form-control w-full max-w-56">
+				<div class="label pb-1">
+					<span class="label-text font-semibold">Chart engine</span>
+				</div>
+				<select class="select select-bordered" bind:value={chartLibrary}>
+					<option value="echarts">ECharts</option>
+					<option value="lightweight">Lightweight Charts</option>
 				</select>
 			</label>
 
@@ -384,6 +402,12 @@
 			</div>
 		{/if}
 
+		{#if chartLibrary === 'lightweight'}
+			<div class="mt-3 text-sm text-base-content/70">
+				Lightweight Charts uses the external schema controls in this demo.
+			</div>
+		{/if}
+
 		{#if selected === CUSTOM_CONFIGURATION_ID && customError}
 			<div class="mt-3 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
 				{customError}
@@ -400,6 +424,7 @@
 					markers={configuration.markers}
 					debug={false}
 					externalManagerLegend={legendMode === 'external'}
+					{chartLibrary}
 					containerClass={showCustomSidebar
 						? 'relative grid grid-cols-[300px_1fr] size-full'
 						: 'relative size-full'}

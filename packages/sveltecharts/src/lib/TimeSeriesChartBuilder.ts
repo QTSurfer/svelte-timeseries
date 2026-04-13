@@ -83,7 +83,18 @@ export class TimeSeriesChartBuilder {
 		this.ECharts = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
+		this.option.useUTC = true;
 		this.option.animation = false;
+		this.option.xAxis = {
+			type: 'time',
+			axisLine: { show: true },
+			axisLabel: {
+				formatter: (value: number) => {
+					const d = new Date(value);
+					return d.toTimeString().slice(0, 8);
+				}
+			}
+		};
 
 		this.option.legend = this.builderConfig.externalManagerLegend
 			? {
@@ -127,12 +138,25 @@ export class TimeSeriesChartBuilder {
 
 		this.option.tooltip = {
 			trigger: 'axis',
-			axisPointer: { type: 'cross' }
+			axisPointer: { type: 'cross' },
+			valueFormatter: (value: number, _dataIndex?: number, dataType?: string) => {
+				if (dataType === 'x' || dataType === 'time') {
+					const d = new Date(value);
+					return d.toTimeString().slice(0, 8);
+				}
+				return typeof value === 'number' ? value.toFixed(2) : String(value);
+			}
 		};
 
 		this.option.xAxis = {
 			type: 'time',
-			axisLine: { show: true }
+			axisLine: { show: true },
+			axisLabel: {
+				formatter: (value: number) => {
+					const d = new Date(value);
+					return d.toTimeString().slice(0, 8);
+				}
+			}
 		};
 
 		this.option.yAxis = [
@@ -212,6 +236,41 @@ export class TimeSeriesChartBuilder {
 		});
 
 		return this;
+	}
+
+	scrollToTime(timestamp: number): this {
+		this.ECharts.dispatchAction({
+			type: 'dataZoom',
+			start: 0,
+			end: 100
+		});
+
+		setTimeout(() => {
+			this.ECharts.dispatchAction({
+				type: 'showTip',
+				seriesIndex: 0,
+				dataIndex: this.findClosestDataIndex(timestamp)
+			});
+		}, 100);
+
+		return this;
+	}
+
+	private findClosestDataIndex(timestamp: number): number {
+		const ts = this.dataset.source[this._tsColumn] ?? [];
+		if (!ts.length) return 0;
+
+		let closest = 0;
+		let minDiff = Math.abs(ts[0] - timestamp);
+
+		for (let i = 1; i < ts.length; i++) {
+			const diff = Math.abs(ts[i] - timestamp);
+			if (diff < minDiff) {
+				minDiff = diff;
+				closest = i;
+			}
+		}
+		return closest;
 	}
 
 	/**
@@ -720,7 +779,16 @@ export class TimeSeriesChartBuilder {
 			);
 		}
 
-		this.option.xAxis = { type: 'time', name: timeDimensionName };
+		this.option.xAxis = {
+			type: 'time',
+			name: timeDimensionName,
+			axisLabel: {
+				formatter: (value: number) => {
+					const d = new Date(value);
+					return d.toTimeString().slice(0, 8);
+				}
+			}
+		};
 		this.yDimensions.map((dim, inx) =>
 			this.addSeries(
 				dim,
@@ -803,6 +871,7 @@ export class TimeSeriesChartBuilder {
 			notMerge: false,
 			replaceMerge: ['dataset']
 		});
+
 		return this;
 	}
 

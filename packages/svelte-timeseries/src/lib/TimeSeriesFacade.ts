@@ -1,4 +1,4 @@
-import { TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
+import { TimeSeriesChartBuilder, type TimeSeriesChartAdapter } from '@qtsurfer/sveltecharts';
 import { DuckDB, Tables } from './duckdb/DuckDB';
 
 export type Columns = { name: string; checked: boolean }[];
@@ -6,7 +6,7 @@ export type Columns = { name: string; checked: boolean }[];
 export default class TimeSeriesFacade {
 	constructor(
 		private duckDb: DuckDB<Tables>,
-		private timeSeriesChartBuilder: TimeSeriesChartBuilder
+		private timeSeriesChartBuilder: TimeSeriesChartAdapter
 	) {}
 
 	async initialize(table: string, columnesSelect: string) {
@@ -77,10 +77,7 @@ export default class TimeSeriesFacade {
 	}
 
 	goToTime(ts: number) {
-		const [min, max] = this.timeSeriesChartBuilder.getRangeValues();
-		const percent = ((ts - min) / (max - min)) * 100;
-
-		this.timeSeriesChartBuilder.goToZoom(Math.max(0, percent - 1), Math.min(100, percent + 1));
+		this.timeSeriesChartBuilder.scrollToTime(ts);
 	}
 
 	describe() {
@@ -105,6 +102,13 @@ export default class TimeSeriesFacade {
 	 * Returns the chart builder for programmatic chart updates.
 	 */
 	getChartBuilder(): TimeSeriesChartBuilder {
+		if (!(this.timeSeriesChartBuilder instanceof TimeSeriesChartBuilder)) {
+			throw new Error('Current chart library does not expose an ECharts TimeSeriesChartBuilder.');
+		}
+		return this.timeSeriesChartBuilder;
+	}
+
+	getChartAdapter(): TimeSeriesChartAdapter {
 		return this.timeSeriesChartBuilder;
 	}
 }

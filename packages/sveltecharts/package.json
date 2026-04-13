@@ -85,5 +85,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "svelte": "./dist/index.js"
+  "svelte": "./dist/index.js",
+  "dependencies": {
+    "lightweight-charts": "^5.1.0"
+  }
 }
