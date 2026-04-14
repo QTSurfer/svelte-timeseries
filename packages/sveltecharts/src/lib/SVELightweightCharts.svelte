@@ -180,7 +180,7 @@
 			style="left: {tooltipX}px; top: {tooltipY}px;"
 		>
 			<div class="lw-tooltip__time">{tooltipTime}</div>
-			{#each tooltipRows as row}
+			{#each tooltipRows as row (row.label)}
 				<div class="lw-tooltip__row">
 					{#if row.label}<span class="lw-tooltip__label">{row.label}</span>{/if}
 					<span class="lw-tooltip__value">{row.value}</span>

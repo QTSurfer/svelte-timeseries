@@ -71,6 +71,7 @@
 		"publint": "^0.3.18",
 		"svelte": "^5.55.0",
 		"svelte-check": "^4.4.5",
+		"svelte-eslint-parser": "^1.6.0",
 		"typescript": "^5.9.3",
 		"vite": "^7.2.4",
 		"vitest": "^4.1.0"

@@ -172,7 +172,7 @@
 			<summary> SCHEMA </summary>
 			<div>
 				<ul>
-					{#each props.columns as column}
+					{#each props.columns as column (column.name)}
 						<li>
 							<div>
 								{column.name}
@@ -198,7 +198,7 @@
 	<details class="sts-details">
 		<summary> MARKERS </summary>
 		<ul>
-			{#each props.markers as marker, i}
+			{#each props.markers as marker, i (i)}
 				<li>
 					<div>
 						<b>{marker.text}</b>

@@ -279,7 +279,7 @@
 					<span class="label-text font-semibold">Scenario</span>
 				</div>
 				<select class="select select-bordered" bind:value={selected}>
-					{#each configurations as config, i}
+					{#each configurations as config, i (i)}
 						<option value={`preset:${i}`}>
 							{config.name}
 						</option>
@@ -372,7 +372,7 @@
 								disabled={inspectingCustomFile || customColumns.length === 0}
 							>
 								<option value="" disabled selected={!customMainColumn}> Select column </option>
-								{#each customColumns as column}
+								{#each customColumns as column (column)}
 									<option value={column}>{column}</option>
 								{/each}
 							</select>
@@ -441,7 +441,7 @@
 								<summary class="collapse-title font-semibold"> SCHEMA </summary>
 								<div class="collapse-content text-sm p-0 h-100">
 									<ul class="list overflow-auto h-full bg-base-100">
-										{#each props.columns as column}
+										{#each props.columns as column (column.name)}
 											<li class="list-row">
 												<div class="list-col-grow">
 													{column.name}
@@ -483,7 +483,7 @@
 								<summary class="collapse-title font-semibold"> MARKERS </summary>
 								<div class="collapse-content text-sm p-0">
 									<ul class="list overflow-auto h-full bg-base-100">
-										{#each props.markers as marker, i}
+										{#each props.markers as marker, i (i)}
 											<li class="list-row">
 												<div class="flex items-center">
 													<button
