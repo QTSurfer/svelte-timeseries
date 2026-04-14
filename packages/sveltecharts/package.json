@@ -44,6 +44,9 @@
     "vite:build": "vite build"
   },
   "types": "./dist/index.d.ts",
+  "dependencies": {
+    "lightweight-charts": "^5.1.0"
+  },
   "peerDependencies": {
     "echarts": "^6.0.0",
     "svelte": "^5.43.14"

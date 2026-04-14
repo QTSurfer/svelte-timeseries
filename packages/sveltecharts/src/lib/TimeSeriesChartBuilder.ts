@@ -83,6 +83,7 @@ export class TimeSeriesChartBuilder {
 		this.ECharts = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
+		this.option.useUTC = true;
 		this.option.animation = false;
 
 		this.option.legend = this.builderConfig.externalManagerLegend
@@ -132,7 +133,13 @@ export class TimeSeriesChartBuilder {
 
 		this.option.xAxis = {
 			type: 'time',
-			axisLine: { show: true }
+			axisLine: { show: true },
+			axisLabel: {
+				formatter: (value: number) => {
+					const d = new Date(value);
+					return d.toTimeString().slice(0, 8);
+				}
+			}
 		};
 
 		this.option.yAxis = [
@@ -212,6 +219,54 @@ export class TimeSeriesChartBuilder {
 		});
 
 		return this;
+	}
+
+	scrollToTime(timestamp: number): this {
+		const [min, max] = this.getRangeValues();
+		if (!min || !max) return this;
+
+		const range = max - min;
+		const targetPercent = ((timestamp - min) / range) * 100;
+		const windowSize = 5;
+		const start = Math.max(0, targetPercent - windowSize / 2);
+		const end = Math.min(100, targetPercent + windowSize / 2);
+
+		this.ECharts.dispatchAction({
+			type: 'dataZoom',
+			start,
+			end
+		});
+
+		setTimeout(() => {
+			this.ECharts.dispatchAction({
+				type: 'showTip',
+				seriesIndex: 0,
+				dataIndex: this.findClosestDataIndex(timestamp)
+			});
+		}, 100);
+
+		return this;
+	}
+
+	private findClosestDataIndex(timestamp: number): number {
+		const dataset = this.option.dataset as {
+			source: DatasetFormatSimpleObject;
+			dimensions: string[];
+		};
+		const ts = (dataset?.source as DatasetFormatSimpleObject)?.[this._tsColumn] ?? [];
+		if (!ts.length) return 0;
+
+		let closest = 0;
+		let minDiff = Math.abs(ts[0] - timestamp);
+
+		for (let i = 1; i < ts.length; i++) {
+			const diff = Math.abs(ts[i] - timestamp);
+			if (diff < minDiff) {
+				minDiff = diff;
+				closest = i;
+			}
+		}
+		return closest;
 	}
 
 	/**
@@ -720,7 +775,6 @@ export class TimeSeriesChartBuilder {
 			);
 		}
 
-		this.option.xAxis = { type: 'time', name: timeDimensionName };
 		this.yDimensions.map((dim, inx) =>
 			this.addSeries(
 				dim,
@@ -803,6 +857,7 @@ export class TimeSeriesChartBuilder {
 			notMerge: false,
 			replaceMerge: ['dataset']
 		});
+
 		return this;
 	}
 
