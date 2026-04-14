@@ -7,7 +7,15 @@
 		type MarkersTableOptions,
 		type Tables
 	} from '../duckdb/DuckDB';
-	import { type ECharts, SVECharts, TimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
+	import {
+		type ECharts,
+		type LightweightChartApi,
+		LightweightTimeSeriesChartBuilder,
+		SVECharts,
+		SVELightweightCharts,
+		type TimeSeriesChartAdapter,
+		TimeSeriesChartBuilder
+	} from '@qtsurfer/sveltecharts';
 
 	type DataColumnsProps = {
 		columns: Columns;
@@ -36,6 +44,7 @@
 		containerClass,
 		snippetclass,
 		chartClass,
+		chartLibrary = 'echarts',
 		isDark,
 		onFacadeReady
 	}: {
@@ -49,6 +58,7 @@
 		containerClass?: string;
 		snippetclass?: string;
 		chartClass?: string;
+		chartLibrary?: 'echarts' | 'lightweight';
 		isDark?: boolean;
 		onFacadeReady?: (facade: TimeSeriesFacade) => void;
 	} = $props();
@@ -63,13 +73,10 @@
 	let matrix = $state([0, 0]);
 	let markersData = $state<MarkersTable[]>([]);
 
-	const onLoad = async (EChartInstance: ECharts) => {
+	const loadChart = async (chartBuilder: TimeSeriesChartAdapter) => {
 		loading = true;
 		const duckDb = await DuckDB.create(table, markers, debug);
-		const timeSeriesBuilder = new TimeSeriesChartBuilder(EChartInstance, {
-			externalManagerLegend
-		});
-		timeSeriesFacade = new TimeSeriesFacade(duckDb, timeSeriesBuilder);
+		timeSeriesFacade = new TimeSeriesFacade(duckDb, chartBuilder);
 
 		const columnsSelect = table[tableName].mainColumn;
 		await timeSeriesFacade.initialize(tableName, columnsSelect);
@@ -86,6 +93,20 @@
 		columns = timeSeriesFacade.getColumns(tableName);
 		onFacadeReady?.(timeSeriesFacade);
 		matrix = timeSeriesFacade.describe();
+	};
+
+	const onLoadECharts = async (EChartInstance: ECharts) => {
+		const timeSeriesBuilder = new TimeSeriesChartBuilder(EChartInstance, {
+			externalManagerLegend
+		});
+		await loadChart(timeSeriesBuilder);
+	};
+
+	const onLoadLightweight = async (chartInstance: LightweightChartApi) => {
+		const timeSeriesBuilder = new LightweightTimeSeriesChartBuilder(chartInstance, {
+			externalManagerLegend
+		});
+		await loadChart(timeSeriesBuilder);
 	};
 
 	async function toggleColumn(name: string) {
@@ -132,7 +153,11 @@
 	</div>
 
 	<div class={chartClass}>
-		<SVECharts {onLoad} {loading} {isDark} />
+		{#if chartLibrary === 'lightweight'}
+			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
+		{:else}
+			<SVECharts onLoad={onLoadECharts} {loading} {isDark} />
+		{/if}
 	</div>
 	{#if loading}
 		<div class="wrapper-loading">
@@ -147,7 +172,7 @@
 			<summary> SCHEMA </summary>
 			<div>
 				<ul>
-					{#each props.columns as column}
+					{#each props.columns as column (column.name)}
 						<li>
 							<div>
 								{column.name}
@@ -173,7 +198,7 @@
 	<details class="sts-details">
 		<summary> MARKERS </summary>
 		<ul>
-			{#each props.markers as marker, i}
+			{#each props.markers as marker, i (i)}
 				<li>
 					<div>
 						<b>{marker.text}</b>

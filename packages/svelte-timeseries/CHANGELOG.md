@@ -1,5 +1,24 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.6.0
+
+### Minor Changes
+
+- Add TradingView Lightweight Charts as a second chart backend.
+  - New `chartLibrary` prop on `SvelteTimeSeries` (`'echarts' | 'lightweight'`)
+  - New `LightweightTimeSeriesChartBuilder` implementing `TimeSeriesChartAdapter`
+  - New `SVELightweightCharts` Svelte component with crosshair tooltip (dark mode aware)
+  - New `TimeSeriesChartAdapter` interface exported from `@qtsurfer/sveltecharts`
+  - New `clearMarkers()` method on both chart builders
+  - New props on `SvelteTimeSeries`: `externalManagerLegend`, `isDark`, `onFacadeReady`, `markersSnippet`
+  - ECharts backend improvements: UTC handling, `scrollToTime`, resize via `ResizeObserver`
+  - Dev: migrated both packages to ESLint 9 flat config
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @qtsurfer/sveltecharts@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes

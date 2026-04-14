@@ -161,7 +161,7 @@ export class DuckDB<T extends Tables> {
 	async getSingleDimension(table: keyof T, selectColumn: string, omitTimestamp = true) {
 		const columnsSelect = [this.tsColumnQuery, this.escapeIdent(selectColumn)];
 
-		const sql = `SELECT ${columnsSelect.join(', ')} FROM ${table.toString()} WHERE ${this.escapeIdent(selectColumn)} NOT NULL`;
+		const sql = `SELECT ${columnsSelect.join(', ')} FROM ${table.toString()} WHERE ${this.escapeIdent(selectColumn)} NOT NULL ORDER BY ${this.tsColumnQuery}`;
 
 		const result = await this.queryBatch(sql);
 		const tsKey = this._tsColumn;
@@ -263,7 +263,6 @@ export class DuckDB<T extends Tables> {
 	private async registerData() {
 		for (const [name, data] of Object.entries(this._tables) as [keyof T, TableData][]) {
 			await this.buildTablesAndSchemas(name, data);
-			continue;
 		}
 	}
 
@@ -417,7 +416,7 @@ export class DuckDB<T extends Tables> {
 		if (!this._markersColumn) {
 			return [];
 		}
-		const sql = `SELECT * FROM markers`;
+		const sql = `SELECT * FROM markers ORDER BY ${this.tsColumnQuery}`;
 
 		const result = await this.query(sql);
 		return result.toArray().map((row) => ({
