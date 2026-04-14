@@ -6,23 +6,30 @@ This file provides guidance to AI agents when working with code in this reposito
 
 This is a monorepo containing two main packages:
 1. `@qtsurfer/svelte-timeseries` - Main Svelte component for time-series visualization
-2. `@qtsurfer/sveltecharts` - ECharts integration layer for Svelte
+2. `@qtsurfer/sveltecharts` - Chart integration layer for Svelte (ECharts + TradingView Lightweight Charts)
 
-The project enables visualization of huge time-series datasets directly in the browser using DuckDB-WASM, Apache Arrow, and ECharts.
+The project enables visualization of huge time-series datasets directly in the browser using DuckDB-WASM, Apache Arrow, ECharts, and TradingView Lightweight Charts.
 
 ## Key Architecture Components
 
 ### Core Layers
 1. **DuckDB-WASM** - Runs SQL against Parquet files in the browser without backend
-2. **TimeSeriesFacade** - Coordinates DuckDB + TimeSeriesChartBuilder, handles incremental column loads
-3. **@qtsurfer/sveltecharts** - Svelte component that builds and updates ECharts instances declaratively
+2. **TimeSeriesFacade** - Coordinates DuckDB + chart builder (via `TimeSeriesChartAdapter`), handles incremental column loads
+3. **@qtsurfer/sveltecharts** - Svelte components and builders for ECharts and TradingView Lightweight Charts
 4. **SvelteKit** - Hosts the component and demo routes
 
+### Chart Backends
+- **ECharts** (`SVECharts` + `TimeSeriesChartBuilder`) - Default backend; full-featured with built-in legend, tooltip, zoom slider
+- **TradingView Lightweight Charts** (`SVELightweightCharts` + `LightweightTimeSeriesChartBuilder`) - Performance-focused canvas renderer; custom Svelte tooltip, external legend required
+- Both implement `TimeSeriesChartAdapter`; `TimeSeriesFacade` is agnostic to the backend
+
 ### Main Entry Points
-- `packages/svelte-timeseries/src/lib/component/SvelteTimeSeries.svelte` - Main component
+- `packages/svelte-timeseries/src/lib/component/SvelteTimeSeries.svelte` - Main component (prop `chartLibrary` selects backend)
 - `packages/svelte-timeseries/src/lib/TimeSeriesFacade.ts` - Core coordination logic
 - `packages/svelte-timeseries/src/lib/duckdb/DuckDB.ts` - DuckDB wrapper
 - `packages/sveltecharts/src/lib/TimeSeriesChartBuilder.ts` - ECharts builder
+- `packages/sveltecharts/src/lib/LightweightTimeSeriesChartBuilder.ts` - Lightweight Charts builder
+- `packages/sveltecharts/src/lib/chartAdapter.ts` - `TimeSeriesChartAdapter` interface
 
 ## Common Development Commands
 
@@ -83,12 +90,15 @@ pnpm changeset:publish
 
 ### Markers System
 - JSON column in Parquet stores marker definitions
-- Rendered as annotations on ECharts
-- Customizable icons, colors, and positions
+- **ECharts**: rendered as `MarkPoint` symbols on data series (icons: `arrowUp`, `arrowDown`, `circle`, `pin`, etc.)
+- **Lightweight Charts**: rendered via `createSeriesMarkers` plugin (shapes: `circle`, `arrowUp`, `arrowDown`, `square`)
+- Lightweight Charts deduplicates markers sharing the same UTC second on a series
+- Customizable colors, positions (`aboveBar`, `belowBar`, `inBar`), and text labels
 
 ### Svelte & Runtime
 - **Svelte 5** (`^5.43.14`) with runes API (`$state`, `$derived`, `$effect`, etc.)
 - **ECharts 6** (`^6.0.0`)
+- **TradingView Lightweight Charts 5** (`^5.1.0`) — uses `createSeriesMarkers` plugin for marker rendering
 - Do NOT use legacy Svelte 4 reactive syntax (`$:`, `export let`, stores)
 
 ### Performance Features
@@ -104,24 +114,30 @@ packages/
 ├── svelte-timeseries/     # Main component package
 │   ├── src/
 │   │   ├── lib/
-│   │   │   ├── component/     # Svelte components
+│   │   │   ├── component/     # Svelte components (SvelteTimeSeries)
 │   │   │   ├── duckdb/        # DuckDB integration
 │   │   │   └── index.ts       # Public exports
 │   │   └── routes/            # Demo routes
 │   └── static/                # Sample Parquet files
-└── sveltecharts/             # ECharts integration
+└── sveltecharts/             # Chart integration (ECharts + Lightweight Charts)
     ├── src/
-    │   ├── lib/               # Core ECharts logic
+    │   ├── lib/
+    │   │   ├── SVECharts.svelte                       # ECharts component
+    │   │   ├── SVELightweightCharts.svelte            # TradingView component
+    │   │   ├── TimeSeriesChartBuilder.ts              # ECharts builder
+    │   │   ├── LightweightTimeSeriesChartBuilder.ts   # Lightweight Charts builder
+    │   │   ├── chartAdapter.ts                        # TimeSeriesChartAdapter interface
+    │   │   └── types.ts                               # Shared types
     │   └── routes/            # Demo routes
 ```
 
 ## Data Flow
 
-1. **Initialization**: SvelteTimeSeries creates DuckDB instance and TimeSeriesChartBuilder
+1. **Initialization**: SvelteTimeSeries selects chart component based on `chartLibrary` prop and creates a DuckDB instance
 2. **Data Loading**: TimeSeriesFacade initializes with primary column via `getSingleDimension()`
-3. **Rendering**: TimeSeriesChartBuilder sets dataset and creates ECharts configuration
-4. **Interaction**: User actions trigger lazy loading of additional columns
-5. **Updates**: Chart updates via ECharts `setOption()` with incremental data
+3. **Rendering**: Active chart builder (`TimeSeriesChartBuilder` or `LightweightTimeSeriesChartBuilder`) sets dataset and renders
+4. **Interaction**: User actions trigger lazy loading of additional columns via `TimeSeriesChartAdapter`
+5. **Updates**: ECharts path uses incremental `setOption()`; Lightweight Charts path replaces series data directly
 
 ---
 
@@ -146,8 +162,8 @@ Agents must NOT:
 
 - Add backend services
 - Replace DuckDB
-- Replace ECharts
-- Remove facade pattern
+- Replace ECharts or Lightweight Charts with a different charting library
+- Remove facade pattern or `TimeSeriesChartAdapter` interface
 - Load full datasets eagerly
 - Introduce blocking UI work
 
@@ -233,14 +249,14 @@ Agents must ensure:
 ## Common Agent Tasks
 Add new column visualization:
 1. Extend TimeSeriesFacade toggle logic
-2. Extend ChartBuilder series config
+2. Extend both `TimeSeriesChartBuilder` and `LightweightTimeSeriesChartBuilder` series config
 3. Ensure lazy loading query
-4. Verify incremental chart update
+4. Verify incremental chart update on both backends
 
 Add marker type:
 1. Extend marker schema
-2. Add renderer in sveltecharts
-3. Validate overlay rendering
+2. Add renderer in both chart builders (ECharts MarkPoint + Lightweight createSeriesMarkers)
+3. Validate overlay rendering on both backends
 
 Modify query logic:
 1. Update DuckDB wrapper

@@ -133,16 +133,18 @@ You can also pass a Parquet file directly instead of a URL:
 <script lang="ts">
 	import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
 
-	let parquetFile: File | null = null;
+	let parquetFile = $state<File | null>(null);
 
-	$: tables = parquetFile
-		? {
-				temps: {
-					parquet: parquetFile,
-					mainColumn: 'temp'
+	const tables = $derived(
+		parquetFile
+			? {
+					temps: {
+						parquet: parquetFile,
+						mainColumn: 'temp'
+					}
 				}
-			}
-		: {};
+			: {}
+	);
 </script>
 
 <input

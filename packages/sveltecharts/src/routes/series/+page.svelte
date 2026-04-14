@@ -10,7 +10,7 @@
 		loading = true;
 
 		const totalHours = 700000;
-		const { data, yDimensionsNames } = createDataSet<Record<string, any>>(totalHours, 'object');
+		const { data } = createDataSet<Record<string, number>>(totalHours, 'object');
 
 		const dataset = {
 			_ts: data.map((d) => d._ts),

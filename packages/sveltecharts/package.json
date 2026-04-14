@@ -1,89 +1,91 @@
 {
-  "private": false,
-  "name": "@qtsurfer/sveltecharts",
-  "version": "0.5.0",
-  "license": "Apache-2.0",
-  "author": "QTSurfer (https://github.com/QTSurfer)",
-  "homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
-    "directory": "packages/sveltecharts"
-  },
-  "bugs": {
-    "url": "https://github.com/QTSurfer/svelte-timeseries/issues"
-  },
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "svelte": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "!dist/**/*.spec.*",
-    "!dist/**/*.test.*"
-  ],
-  "scripts": {
-    "build": "run-s vite:build package",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "dev": "vite dev",
-    "format": "run-p format:all format:package",
-    "format:all": "prettier -l --write .",
-    "format:package": "npx prettier-package-json --write ./package.json",
-    "knip": "pnpm dlx knip",
-    "lint": "prettier --check . && eslint .",
-    "package": "svelte-kit sync && svelte-package && publint",
-    "prepare": "run-s build",
-    "preview": "vite preview",
-    "prepublishOnly": "pnpm build",
-    "publishd": "pnpm publish --dry-run --no-git-checks",
-    "test": "vitest",
-    "vite:build": "vite build"
-  },
-  "types": "./dist/index.d.ts",
-  "peerDependencies": {
-    "echarts": "^6.0.0",
-    "svelte": "^5.43.14"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3.3.5",
-    "@eslint/js": "^9.39.1",
-    "@sveltejs/adapter-auto": "^7.0.1",
-    "@sveltejs/kit": "^2.55.0",
-    "@sveltejs/package": "^2.5.7",
-    "@sveltejs/vite-plugin-svelte": "^6.2.1",
-    "@types/eslint": "^9.6.1",
-    "@types/node": "^24.12.0",
-    "@typescript-eslint/eslint-plugin": "^8.57.1",
-    "@typescript-eslint/parser": "^8.57.1",
-    "echarts": "^6.0.0",
-    "eslint": "^9.39.1",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-svelte": "^3.16.0",
-    "globals": "^16.5.0",
-    "npm-run-all2": "^8.0.4",
-    "prettier": "^3.8.1",
-    "prettier-plugin-svelte": "^3.5.1",
-    "publint": "^0.3.18",
-    "svelte": "^5.55.0",
-    "svelte-check": "^4.4.5",
-    "typescript": "^5.9.3",
-    "vite": "^7.2.4",
-    "vitest": "^4.1.0"
-  },
-  "keywords": [
-    "apache-echarts",
-    "charts",
-    "echarts",
-    "svelte",
-    "sveltekit",
-    "visualization"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "svelte": "./dist/index.js"
+	"private": false,
+	"name": "@qtsurfer/sveltecharts",
+	"version": "0.5.0",
+	"license": "Apache-2.0",
+	"author": "QTSurfer (https://github.com/QTSurfer)",
+	"homepage": "https://github.com/QTSurfer/svelte-timeseries/tree/main/packages/sveltecharts",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/QTSurfer/svelte-timeseries.git",
+		"directory": "packages/sveltecharts"
+	},
+	"bugs": {
+		"url": "https://github.com/QTSurfer/svelte-timeseries/issues"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"svelte": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"!dist/**/*.spec.*",
+		"!dist/**/*.test.*"
+	],
+	"scripts": {
+		"build": "run-s vite:build package",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"dev": "vite dev",
+		"format": "run-p format:all format:package",
+		"format:all": "prettier -l --write .",
+		"format:package": "npx prettier-package-json --write ./package.json",
+		"knip": "pnpm dlx knip",
+		"lint": "prettier --check . && eslint .",
+		"package": "svelte-kit sync && svelte-package && publint",
+		"prepare": "run-s build",
+		"preview": "vite preview",
+		"prepublishOnly": "pnpm build",
+		"publishd": "pnpm publish --dry-run --no-git-checks",
+		"test": "vitest",
+		"vite:build": "vite build"
+	},
+	"types": "./dist/index.d.ts",
+	"peerDependencies": {
+		"echarts": "^6.0.0",
+		"lightweight-charts": "^5.1.0",
+		"svelte": "^5.43.14"
+	},
+	"devDependencies": {
+		"@eslint/eslintrc": "^3.3.5",
+		"@eslint/js": "^9.39.1",
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/kit": "^2.55.0",
+		"@sveltejs/package": "^2.5.7",
+		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"@types/eslint": "^9.6.1",
+		"@types/node": "^24.12.0",
+		"@typescript-eslint/eslint-plugin": "^8.57.1",
+		"@typescript-eslint/parser": "^8.57.1",
+		"echarts": "^6.0.0",
+		"eslint": "^9.39.1",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-svelte": "^3.16.0",
+		"globals": "^16.5.0",
+		"npm-run-all2": "^8.0.4",
+		"prettier": "^3.8.1",
+		"prettier-plugin-svelte": "^3.5.1",
+		"publint": "^0.3.18",
+		"svelte": "^5.55.0",
+		"svelte-check": "^4.4.5",
+		"svelte-eslint-parser": "^1.6.0",
+		"typescript": "^5.9.3",
+		"vite": "^7.2.4",
+		"vitest": "^4.1.0"
+	},
+	"keywords": [
+		"apache-echarts",
+		"charts",
+		"echarts",
+		"svelte",
+		"sveltekit",
+		"visualization"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"svelte": "./dist/index.js"
 }

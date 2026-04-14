@@ -10,7 +10,7 @@
 		loading = true;
 		const totalHours = 700000;
 
-		const { data, yDimensionsNames } = createDataSet<Record<string, any>>(totalHours, 'object');
+		const { data, yDimensionsNames } = createDataSet<Record<string, number>>(totalHours, 'object');
 
 		const timeSeries = new TimeSeriesChartBuilder(instance);
 		const timeKey = yDimensionsNames[0];
