@@ -246,6 +246,14 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		return this;
 	}
 
+	clearMarkers(): this {
+		this.markers.clear();
+		for (const plugin of this.markersPlugins.values()) {
+			plugin.setMarkers([]);
+		}
+		return this;
+	}
+
 	private normalizeDataset(data: ChartDataset, yDimensionsNames?: string[]) {
 		if (Array.isArray(data)) {
 			if (!data.length || Array.isArray(data[0])) {

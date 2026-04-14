@@ -33,4 +33,5 @@ export interface TimeSeriesChartAdapter {
 	scrollToTime(timestamp: number): this;
 	getTotalRows(): number;
 	toggleMarkers(id: number, dimName: string, shape: string): this;
+	clearMarkers(): this;
 }

@@ -976,4 +976,19 @@ export class TimeSeriesChartBuilder {
 		this.build();
 		return this;
 	}
+
+	clearMarkers(): this {
+		if (!Array.isArray(this.option.series)) {
+			return this;
+		}
+
+		for (const s of this.option.series as any[]) {
+			if (s.markPoint) {
+				s.markPoint.data = [];
+			}
+		}
+
+		this.build();
+		return this;
+	}
 }
