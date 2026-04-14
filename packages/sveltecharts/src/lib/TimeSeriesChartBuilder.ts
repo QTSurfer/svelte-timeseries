@@ -249,7 +249,10 @@ export class TimeSeriesChartBuilder {
 	}
 
 	private findClosestDataIndex(timestamp: number): number {
-		const dataset = this.option.dataset as { source: DatasetFormatSimpleObject; dimensions: string[] };
+		const dataset = this.option.dataset as {
+			source: DatasetFormatSimpleObject;
+			dimensions: string[];
+		};
 		const ts = (dataset?.source as DatasetFormatSimpleObject)?.[this._tsColumn] ?? [];
 		if (!ts.length) return 0;
 
