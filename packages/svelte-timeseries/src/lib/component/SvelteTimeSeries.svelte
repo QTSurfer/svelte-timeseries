@@ -73,12 +73,10 @@
 	let matrix = $state([0, 0]);
 	let markersData = $state<MarkersTable[]>([]);
 
-	const loadChart = async (
-		chartBuilder: TimeSeriesChartBuilder | LightweightTimeSeriesChartBuilder
-	) => {
+	const loadChart = async (chartBuilder: TimeSeriesChartAdapter) => {
 		loading = true;
 		const duckDb = await DuckDB.create(table, markers, debug);
-		timeSeriesFacade = new TimeSeriesFacade(duckDb, chartBuilder as TimeSeriesChartAdapter);
+		timeSeriesFacade = new TimeSeriesFacade(duckDb, chartBuilder);
 
 		const columnsSelect = table[tableName].mainColumn;
 		await timeSeriesFacade.initialize(tableName, columnsSelect);

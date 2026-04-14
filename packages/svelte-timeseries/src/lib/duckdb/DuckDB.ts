@@ -263,7 +263,6 @@ export class DuckDB<T extends Tables> {
 	private async registerData() {
 		for (const [name, data] of Object.entries(this._tables) as [keyof T, TableData][]) {
 			await this.buildTablesAndSchemas(name, data);
-			continue;
 		}
 	}
 

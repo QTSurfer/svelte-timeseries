@@ -16,6 +16,7 @@ import type {
 	ChartDatasetFormatArray,
 	ChartDatasetFormatObject,
 	ChartDatasetFormatSimpleObject,
+	ChartMarkerPointOptions,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
 
@@ -98,12 +99,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			timestamp: number;
 			name?: string;
 		},
-		options?: {
-			icon?: string;
-			color?: string;
-			position?: string;
-			symbolSize?: number;
-		}
+		options?: ChartMarkerPointOptions
 	): this {
 		const markerState: MarkerState = {
 			id,

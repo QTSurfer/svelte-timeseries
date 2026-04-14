@@ -13,12 +13,19 @@ export type ChartMarkerPoint = {
 	name?: string;
 };
 
+export type ChartMarkerPointOptions = {
+	icon?: string;
+	color?: string;
+	position?: string;
+	symbolSize?: number;
+};
+
 export interface TimeSeriesChartAdapter {
 	setLegendIcon(icon: string): this;
 	setDataset(data: ChartDataset, yDimensionsNames?: string[]): this;
 	build(): this;
 	addDimension(data: ChartDatasetFormatSimpleObject, dimName: string): this;
-	addMarkerPoint(id: number, data: ChartMarkerPoint, options?: any): this;
+	addMarkerPoint(id: number, data: ChartMarkerPoint, options?: ChartMarkerPointOptions): this;
 	getLegendStatus(): Record<string, boolean>;
 	toggleLegend(column: string): this;
 	getRangeValues(): [number, number];

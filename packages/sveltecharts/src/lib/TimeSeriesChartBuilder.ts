@@ -5,6 +5,7 @@ import {
 	type LegendComponentOption
 } from 'echarts';
 import { type EChartsOption, type ECharts } from '$lib';
+import type { ChartMarkerPointOptions } from './chartAdapter';
 
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
@@ -680,7 +681,7 @@ export class TimeSeriesChartBuilder {
 			timestamp: number;
 			name?: string;
 		},
-		options?: Partial<MarkerPointOption>
+		options?: ChartMarkerPointOptions
 	): this {
 		try {
 			const opt: MarkerPointOption = {
@@ -688,7 +689,7 @@ export class TimeSeriesChartBuilder {
 				position: 'inside',
 				symbolSize: 18,
 				color: 'black',
-				...options
+				...(options as Partial<MarkerPointOption>)
 			};
 
 			if (!Array.isArray(this.option.series)) {
@@ -902,7 +903,7 @@ export class TimeSeriesChartBuilder {
 		return Array.isArray(source) && (source.length === 0 || Array.isArray(source[0]));
 	}
 
-	getRangeValues() {
+	getRangeValues(): [number, number] {
 		const dataset = this.option.dataset as {
 			source: DatasetFormatArray | DatasetFormatObject | DatasetFormatSimpleObject;
 			dimensions: string[];
@@ -967,7 +968,7 @@ export class TimeSeriesChartBuilder {
 		const point = markerPoints.find((mp) => mp.name === `markerpoint-${id}`);
 
 		if (!point) {
-			return;
+			return this;
 		}
 
 		point.symbol = point.symbol === 'none' ? this.getIcon(shape as IconType) : 'none';

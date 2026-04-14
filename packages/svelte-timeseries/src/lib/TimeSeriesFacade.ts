@@ -99,11 +99,11 @@ export default class TimeSeriesFacade {
 	}
 
 	/**
-	 * Returns the chart builder for programmatic chart updates.
+	 * Returns the ECharts chart builder, or undefined if a different backend is active.
 	 */
-	getChartBuilder(): TimeSeriesChartBuilder {
+	getChartBuilder(): TimeSeriesChartBuilder | undefined {
 		if (!(this.timeSeriesChartBuilder instanceof TimeSeriesChartBuilder)) {
-			throw new Error('Current chart library does not expose an ECharts TimeSeriesChartBuilder.');
+			return undefined;
 		}
 		return this.timeSeriesChartBuilder;
 	}
