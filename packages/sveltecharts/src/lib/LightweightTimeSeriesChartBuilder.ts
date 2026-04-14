@@ -31,6 +31,7 @@ type MarkerState = {
 	position: SeriesMarkerBarPosition;
 	text?: string;
 	visible: boolean;
+	size?: number;
 };
 
 const SERIES_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#d97706', '#0891b2'];
@@ -111,7 +112,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			shape: this.mapMarkerShape(options?.icon),
 			position: this.mapMarkerPosition(options?.position),
 			text: data.name,
-			visible: true
+			visible: true,
+			size: options?.symbolSize ?? 4
 		};
 
 		const markers = this.markers.get(data.dimName) ?? [];
@@ -202,20 +204,16 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		const visibleRange = timeScale.getVisibleRange();
 
 		if (!visibleRange) {
-			const range = timeScale.getVisibleRange();
-			if (!range) {
-				timeScale.setVisibleRange({ from: timeSec, to: timeSec + 60 });
-			}
+			timeScale.setVisibleRange({ from: timeSec, to: (timeSec + 60) as Time });
 			return this;
 		}
 
-		const center = timeSec;
 		const width = Number(visibleRange.to) - Number(visibleRange.from);
 		const halfWidth = Math.max(width / 2, 30);
 
 		timeScale.setVisibleRange({
-			from: (center - halfWidth) as Time,
-			to: (center + halfWidth) as Time
+			from: (timeSec - halfWidth) as Time,
+			to: (timeSec + halfWidth) as Time
 		});
 
 		return this;
@@ -390,6 +388,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			return;
 		}
 
+		// Lightweight Charts requires unique timestamps per series — duplicate UTCTimestamps
+		// within the same second are collapsed, keeping only the first marker at that time.
 		const seenTimes = new Set<number>();
 		const markers = (this.markers.get(dimName) ?? [])
 			.filter((marker) => marker.visible)
@@ -406,6 +406,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 					color: marker.color || '#888888',
 					shape: marker.shape,
 					position: marker.position,
+					size: marker.size,
 					...(marker.text ? { text: marker.text } : {})
 				})
 			);
@@ -474,8 +475,9 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 
 		for (let i = 0; i < timestamps.length; i++) {
 			const t = this.toChartTime(timestamps[i]);
-			if (seen.has(t)) continue;
-			seen.add(t);
+			const tNum = t as number;
+			if (seen.has(tNum)) continue;
+			seen.add(tNum);
 			result.push({ time: t, value: values[i] });
 		}
 

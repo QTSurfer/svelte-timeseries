@@ -108,6 +108,10 @@ export default class TimeSeriesFacade {
 		return this.timeSeriesChartBuilder;
 	}
 
+	/**
+	 * Returns the chart adapter interface, compatible with both ECharts and Lightweight Charts.
+	 * Use this when you don't need ECharts-specific APIs.
+	 */
 	getChartAdapter(): TimeSeriesChartAdapter {
 		return this.timeSeriesChartBuilder;
 	}

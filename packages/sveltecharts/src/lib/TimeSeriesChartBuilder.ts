@@ -85,16 +85,6 @@ export class TimeSeriesChartBuilder {
 
 		this.option.useUTC = true;
 		this.option.animation = false;
-		this.option.xAxis = {
-			type: 'time',
-			axisLine: { show: true },
-			axisLabel: {
-				formatter: (value: number) => {
-					const d = new Date(value);
-					return d.toTimeString().slice(0, 8);
-				}
-			}
-		};
 
 		this.option.legend = this.builderConfig.externalManagerLegend
 			? {
@@ -143,7 +133,13 @@ export class TimeSeriesChartBuilder {
 
 		this.option.xAxis = {
 			type: 'time',
-			axisLine: { show: true }
+			axisLine: { show: true },
+			axisLabel: {
+				formatter: (value: number) => {
+					const d = new Date(value);
+					return d.toTimeString().slice(0, 8);
+				}
+			}
 		};
 
 		this.option.yAxis = [
@@ -253,7 +249,8 @@ export class TimeSeriesChartBuilder {
 	}
 
 	private findClosestDataIndex(timestamp: number): number {
-		const ts = this.dataset.source[this._tsColumn] ?? [];
+		const dataset = this.option.dataset as { source: DatasetFormatSimpleObject; dimensions: string[] };
+		const ts = (dataset?.source as DatasetFormatSimpleObject)?.[this._tsColumn] ?? [];
 		if (!ts.length) return 0;
 
 		let closest = 0;
@@ -775,10 +772,6 @@ export class TimeSeriesChartBuilder {
 			);
 		}
 
-		this.option.xAxis = {
-			type: 'time',
-			axisLine: { show: true }
-		};
 		this.yDimensions.map((dim, inx) =>
 			this.addSeries(
 				dim,
