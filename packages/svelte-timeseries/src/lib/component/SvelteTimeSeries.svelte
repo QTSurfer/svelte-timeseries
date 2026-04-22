@@ -45,7 +45,8 @@
 		chartClass,
 		chartLibrary = 'echarts',
 		isDark,
-		onFacadeReady
+		onFacadeReady,
+		loadingSnippet
 	}: {
 		table: Tables;
 		markers?: MarkersTableOptions;
@@ -60,6 +61,7 @@
 		chartLibrary?: 'echarts' | 'lightweight';
 		isDark?: boolean;
 		onFacadeReady?: (facade: TimeSeriesFacade) => void;
+		loadingSnippet?: Snippet;
 	} = $props();
 
 	let loading = $state(false);
@@ -159,9 +161,13 @@
 		{/if}
 	</div>
 	{#if loading}
-		<div class="wrapper-loading">
-			<div class="spinner"></div>
-		</div>
+		{#if loadingSnippet}
+			{@render loadingSnippet()}
+		{:else}
+			<div class="wrapper-loading">
+				<div class="spinner"></div>
+			</div>
+		{/if}
 	{/if}
 </div>
 
