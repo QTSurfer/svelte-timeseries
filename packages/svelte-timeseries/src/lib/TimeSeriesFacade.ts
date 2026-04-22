@@ -10,8 +10,17 @@ export default class TimeSeriesFacade {
 	) {}
 
 	async initialize(table: string, columnesSelect: string) {
-		const result = await this.duckDb.getSingleDimension(table, columnesSelect, false);
 		this.timeSeriesChartBuilder.setLegendIcon('rect');
+
+		const ohlc = this.duckDb.resolveOHLC(table);
+		if (ohlc) {
+			const resolution = this.duckDb.getTable(table).resolution;
+			const result = await this.duckDb.getOHLC(table, ohlc, resolution);
+			this.timeSeriesChartBuilder.setCandlestickSeries(result, ohlc);
+			return;
+		}
+
+		const result = await this.duckDb.getSingleDimension(table, columnesSelect, false);
 		this.timeSeriesChartBuilder.setDataset(result, Object.keys(result));
 	}
 

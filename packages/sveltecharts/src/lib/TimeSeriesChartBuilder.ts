@@ -5,7 +5,7 @@ import {
 	type LegendComponentOption
 } from 'echarts';
 import { type EChartsOption, type ECharts } from '$lib';
-import type { ChartMarkerPointOptions } from './chartAdapter';
+import type { ChartDatasetFormatSimpleObject, ChartMarkerPointOptions, OHLCDimensions } from './chartAdapter';
 
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
@@ -195,6 +195,54 @@ export class TimeSeriesChartBuilder {
 				throw new Error('Data must be an array');
 			}
 		}
+
+		return this.build();
+	}
+
+	/**
+	 * Loads OHLC data and renders a candlestick series.
+	 * data must be a columnar object: { _ts: number[], open: number[], high: number[], low: number[], close: number[] }
+	 * dims specifies the column names for each OHLC role.
+	 */
+	setCandlestickSeries(data: ChartDatasetFormatSimpleObject, dims: OHLCDimensions): this {
+		this._tsColumn = Object.keys(data)[0];
+
+		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
+			this.option.dataset.dimensions = [
+				this._tsColumn,
+				dims.open,
+				dims.high,
+				dims.low,
+				dims.close
+			];
+			this.option.dataset.source = data;
+		}
+
+		const selected = (this.option.legend as LegendComponentOption).selected as Record<
+			string,
+			boolean
+		>;
+		Object.assign(selected, { Candlestick: true });
+
+		(this.option.series as SeriesOption[]).push({
+			type: 'candlestick',
+			id: 'candlestick',
+			name: 'Candlestick',
+			encode: {
+				x: this._tsColumn,
+				// ECharts candlestick encode order: [open, close, low, high]
+				y: [dims.open, dims.close, dims.low, dims.high]
+			},
+			animation: false,
+			progressive: 4000,
+			progressiveThreshold: 3000,
+			itemStyle: {
+				color: '#26a69a',
+				color0: '#ef5350',
+				borderColor: '#26a69a',
+				borderColor0: '#ef5350'
+			}
+		} as SeriesOption);
 
 		return this.build();
 	}

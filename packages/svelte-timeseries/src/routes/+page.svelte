@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../css/main.css';
 	import { SvelteTimeSeries } from '$lib';
-	import { DuckDB, type MarkersTableOptions, type Tables } from '$lib/duckdb/DuckDB';
+	import { DuckDB, type MarkersTableOptions, type OHLCResolution, type Tables } from '$lib/duckdb/DuckDB';
 	import { onMount } from 'svelte';
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
@@ -28,6 +28,7 @@
 	let customFile = $state<File | null>(null);
 	let customColumns = $state<string[]>([]);
 	let customMainColumn = $state('');
+	let customResolution = $state<OHLCResolution | '' | 'line'>('');
 	let customError = $state('');
 	let inspectingCustomFile = $state(false);
 	let loadedCustomConfiguration = $state<DemoConfiguration | null>(null);
@@ -197,13 +198,14 @@
 				return;
 			}
 
+			const candlestickOverride =
+				customResolution === 'line' ? { candlestick: false as const } :
+				customResolution ? { resolution: customResolution } : {};
+
 			loadedCustomConfiguration = {
 				name: `Remote parquet: ${url}`,
 				tables: {
-					remote: {
-						url,
-						mainColumn
-					}
+					remote: { url, mainColumn, ...candlestickOverride }
 				}
 			};
 		} else {
@@ -217,13 +219,14 @@
 				return;
 			}
 
+			const candlestickOverride =
+				customResolution === 'line' ? { candlestick: false as const } :
+				customResolution ? { resolution: customResolution } : {};
+
 			loadedCustomConfiguration = {
 				name: `Local parquet: ${customFile.name}`,
 				tables: {
-					uploaded: {
-						parquet: customFile,
-						mainColumn: customMainColumn
-					}
+					uploaded: { parquet: customFile, mainColumn: customMainColumn, ...candlestickOverride }
 				}
 			};
 		}
@@ -309,6 +312,23 @@
 			</label>
 
 			{#if selected === CUSTOM_CONFIGURATION_ID}
+				<label class="form-control w-full max-w-40">
+					<div class="label pb-1">
+						<span class="label-text font-semibold">Resolution</span>
+					</div>
+					<select class="select select-bordered" bind:value={customResolution}>
+						<option value="">Auto (candlestick if detected)</option>
+						<option value="line">Line (disable candlestick)</option>
+						<option value="15s">Candlestick — 15 seconds</option>
+						<option value="1m">Candlestick — 1 minute</option>
+						<option value="5m">Candlestick — 5 minutes</option>
+						<option value="15m">Candlestick — 15 minutes</option>
+						<option value="1h">Candlestick — 1 hour</option>
+						<option value="4h">Candlestick — 4 hours</option>
+						<option value="1d">Candlestick — 1 day</option>
+					</select>
+				</label>
+
 				<div class="join">
 					<button
 						class={`btn join-item ${sourceMode === 'url' ? 'btn-primary' : 'btn-outline'}`}

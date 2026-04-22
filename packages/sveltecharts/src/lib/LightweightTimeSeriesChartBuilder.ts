@@ -1,10 +1,12 @@
 import {
 	LineSeries,
+	CandlestickSeries,
 	createSeriesMarkers,
 	type IChartApi,
 	type ISeriesApi,
 	type ISeriesMarkersPluginApi,
 	type LineData,
+	type CandlestickData,
 	type SeriesMarkerBarPosition,
 	type SeriesMarker,
 	type SeriesMarkerShape,
@@ -17,6 +19,7 @@ import type {
 	ChartDatasetFormatObject,
 	ChartDatasetFormatSimpleObject,
 	ChartMarkerPointOptions,
+	OHLCDimensions,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
 
@@ -88,6 +91,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	private _tsColumn = '_ts';
 	private selected: Record<string, boolean> = {};
 	private series = new Map<string, ISeriesApi<'Line', Time>>();
+	private _candlestickSeries: ISeriesApi<'Candlestick', Time> | null = null;
+	private _ohlcDims: OHLCDimensions | null = null;
 	private markersPlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
 	private markers = new Map<string, MarkerState[]>();
 	private _dataDirty = false;
@@ -116,6 +121,34 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 
 		this.createSeriesData();
 		return this.build();
+	}
+
+	setCandlestickSeries(data: ChartDatasetFormatSimpleObject, dims: OHLCDimensions): this {
+		this._tsColumn = Object.keys(data)[0];
+		this.dataset = data;
+		this._ohlcDims = dims;
+
+		// Remove existing candlestick series before recreating
+		if (this._candlestickSeries) {
+			this.LightweightChart.removeSeries(this._candlestickSeries);
+			this._candlestickSeries = null;
+		}
+
+		this._candlestickSeries = this.LightweightChart.addSeries(CandlestickSeries, {
+			upColor: '#26a69a',
+			downColor: '#ef5350',
+			borderVisible: false,
+			wickUpColor: '#26a69a',
+			wickDownColor: '#ef5350'
+		});
+
+		this.selected['Candlestick'] = true;
+
+		const candleData = this.toCandlestickData(dims);
+		this._candlestickSeries.setData(candleData);
+
+		this.LightweightChart.timeScale().fitContent();
+		return this;
 	}
 
 	addDimension(data: ChartDatasetFormatSimpleObject, dimName: string) {
@@ -506,11 +539,38 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			this.LightweightChart.removeSeries(series);
 		}
 
+		if (this._candlestickSeries) {
+			this.LightweightChart.removeSeries(this._candlestickSeries);
+			this._candlestickSeries = null;
+			this._ohlcDims = null;
+		}
+
 		this.series.clear();
 		this.markersPlugins.clear();
 		this.markers.clear();
 		this._timeRangeForced = false;
 		this._building = false;
+	}
+
+	private toCandlestickData(dims: OHLCDimensions): CandlestickData<Time>[] {
+		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const opens = this.dataset[dims.open] ?? [];
+		const highs = this.dataset[dims.high] ?? [];
+		const lows = this.dataset[dims.low] ?? [];
+		const closes = this.dataset[dims.close] ?? [];
+
+		const seen = new Set<number>();
+		const result: CandlestickData<Time>[] = [];
+
+		for (let i = 0; i < timestamps.length; i++) {
+			const t = this.toChartTime(timestamps[i]);
+			const tNum = t as number;
+			if (seen.has(tNum)) continue;
+			seen.add(tNum);
+			result.push({ time: t, open: opens[i], high: highs[i], low: lows[i], close: closes[i] });
+		}
+
+		return result;
 	}
 
 	private toLineData(dim: string): LineData<Time>[] {
