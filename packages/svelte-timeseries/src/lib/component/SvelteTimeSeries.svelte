@@ -1,20 +1,19 @@
 <script lang="ts">
-	import TimeSeriesFacade, { type Columns } from '$lib/TimeSeriesFacade';
-	import { type Snippet } from 'svelte';
+	import TimeSeriesFacade from '$lib/TimeSeriesFacade';
+	import type { Columns } from '$lib/TimeSeriesFacade';
+	import type { Snippet } from 'svelte';
+	import { DuckDB } from '../duckdb/DuckDB';
+	import type { MarkersTable, MarkersTableOptions, Tables } from '../duckdb/DuckDB';
 	import {
-		DuckDB,
-		type MarkersTable,
-		type MarkersTableOptions,
-		type Tables
-	} from '../duckdb/DuckDB';
-	import {
-		type ECharts,
-		type LightweightChartApi,
 		LightweightTimeSeriesChartBuilder,
 		SVECharts,
 		SVELightweightCharts,
-		type TimeSeriesChartAdapter,
 		TimeSeriesChartBuilder
+	} from '@qtsurfer/sveltecharts';
+	import type {
+		ECharts,
+		LightweightChartApi,
+		TimeSeriesChartAdapter
 	} from '@qtsurfer/sveltecharts';
 
 	type DataColumnsProps = {
@@ -46,7 +45,8 @@
 		chartClass,
 		chartLibrary = 'echarts',
 		isDark,
-		onFacadeReady
+		onFacadeReady,
+		loadingSnippet
 	}: {
 		table: Tables;
 		markers?: MarkersTableOptions;
@@ -61,6 +61,7 @@
 		chartLibrary?: 'echarts' | 'lightweight';
 		isDark?: boolean;
 		onFacadeReady?: (facade: TimeSeriesFacade) => void;
+		loadingSnippet?: Snippet;
 	} = $props();
 
 	let loading = $state(false);
@@ -160,9 +161,13 @@
 		{/if}
 	</div>
 	{#if loading}
-		<div class="wrapper-loading">
-			<div class="spinner"></div>
-		</div>
+		{#if loadingSnippet}
+			{@render loadingSnippet()}
+		{:else}
+			<div class="wrapper-loading">
+				<div class="spinner"></div>
+			</div>
+		{/if}
 	{/if}
 </div>
 
