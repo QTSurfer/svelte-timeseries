@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LightweightTimeSeriesChartBuilder } from '../../src/lib/LightweightTimeSeriesChartBuilder';
+import {
+	LightweightTimeSeriesChartBuilder,
+	formatPreciseValue
+} from '../../src/lib/LightweightTimeSeriesChartBuilder';
 
 function createMockSeries() {
 	return {
@@ -52,6 +55,25 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		expect(chart.addSeries).toHaveBeenCalledTimes(1);
 		expect(builder.getRangeValues()).toEqual([1000, 3000]);
 		expect(builder.getLegendStatus()).toEqual({ price: true });
+	});
+
+	it('configures price precision for very small values', () => {
+		builder.setDataset({
+			_ts: [1000, 2000, 3000],
+			price: [0.00000385, 0.00000386, 0.00000387]
+		});
+
+		expect(chart.addSeries).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				priceFormat: {
+					type: 'price',
+					precision: 8,
+					minMove: 0.00000001
+				}
+			})
+		);
+		expect(formatPreciseValue(0.00000385)).toBe('0.00000385');
 	});
 
 	it('adds dimensions incrementally and marks them as visible', () => {

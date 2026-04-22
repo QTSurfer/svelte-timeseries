@@ -36,6 +36,46 @@ type MarkerState = {
 };
 
 const SERIES_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#d97706', '#0891b2'];
+const DEFAULT_PRICE_PRECISION = 2;
+const MAX_PRICE_PRECISION = 12;
+
+function getDecimalPrecision(value: number) {
+	if (!Number.isFinite(value) || value === 0) {
+		return 0;
+	}
+
+	const [mantissa, exponentValue] = Math.abs(value).toExponential(MAX_PRICE_PRECISION).split('e');
+	const exponent = Number(exponentValue);
+	const significantDecimals = (mantissa.split('.')[1] ?? '').replace(/0+$/, '').length;
+
+	return Math.max(0, Math.min(MAX_PRICE_PRECISION, significantDecimals - exponent));
+}
+
+export function getPricePrecision(values: number[]) {
+	let precision = DEFAULT_PRICE_PRECISION;
+
+	for (const value of values) {
+		precision = Math.max(precision, getDecimalPrecision(value));
+		if (precision >= MAX_PRICE_PRECISION) {
+			return MAX_PRICE_PRECISION;
+		}
+	}
+
+	return precision;
+}
+
+export function formatPreciseValue(value: number) {
+	if (!Number.isFinite(value)) {
+		return String(value);
+	}
+
+	const precision = getDecimalPrecision(value);
+	if (precision === 0) {
+		return value.toString();
+	}
+
+	return value.toFixed(precision).replace(/\.?0+$/, '');
+}
 
 export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	public LightweightChart: IChartApi;
@@ -371,6 +411,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	}
 
 	private addSeries(dim: string, dimName: string, isSelected: boolean, index?: number) {
+		const pricePrecision = getPricePrecision(this.dataset[dim] ?? []);
+
 		const series = this.LightweightChart.addSeries(LineSeries, {
 			color: SERIES_COLORS[(index ?? this.series.size) % SERIES_COLORS.length],
 			lineWidth: 1,
@@ -378,7 +420,12 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			priceScaleId: this.isPercentageDimension(dim) ? 'left' : 'right',
 			visible: isSelected,
 			crosshairMarkerVisible: false,
-			lastValueVisible: true
+			lastValueVisible: true,
+			priceFormat: {
+				type: 'price',
+				precision: pricePrecision,
+				minMove: 10 ** -pricePrecision
+			}
 		});
 
 		this.series.set(dim, series);
