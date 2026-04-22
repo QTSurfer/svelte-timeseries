@@ -10,7 +10,11 @@
 		SVELightweightCharts,
 		TimeSeriesChartBuilder
 	} from '@qtsurfer/sveltecharts';
-	import type { ECharts, LightweightChartApi, TimeSeriesChartAdapter } from '@qtsurfer/sveltecharts';
+	import type {
+		ECharts,
+		LightweightChartApi,
+		TimeSeriesChartAdapter
+	} from '@qtsurfer/sveltecharts';
 
 	type DataColumnsProps = {
 		columns: Columns;
