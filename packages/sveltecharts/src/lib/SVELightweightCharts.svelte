@@ -9,6 +9,7 @@
 		type MouseEventParams,
 		type Time
 	} from 'lightweight-charts';
+	import { formatPreciseValue } from './LightweightTimeSeriesChartBuilder';
 
 	type LightweightChartsConfig = {
 		options?: DeepPartial<ChartOptions>;
@@ -100,7 +101,7 @@
 			const value = data?.value;
 			if (value === undefined || value === null) continue;
 			const label = (series.options() as { title?: string }).title ?? '';
-			rows.push({ label, value: value.toFixed(4) });
+			rows.push({ label, value: formatPreciseValue(value) });
 		}
 
 		if (rows.length === 0) {

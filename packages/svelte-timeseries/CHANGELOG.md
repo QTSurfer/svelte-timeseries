@@ -1,5 +1,25 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.7.0
+
+### Minor Changes
+
+- Dynamic price precision and customizable loading snippet.
+
+  **@qtsurfer/sveltecharts**
+  - Lightweight Charts backend now computes price precision per column (up to 12 decimals) instead of a hardcoded `.toFixed(4)`. Fixes display for low-value assets (e.g. `0.00000385`).
+  - New exports: `getPricePrecision(values)` and `formatPreciseValue(value)`.
+  - Crosshair tooltip in `SVELightweightCharts` uses `formatPreciseValue`.
+
+  **@qtsurfer/svelte-timeseries**
+  - New optional `loadingSnippet` prop on `SvelteTimeSeries` — lets consumers render a custom loader in place of the default spinner.
+  - Split mixed value/type imports into explicit `import type` statements for Tailwind CSS processor compatibility.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @qtsurfer/sveltecharts@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes
