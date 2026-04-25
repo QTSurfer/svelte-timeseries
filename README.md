@@ -16,12 +16,13 @@
 4. [Installation](#installation)
 5. [Getting started](#getting-started)
 6. [Component API](#component-api)
-7. [Chart libraries](#chart-libraries)
-8. [TimeSeriesFacade in practice](#timeseriesfacade-in-practice)
-9. [Advanced APIs](#advanced-apis)
-10. [Reference scenarios](#reference-scenarios)
-11. [Development & testing](#development--testing)
-12. [Support & contributions](#support--contributions)
+7. [Candlestick & OHLC](#candlestick--ohlc)
+8. [Chart libraries](#chart-libraries)
+9. [TimeSeriesFacade in practice](#timeseriesfacade-in-practice)
+10. [Advanced APIs](#advanced-apis)
+11. [Reference scenarios](#reference-scenarios)
+12. [Development & testing](#development--testing)
+13. [Support & contributions](#support--contributions)
 
 ## Overview
 
@@ -104,6 +105,96 @@ Requirements:
 | `performanceSnippet?`    | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                           |
 | `containerClass?`        | `string`                                                                        | CSS classes applied to the outer container element.                                                |
 | `chartClass?`            | `string`                                                                        | CSS classes applied to the inner chart element.                                                    |
+
+## Candlestick & OHLC
+
+### Auto-detection
+
+When a Parquet file contains columns whose names match known OHLC patterns, the component automatically renders a candlestick series without any extra configuration:
+
+| Role  | Recognized column names                    |
+| ----- | ------------------------------------------ |
+| open  | `open`, `_open`, `opn`, `o`                |
+| high  | `high`, `_high`, `hig`, `h`                |
+| low   | `low`, `_low`, `l`                         |
+| close | `close`, `_close`, `cls`, `c`              |
+
+### Explicit mapping
+
+Pass a `candlestick` object to override auto-detection with exact column names:
+
+```ts
+const tables = {
+  btc: {
+    url: '/BTC_USDT_h01_klines.parquet',
+    mainColumn: 'cls',
+    candlestick: {
+      open:  'opn',
+      high:  'hig',
+      low:   'low',
+      close: 'cls'
+    }
+  }
+};
+```
+
+### Disable candlestick (force line)
+
+Set `candlestick: false` to skip OHLC detection entirely and render the `mainColumn` as a plain line series:
+
+```ts
+const tables = {
+  btc: {
+    url: '/BTC_USDT_h01_klines.parquet',
+    mainColumn: 'cls',
+    candlestick: false
+  }
+};
+```
+
+### Resampling
+
+Use `resolution` to resample raw tick data into OHLC bars of a fixed size via DuckDB's `time_bucket()`. The format is `<number><unit>` where unit is `s` (seconds), `m` (minutes), `h` (hours), or `d` (days):
+
+```ts
+const tables = {
+  ticks: {
+    url: '/ticks.parquet',
+    mainColumn: 'price',
+    resolution: '15m'   // aggregate raw ticks into 15-minute candles
+  }
+};
+```
+
+Valid examples: `'15s'`, `'1m'`, `'5m'`, `'15m'`, `'1h'`, `'4h'`, `'1d'`.
+
+When `resolution` is set, DuckDB computes `open = FIRST`, `high = MAX`, `low = MIN`, `close = LAST` for each bucket.
+
+### TableData reference
+
+```ts
+type OHLCColumns = {
+  open:  string;
+  high:  string;
+  low:   string;
+  close: string;
+};
+
+type OHLCResolution = `${number}${'s' | 'm' | 'h' | 'd'}`;
+
+// All OHLC fields live inside each table entry:
+{
+  url: string;          // remote Parquet URL
+  // — or —
+  parquet: BinarySource; // Blob | ArrayBuffer | Uint8Array
+
+  mainColumn: string;
+  columnsSelect?: string[];
+
+  candlestick?: OHLCColumns | false;  // explicit map, or false to disable
+  resolution?:  OHLCResolution;       // resampling bucket size
+}
+```
 
 ## Chart libraries
 

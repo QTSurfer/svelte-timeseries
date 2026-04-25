@@ -1,7 +1,12 @@
 <script lang="ts">
 	import '../css/main.css';
 	import { SvelteTimeSeries } from '$lib';
-	import { DuckDB, type MarkersTableOptions, type OHLCResolution, type Tables } from '$lib/duckdb/DuckDB';
+	import {
+		DuckDB,
+		type MarkersTableOptions,
+		type OHLCResolution,
+		type Tables
+	} from '$lib/duckdb/DuckDB';
 	import { onMount } from 'svelte';
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
@@ -65,6 +70,15 @@
 					url: `${baseUrl}signals.parquet`,
 					mainColumn: 'price',
 					columnsSelect: ['_ts', 'price', 'VlongBolBW%', 'ema500'] // Limited colums table
+				}
+			}
+		},
+		{
+			name: 'BTC/USDT — 1s Candlestick',
+			tables: {
+				btc: {
+					url: `${baseUrl}BTC_USDT_2026-04-19_h01_klines.parquet`,
+					mainColumn: 'cls'
 				}
 			}
 		},
@@ -199,8 +213,11 @@
 			}
 
 			const candlestickOverride =
-				customResolution === 'line' ? { candlestick: false as const } :
-				customResolution ? { resolution: customResolution } : {};
+				customResolution === 'line'
+					? { candlestick: false as const }
+					: customResolution
+						? { resolution: customResolution }
+						: {};
 
 			loadedCustomConfiguration = {
 				name: `Remote parquet: ${url}`,
@@ -220,8 +237,11 @@
 			}
 
 			const candlestickOverride =
-				customResolution === 'line' ? { candlestick: false as const } :
-				customResolution ? { resolution: customResolution } : {};
+				customResolution === 'line'
+					? { candlestick: false as const }
+					: customResolution
+						? { resolution: customResolution }
+						: {};
 
 			loadedCustomConfiguration = {
 				name: `Local parquet: ${customFile.name}`,

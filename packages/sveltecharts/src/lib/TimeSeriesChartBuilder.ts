@@ -207,6 +207,9 @@ export class TimeSeriesChartBuilder {
 	setCandlestickSeries(data: ChartDatasetFormatSimpleObject, dims: OHLCDimensions): this {
 		this._tsColumn = Object.keys(data)[0];
 
+		this.yDimensions = [dims.open, dims.high, dims.low, dims.close];
+		this.yDimensionNames = [dims.open, dims.high, dims.low, dims.close];
+
 		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
 			this.option.dataset.dimensions = [
 				this._tsColumn,
