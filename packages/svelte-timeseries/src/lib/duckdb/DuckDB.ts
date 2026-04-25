@@ -240,7 +240,11 @@ export class DuckDB<T extends Tables> {
 		return `SELECT ${cols.join(', ')} FROM ${table} ORDER BY ${this.tsColumnQuery}`;
 	}
 
-	private buildOHLCResampledSQL(table: string, ohlc: OHLCColumns, resolution: OHLCResolution): string {
+	private buildOHLCResampledSQL(
+		table: string,
+		ohlc: OHLCColumns,
+		resolution: OHLCResolution
+	): string {
 		const interval = this.resolutionToInterval(resolution);
 		const ts = this.tsColumnQuery;
 		const o = this.escapeIdent(ohlc.open);
@@ -265,7 +269,10 @@ export class DuckDB<T extends Tables> {
 	/** Converts '15s' → '15 seconds', '5m' → '5 minutes', '1h' → '1 hour', '1d' → '1 day'. */
 	private resolutionToInterval(resolution: OHLCResolution): string {
 		const match = resolution.match(/^(\d+)(s|m|h|d)$/);
-		if (!match) throw new Error(`Invalid resolution format: "${resolution}". Expected e.g. "15s", "5m", "1h".`);
+		if (!match)
+			throw new Error(
+				`Invalid resolution format: "${resolution}". Expected e.g. "15s", "5m", "1h".`
+			);
 		const n = match[1];
 		const unit = match[2];
 		const unitMap: Record<string, string> = { s: 'second', m: 'minute', h: 'hour', d: 'day' };

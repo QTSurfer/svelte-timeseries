@@ -5,7 +5,11 @@ import {
 	type LegendComponentOption
 } from 'echarts';
 import { type EChartsOption, type ECharts } from '$lib';
-import type { ChartDatasetFormatSimpleObject, ChartMarkerPointOptions, OHLCDimensions } from './chartAdapter';
+import type {
+	ChartDatasetFormatSimpleObject,
+	ChartMarkerPointOptions,
+	OHLCDimensions
+} from './chartAdapter';
 
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
@@ -211,13 +215,7 @@ export class TimeSeriesChartBuilder {
 		this.yDimensionNames = [dims.open, dims.high, dims.low, dims.close];
 
 		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
-			this.option.dataset.dimensions = [
-				this._tsColumn,
-				dims.open,
-				dims.high,
-				dims.low,
-				dims.close
-			];
+			this.option.dataset.dimensions = [this._tsColumn, dims.open, dims.high, dims.low, dims.close];
 			this.option.dataset.source = data;
 		}
 

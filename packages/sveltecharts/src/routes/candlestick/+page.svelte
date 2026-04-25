@@ -44,7 +44,11 @@
 		<div class="chart">
 			<h2>Lightweight Charts</h2>
 			<div class="chart-wrapper">
-				<SVELightweightCharts onLoad={onLoadLightweight} loading={loadingLightweight} isDark={false} />
+				<SVELightweightCharts
+					onLoad={onLoadLightweight}
+					loading={loadingLightweight}
+					isDark={false}
+				/>
 			</div>
 		</div>
 	</div>
