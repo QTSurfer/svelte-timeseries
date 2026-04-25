@@ -5,7 +5,11 @@ import {
 	type LegendComponentOption
 } from 'echarts';
 import { type EChartsOption, type ECharts } from '$lib';
-import type { ChartMarkerPointOptions } from './chartAdapter';
+import type {
+	ChartDatasetFormatSimpleObject,
+	ChartMarkerPointOptions,
+	OHLCDimensions
+} from './chartAdapter';
 
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
@@ -70,6 +74,8 @@ export type MarkArea = {
 	xAxis: [number, number];
 	color?: ZRColor;
 };
+const CANDLESTICK_SERIES_ID = 'candlestick';
+
 export class TimeSeriesChartBuilder {
 	public ECharts: ECharts;
 	private builderConfig: ConfigBuilder = {
@@ -79,6 +85,7 @@ export class TimeSeriesChartBuilder {
 	private yDimensions!: string[];
 	private yDimensionNames?: string[];
 	private _tsColumn: string = '_ts';
+	private _ohlcDims: OHLCDimensions | null = null;
 
 	constructor(instance: ECharts, builderConfig?: ConfigBuilder) {
 		this.ECharts = instance;
@@ -197,6 +204,89 @@ export class TimeSeriesChartBuilder {
 		}
 
 		return this.build();
+	}
+
+	/**
+	 * Loads OHLC data and renders a candlestick series.
+	 * data must be a columnar object: { _ts: number[], open: number[], high: number[], low: number[], close: number[] }
+	 * dims specifies the column names for each OHLC role.
+	 *
+	 * Calling this method multiple times replaces any existing candlestick series in place.
+	 */
+	setCandlestickSeries(data: ChartDatasetFormatSimpleObject, dims: OHLCDimensions): this {
+		this._tsColumn = Object.keys(data)[0];
+
+		this.yDimensions = [dims.open, dims.high, dims.low, dims.close];
+		this.yDimensionNames = [dims.open, dims.high, dims.low, dims.close];
+		this._ohlcDims = dims;
+
+		if (this.option.dataset && !Array.isArray(this.option.dataset)) {
+			this.option.dataset.dimensions = [this._tsColumn, dims.open, dims.high, dims.low, dims.close];
+			this.option.dataset.source = data;
+		}
+
+		const selected = (this.option.legend as LegendComponentOption).selected as Record<
+			string,
+			boolean
+		>;
+		Object.assign(selected, { Candlestick: true });
+
+		this.removeCandlestickSeries();
+
+		(this.option.series as SeriesOption[]).push({
+			type: 'candlestick',
+			id: CANDLESTICK_SERIES_ID,
+			name: 'Candlestick',
+			encode: {
+				x: this._tsColumn,
+				// ECharts candlestick encode order: [open, close, low, high]
+				y: [dims.open, dims.close, dims.low, dims.high]
+			},
+			animation: false,
+			progressive: 4000,
+			progressiveThreshold: 3000,
+			itemStyle: {
+				color: '#26a69a',
+				color0: '#ef5350',
+				borderColor: '#26a69a',
+				borderColor0: '#ef5350'
+			}
+		} as SeriesOption);
+
+		return this.build();
+	}
+
+	/**
+	 * Removes the candlestick series (if any) and clears OHLC state.
+	 * Useful before switching back to line rendering on the same builder instance.
+	 */
+	clearCandlestickSeries(): this {
+		if (!this._ohlcDims) return this;
+
+		this.removeCandlestickSeries();
+		this._ohlcDims = null;
+
+		const selected = (this.option.legend as LegendComponentOption).selected as Record<
+			string,
+			boolean
+		>;
+		delete selected['Candlestick'];
+
+		// Force ECharts to drop the removed candlestick from its internal state.
+		this.ECharts.setOption(this.option, {
+			lazyUpdate: true,
+			notMerge: false,
+			replaceMerge: ['dataset', 'series']
+		});
+
+		return this;
+	}
+
+	private removeCandlestickSeries(): void {
+		if (!Array.isArray(this.option.series)) return;
+		this.option.series = (this.option.series as SeriesOption[]).filter(
+			(s) => (s as { id?: string }).id !== CANDLESTICK_SERIES_ID
+		);
 	}
 
 	toggleLegend(column: string): this {
