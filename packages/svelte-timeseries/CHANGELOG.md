@@ -1,5 +1,24 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.8.0
+
+### Minor Changes
+
+- [#101](https://github.com/QTSurfer/svelte-timeseries/pull/101) [`ae1508c`](https://github.com/QTSurfer/svelte-timeseries/commit/ae1508c84e5b3d66b35eef0064c5df39f0228c76) Thanks [@leonardojgv](https://github.com/leonardojgv)! - Add candlestick (OHLC) chart support.
+  - Auto-detects OHLC columns by name (`open/_open/opn`, `high/_high/hig`, `low/_low`, `close/_close/cls`). Single-letter aliases (`o/h/l/c`) require explicit mapping to avoid false positives on unrelated parquets.
+  - Explicit mapping via `candlestick: { open, high, low, close }` in table config.
+  - Set `candlestick: false` to force line rendering and skip detection.
+  - `resolution` option resamples raw ticks into fixed-size OHLC bars via DuckDB `time_bucket()` (e.g. `'15m'`, `'1h'`).
+  - New exports: `OHLCColumns`, `OHLCResolution`, `TimeSeriesChartAdapter`, `OHLCDimensions`.
+  - `TimeSeriesFacade.getChartAdapter()` returns the backend-agnostic adapter interface.
+  - **Breaking**: `TimeSeriesFacade.getChartBuilder()` now returns `TimeSeriesChartBuilder | undefined` (returns `undefined` when the Lightweight Charts backend is active). Use `getChartAdapter()` for backend-agnostic access.
+  - Fix: `addDimension` crashed with `Cannot read properties of undefined (reading 'push')` when called after `setCandlestickSeries`.
+
+### Patch Changes
+
+- Updated dependencies [[`ae1508c`](https://github.com/QTSurfer/svelte-timeseries/commit/ae1508c84e5b3d66b35eef0064c5df39f0228c76)]:
+  - @qtsurfer/sveltecharts@0.8.0
+
 ## 0.7.0
 
 ### Minor Changes
