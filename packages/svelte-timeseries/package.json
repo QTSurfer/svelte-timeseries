@@ -1,7 +1,7 @@
 {
 	"private": false,
 	"name": "@qtsurfer/svelte-timeseries",
-	"version": "0.7.0",
+	"version": "0.8.0",
 	"license": "Apache-2.0",
 	"author": "QTSurfer (https://github.com/QTSurfer)",
 	"homepage": "https://qtsurfer.github.io/svelte-timeseries",
@@ -42,6 +42,7 @@
 		"preview": "vite preview",
 		"sk:clean": "rimraf .svelte-kit",
 		"sk:sync": "svelte-kit sync",
+		"test": "vitest run",
 		"vite:clean": "rimraf node_modules/.vite vite.config.ts.*"
 	},
 	"types": "./dist/index.d.ts",
@@ -81,7 +82,8 @@
 		"tailwindcss": "^4.2.2",
 		"tslib": "^2.8.1",
 		"typescript": "^5.9.3",
-		"vite": "^7.2.4"
+		"vite": "^7.2.4",
+		"vitest": "^4.1.0"
 	},
 	"keywords": [
 		"apache-arrow",

@@ -2,6 +2,13 @@ export type ChartDatasetFormatSimpleObject = Record<string, number[]>;
 export type ChartDatasetFormatObject = Record<string, any>[];
 export type ChartDatasetFormatArray = number[][];
 
+export type OHLCDimensions = {
+	open: string;
+	high: string;
+	low: string;
+	close: string;
+};
+
 export type ChartDataset =
 	| ChartDatasetFormatArray
 	| ChartDatasetFormatObject
@@ -23,6 +30,7 @@ export type ChartMarkerPointOptions = {
 export interface TimeSeriesChartAdapter {
 	setLegendIcon(icon: string): this;
 	setDataset(data: ChartDataset, yDimensionsNames?: string[]): this;
+	setCandlestickSeries(data: ChartDatasetFormatSimpleObject, dims: OHLCDimensions): this;
 	build(): this;
 	addDimension(data: ChartDatasetFormatSimpleObject, dimName: string): this;
 	addMarkerPoint(id: number, data: ChartMarkerPoint, options?: ChartMarkerPointOptions): this;

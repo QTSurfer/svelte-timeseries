@@ -10,6 +10,11 @@ function createMockECharts(): ECharts {
 	} as unknown as ECharts;
 }
 
+function lastSetOptionCall(echarts: ECharts) {
+	const calls = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls;
+	return calls[calls.length - 1];
+}
+
 describe('TimeSeriesChartBuilder', () => {
 	let echarts: ECharts;
 	let builder: TimeSeriesChartBuilder;
@@ -345,6 +350,100 @@ describe('TimeSeriesChartBuilder', () => {
 			const status = builder.getLegendStatus();
 			expect(status).toHaveProperty('price');
 			expect(status).toHaveProperty('ema');
+		});
+	});
+
+	describe('setCandlestickSeries', () => {
+		const dims = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		const data = {
+			_ts: [1000, 2000, 3000],
+			open: [100, 101, 102],
+			high: [105, 106, 107],
+			low: [99, 100, 101],
+			close: [104, 105, 106]
+		};
+
+		it('pushes a candlestick series with id "candlestick" and ECharts encode order [O,C,L,H]', () => {
+			builder.setCandlestickSeries(data, dims);
+
+			const opts = lastSetOptionCall(echarts)[0];
+			const candle = opts.series.find((s: any) => s.id === 'candlestick');
+
+			expect(candle).toBeDefined();
+			expect(candle.type).toBe('candlestick');
+			expect(candle.encode.x).toBe('_ts');
+			// ECharts requires [open, close, low, high] in this exact order.
+			expect(candle.encode.y).toEqual(['open', 'close', 'low', 'high']);
+		});
+
+		it('marks the candlestick legend entry as selected', () => {
+			builder.setCandlestickSeries(data, dims);
+			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
+		});
+
+		it('sets dataset.dimensions in the [_ts, O, H, L, C] order', () => {
+			builder.setCandlestickSeries(data, dims);
+			const opts = lastSetOptionCall(echarts)[0];
+			expect(opts.dataset.dimensions).toEqual(['_ts', 'open', 'high', 'low', 'close']);
+		});
+
+		it('replaces (does not duplicate) the candlestick on a second call', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.setCandlestickSeries(data, dims);
+
+			const opts = lastSetOptionCall(echarts)[0];
+			const candles = opts.series.filter((s: any) => s.id === 'candlestick');
+			expect(candles).toHaveLength(1);
+		});
+
+		it('exposes correct row count and range after rendering', () => {
+			builder.setCandlestickSeries(data, dims);
+			expect(builder.getTotalRows()).toBe(3);
+			expect(builder.getRangeValues()).toEqual([1000, 3000]);
+		});
+
+		it('coexists with overlay dimensions added afterwards', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addDimension({ ema: [103, 104, 105] }, 'ema');
+
+			const opts = lastSetOptionCall(echarts)[0];
+			expect(opts.series.find((s: any) => s.id === 'candlestick')).toBeDefined();
+			expect(opts.series.find((s: any) => s.id === 'ema')).toBeDefined();
+		});
+	});
+
+	describe('clearCandlestickSeries', () => {
+		const dims = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		const data = {
+			_ts: [1000, 2000],
+			open: [100, 101],
+			high: [105, 106],
+			low: [99, 100],
+			close: [104, 105]
+		};
+
+		it('removes the candlestick series and Candlestick legend entry', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.clearCandlestickSeries();
+
+			const opts = lastSetOptionCall(echarts)[0];
+			expect(opts.series.find((s: any) => s.id === 'candlestick')).toBeUndefined();
+			expect(builder.getLegendStatus()).not.toHaveProperty('Candlestick');
+		});
+
+		it('uses replaceMerge:["dataset","series"] so ECharts drops the series from state', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.clearCandlestickSeries();
+
+			const lastCall = lastSetOptionCall(echarts);
+			expect(lastCall[1]).toEqual(expect.objectContaining({ replaceMerge: ['dataset', 'series'] }));
+		});
+
+		it('is a no-op when no candlestick was set', () => {
+			const before = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls.length;
+			builder.clearCandlestickSeries();
+			const after = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls.length;
+			expect(after).toBe(before);
 		});
 	});
 });
