@@ -30,6 +30,7 @@ function createMockChart() {
 
 vi.mock('lightweight-charts', () => ({
 	LineSeries: Symbol('LineSeries'),
+	CandlestickSeries: Symbol('CandlestickSeries'),
 	createSeriesMarkers: vi.fn(() => ({
 		setMarkers: vi.fn(),
 		detach: vi.fn()
@@ -116,6 +117,84 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		expect(timeScale.setVisibleRange).toHaveBeenCalledWith({
 			from: 1,
 			to: 2
+		});
+	});
+
+	describe('setCandlestickSeries', () => {
+		const dims = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		const data = {
+			_ts: [1000, 2000, 3000],
+			open: [100, 101, 102],
+			high: [105, 106, 107],
+			low: [99, 100, 101],
+			close: [104, 105, 106]
+		};
+
+		it('adds a candlestick series and feeds it OHLC data', () => {
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+
+			builder.setCandlestickSeries(data, dims);
+
+			expect(chart.addSeries).toHaveBeenCalledTimes(1);
+			expect(candleSeries.setData).toHaveBeenCalledTimes(1);
+
+			const passed = candleSeries.setData.mock.calls[0][0];
+			expect(passed).toHaveLength(3);
+			expect(passed[0]).toEqual({
+				time: 1,
+				open: 100,
+				high: 105,
+				low: 99,
+				close: 104
+			});
+		});
+
+		it('marks Candlestick as selected in the legend', () => {
+			builder.setCandlestickSeries(data, dims);
+			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
+		});
+
+		it('removes the previous candlestick before adding a new one on rebuild', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.setCandlestickSeries(data, dims);
+
+			// First call: add 1 candle. Second call: removeSeries on the old one, then add a new one.
+			expect(chart.removeSeries).toHaveBeenCalledTimes(1);
+			expect(chart.addSeries).toHaveBeenCalledTimes(2);
+		});
+
+		it('does not crash when addDimension is called after setCandlestickSeries (regression)', () => {
+			builder.setCandlestickSeries(data, dims);
+
+			// Before the fix, dataset was undefined here and this threw
+			// "Cannot read properties of undefined (reading 'push')".
+			expect(() => builder.addDimension({ ema: [103, 104, 105] }, 'ema')).not.toThrow();
+
+			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
+			expect(builder.getLegendStatus()).toHaveProperty('ema', true);
+		});
+
+		it('deduplicates rows that map to the same chart time', () => {
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+
+			// Two timestamps that fall in the same second after toChartTime conversion
+			// (1500 ms and 1700 ms both → second 1).
+			builder.setCandlestickSeries(
+				{
+					_ts: [1500, 1700, 3000],
+					open: [100, 101, 102],
+					high: [105, 106, 107],
+					low: [99, 100, 101],
+					close: [104, 105, 106]
+				},
+				dims
+			);
+
+			const passed = candleSeries.setData.mock.calls[0][0];
+			expect(passed).toHaveLength(2);
+			expect(passed.map((p: { time: number }) => p.time)).toEqual([1, 3]);
 		});
 	});
 });

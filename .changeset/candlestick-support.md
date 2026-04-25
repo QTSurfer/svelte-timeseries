@@ -1,11 +1,11 @@
 ---
-"@qtsurfer/svelte-timeseries": minor
-"@qtsurfer/sveltecharts": minor
+"@qtsurfer/svelte-timeseries": major
+"@qtsurfer/sveltecharts": major
 ---
 
 Add candlestick (OHLC) chart support.
 
-- Auto-detects OHLC columns by name (`open/opn/o`, `high/hig/h`, `low/l`, `close/cls/c`).
+- Auto-detects OHLC columns by name (`open/_open/opn`, `high/_high/hig`, `low/_low`, `close/_close/cls`). Single-letter aliases (`o/h/l/c`) require explicit mapping to avoid false positives on unrelated parquets.
 - Explicit mapping via `candlestick: { open, high, low, close }` in table config.
 - Set `candlestick: false` to force line rendering and skip detection.
 - `resolution` option resamples raw ticks into fixed-size OHLC bars via DuckDB `time_bucket()` (e.g. `'15m'`, `'1h'`).

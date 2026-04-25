@@ -112,12 +112,14 @@ Requirements:
 
 When a Parquet file contains columns whose names match known OHLC patterns, the component automatically renders a candlestick series without any extra configuration:
 
-| Role  | Recognized column names                    |
-| ----- | ------------------------------------------ |
-| open  | `open`, `_open`, `opn`, `o`                |
-| high  | `high`, `_high`, `hig`, `h`                |
-| low   | `low`, `_low`, `l`                         |
-| close | `close`, `_close`, `cls`, `c`              |
+| Role  | Recognized column names    |
+| ----- | -------------------------- |
+| open  | `open`, `_open`, `opn`     |
+| high  | `high`, `_high`, `hig`     |
+| low   | `low`, `_low`              |
+| close | `close`, `_close`, `cls`   |
+
+Single-letter column names (`o`, `h`, `l`, `c`) are **not** auto-detected — they collide too often with unrelated columns in non-financial parquets. Use the [explicit mapping](#explicit-mapping) below to opt into them.
 
 ### Explicit mapping
 
