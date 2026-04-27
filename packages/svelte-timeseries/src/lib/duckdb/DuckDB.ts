@@ -14,7 +14,9 @@ export type MarkersTableOptions = {
 	targetDimension: string;
 };
 
-export type ParquetSource = Blob | ArrayBuffer | Uint8Array;
+export type BinarySource = Blob | ArrayBuffer | Uint8Array;
+/** @deprecated Use BinarySource */
+export type ParquetSource = BinarySource;
 
 type TableDataBase = {
 	mainColumn: string;
@@ -34,14 +36,22 @@ type TableDataBase = {
 type TableDataFromUrl = TableDataBase & {
 	url: string;
 	parquet?: never;
+	lastra?: never;
 };
 
 type TableDataFromParquet = TableDataBase & {
 	url?: never;
-	parquet: ParquetSource;
+	parquet: BinarySource;
+	lastra?: never;
 };
 
-export type TableData = TableDataFromUrl | TableDataFromParquet;
+type TableDataFromLastra = TableDataBase & {
+	url?: never;
+	parquet?: never;
+	lastra: BinarySource;
+};
+
+export type TableData = TableDataFromUrl | TableDataFromParquet | TableDataFromLastra;
 export type Tables = Record<string, TableData>;
 
 type IconType =
@@ -399,7 +409,9 @@ export class DuckDB<T extends Tables> {
 
 			const viewName = String(name);
 			const tempViewName = `__temp_${viewName}`;
-			const sourcePath = await this.registerParquetSource(viewName, tableConfiguration);
+			const format = this.resolveFormat(tableConfiguration);
+			const sourcePath = await this.registerFileSource(viewName, tableConfiguration, format);
+			const scanFn = format === 'lastra' ? 'read_lastra' : 'parquet_scan';
 
 			const columnsSelect = tableConfiguration?.columnsSelect?.map((c) => this.escapeIdent(c)) ?? [
 				'*'
@@ -411,9 +423,8 @@ export class DuckDB<T extends Tables> {
 
 			const selectColumns = columnsSelect.join(', ');
 
-			// Create temp view from parquet file
 			await conn.query(
-				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT ${selectColumns} FROM parquet_scan('${sourcePath}')`
+				`CREATE OR REPLACE VIEW ${this.escapeIdent(tempViewName)} AS SELECT ${selectColumns} FROM ${scanFn}('${sourcePath}')`
 			);
 
 			// detected the initial schema of the temp view
@@ -468,50 +479,72 @@ export class DuckDB<T extends Tables> {
 		}, 'buildTablesAndSchemas - ' + name.toString());
 	}
 
-	private async registerParquetSource(
+	private resolveFormat(tableConfiguration: TableData): 'parquet' | 'lastra' {
+		if ('lastra' in tableConfiguration && tableConfiguration.lastra) return 'lastra';
+		if (tableConfiguration.url?.endsWith('.lastra')) return 'lastra';
+		return 'parquet';
+	}
+
+	private async registerFileSource(
 		viewName: string,
-		tableConfiguration: TableData
+		tableConfiguration: TableData,
+		format: 'parquet' | 'lastra'
 	): Promise<string> {
 		if (tableConfiguration.url !== undefined) {
 			return tableConfiguration.url;
 		}
 
-		const registeredFileName = `${viewName}.parquet`;
-		const parquet = tableConfiguration.parquet;
+		const ext = format === 'lastra' ? 'lastra' : 'parquet';
+		const registeredFileName = `${viewName}.${ext}`;
+		const source =
+			'lastra' in tableConfiguration ? tableConfiguration.lastra : tableConfiguration.parquet;
 
-		if (parquet instanceof Uint8Array) {
-			await this.db.registerFileBuffer(registeredFileName, parquet);
+		if (source instanceof Uint8Array) {
+			await this.db.registerFileBuffer(registeredFileName, source);
 			return registeredFileName;
 		}
 
-		if (parquet instanceof ArrayBuffer) {
-			await this.db.registerFileBuffer(registeredFileName, new Uint8Array(parquet));
+		if (source instanceof ArrayBuffer) {
+			await this.db.registerFileBuffer(registeredFileName, new Uint8Array(source));
 			return registeredFileName;
 		}
 
-		if (parquet instanceof Blob) {
-			if (typeof File !== 'undefined' && parquet instanceof File) {
+		if (source instanceof Blob) {
+			if (typeof File !== 'undefined' && source instanceof File) {
 				await this.db.registerFileHandle(
 					registeredFileName,
-					parquet,
+					source,
 					DuckDBDataProtocol.BROWSER_FILEREADER,
 					true
 				);
 				return registeredFileName;
 			}
 
-			const buffer = new Uint8Array(await parquet.arrayBuffer());
+			const buffer = new Uint8Array(await source.arrayBuffer());
 			await this.db.registerFileBuffer(registeredFileName, buffer);
 			return registeredFileName;
 		}
 
-		throw new Error('Unsupported parquet source. Use url, Blob/File, ArrayBuffer, or Uint8Array.');
+		throw new Error('Unsupported source. Use url, Blob/File, ArrayBuffer, or Uint8Array.');
+	}
+
+	private hasLastraTables(): boolean {
+		return Object.values(this._tables).some((t) => this.resolveFormat(t) === 'lastra');
+	}
+
+	private async loadLastraExtension(): Promise<void> {
+		await this.execute(async (conn) => {
+			await conn.query('INSTALL lastra FROM community; LOAD lastra;');
+		}, 'loadLastraExtension');
 	}
 
 	/**
 	 * Load the database
 	 */
 	private async load() {
+		if (this.hasLastraTables()) {
+			await this.loadLastraExtension();
+		}
 		await this.registerData();
 	}
 
