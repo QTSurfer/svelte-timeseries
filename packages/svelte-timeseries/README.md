@@ -168,6 +168,7 @@ You can also pass a Parquet file directly instead of a URL:
 | `externalManagerLegend?` | `boolean` (default `true`)                                                                                                                       | Passes `externalManagerLegend` to `TimeSeriesChartBuilder`. Disable it to let the chart manage the legend internally. |
 | `columnsSnippet?`        | `Snippet<[ColumnsProps]>`                                                                                                                        | Overrides the column toggle panel.                                                                                    |
 | `performanceSnippet?`    | `Snippet<[PerformanceProps]>`                                                                                                                    | Overrides the performance/metrics panel.                                                                              |
+| `snippetClass?`          | `string`                                                                                                                                         | CSS classes applied to the snippets wrapper around the columns / markers / performance panels.                        |
 
 ## TimeSeriesFacade in practice
 

@@ -70,7 +70,12 @@ pnpm lint
 
 # Format code
 pnpm format
+
+# Spellcheck (cSpell)
+pnpm spellcheck
 ```
+
+`spellcheck` runs cSpell against `packages/**/src/**`. The project dictionary lives in `cspell-project-words.txt` at the repo root — add domain-specific words there rather than disabling cSpell inline.
 
 ### Publishing
 ```bash
@@ -180,6 +185,7 @@ When implementing a change:
 ```bash
 pnpm check
 pnpm build
+pnpm spellcheck
 ```
 5. Verify:
 

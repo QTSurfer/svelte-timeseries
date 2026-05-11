@@ -105,6 +105,7 @@ Requirements:
 | `performanceSnippet?`    | `Snippet<[PerformanceProps]>`                                                   | Overrides the performance/metrics panel.                                                           |
 | `containerClass?`        | `string`                                                                        | CSS classes applied to the outer container element.                                                |
 | `chartClass?`            | `string`                                                                        | CSS classes applied to the inner chart element.                                                    |
+| `snippetClass?`          | `string`                                                                        | CSS classes applied to the snippets wrapper around the columns / markers / performance panels.     |
 
 ## Candlestick & OHLC
 
