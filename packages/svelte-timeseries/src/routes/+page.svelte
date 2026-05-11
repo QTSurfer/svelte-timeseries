@@ -69,7 +69,7 @@
 				signal: {
 					url: `${baseUrl}signals.parquet`,
 					mainColumn: 'price',
-					columnsSelect: ['_ts', 'price', 'VlongBolBW%', 'ema500'] // Limited colums table
+					columnsSelect: ['_ts', 'price', 'VlongBolBW%', 'ema500'] // Limited columns table
 				}
 			}
 		},
@@ -468,7 +468,7 @@
 					containerClass={showCustomSidebar
 						? 'relative grid grid-cols-[300px_1fr] size-full'
 						: 'relative size-full'}
-					snippetclass={showCustomSidebar ? 'flex flex-col p-2 gap-2 overflow-hidden' : 'hidden'}
+					snippetClass={showCustomSidebar ? 'flex flex-col p-2 gap-2 overflow-hidden' : 'hidden'}
 					chartClass="w-full h-full"
 				>
 					{#snippet columnsSnippet(props)}

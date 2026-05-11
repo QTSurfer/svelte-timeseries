@@ -41,7 +41,7 @@
 		markersSnippet,
 		performanceSnippet,
 		containerClass,
-		snippetclass,
+		snippetClass,
 		chartClass,
 		chartLibrary = 'echarts',
 		isDark,
@@ -56,7 +56,7 @@
 		markersSnippet?: Snippet<[MarkersProps]>;
 		performanceSnippet?: Snippet<[PerformanceProps]>;
 		containerClass?: string;
-		snippetclass?: string;
+		snippetClass?: string;
 		chartClass?: string;
 		chartLibrary?: 'echarts' | 'lightweight';
 		isDark?: boolean;
@@ -146,15 +146,15 @@
 		if (!timeSeriesFacade) return;
 		timeSeriesFacade.goToTime(ts);
 	};
-	const performanceTimmer = $derived(
+	const performanceTimer = $derived(
 		timer.start && timer.end ? (timer.end - timer.start) / 1000 : 0
 	);
 </script>
 
 <div id="svelte-timeseries" class={containerClass}>
-	<div class={snippetclass}>
-		{#if performanceTimmer}
-			{@render performanceSnippet?.({ time: performanceTimmer, matrix })}
+	<div class={snippetClass}>
+		{#if performanceTimer}
+			{@render performanceSnippet?.({ time: performanceTimer, matrix })}
 		{/if}
 
 		{@render (columnsSnippet ?? renderColumns)({

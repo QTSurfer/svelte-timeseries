@@ -1,0 +1,27 @@
+# Project / brand
+qtsurfer
+sveltecharts
+
+# DuckDB / SQL types
+duckdb
+FILEREADER
+HUGEINT
+TINYINT
+Vlong
+
+# Charting / timeseries
+backtesting
+datazoom
+horz
+klines
+lttb
+markerpoint
+ohlc
+plottable
+
+# Libraries
+iconify
+
+# Runtime / misc
+endt
+pthread

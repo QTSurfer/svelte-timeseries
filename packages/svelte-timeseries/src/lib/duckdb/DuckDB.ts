@@ -62,7 +62,7 @@ export type MarkersTable = {
 	position: string;
 	text: string;
 };
-type ColumsSchema = { name: string; type: string }[];
+type ColumnsSchema = { name: string; type: string }[];
 
 type EpochUnit = 's' | 'ms' | 'us' | 'ns';
 
@@ -373,7 +373,7 @@ export class DuckDB<T extends Tables> {
 	 * Escape an identifier
 	 */
 	private escapeIdent(ident: string): string {
-		// escape simple para identificadores
+		// simple escape for identifiers
 		return `"${ident.replace(/"/g, '""')}"`;
 	}
 
@@ -421,7 +421,7 @@ export class DuckDB<T extends Tables> {
 				`SELECT column_name AS name, data_type AS type FROM information_schema.columns WHERE table_name = '${tempViewName}'`
 			);
 
-			const initialSchema: ColumsSchema = initialSchemaData.toArray();
+			const initialSchema: ColumnsSchema = initialSchemaData.toArray();
 			const sourceTimestampField = this.getTimestampSourceField(initialSchema);
 
 			if (!sourceTimestampField) {
@@ -441,14 +441,14 @@ export class DuckDB<T extends Tables> {
 
 			// Create markers view if needed
 			if (this._markersColumn?.table === viewName) {
-				const columnesSelect = [
+				const columnsSelect = [
 					`${this.buildTimestampSelect(sourceTimestampField)} AS ${this._tsColumn}`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.text') AS VARCHAR), '^"(.*)"$', '\\1') AS text`
 				];
-				const selectMarkers = `SELECT ${columnesSelect.join(', ')} FROM ${this.escapeIdent(tempViewName)} WHERE ${this._markersColumn.targetColumn} IS NOT NULL AND json_valid(${this._markersColumn.targetColumn})`;
+				const selectMarkers = `SELECT ${columnsSelect.join(', ')} FROM ${this.escapeIdent(tempViewName)} WHERE ${this._markersColumn.targetColumn} IS NOT NULL AND json_valid(${this._markersColumn.targetColumn})`;
 				await conn.query(`CREATE OR REPLACE VIEW markers AS ${selectMarkers}`);
 			}
 
@@ -584,7 +584,7 @@ export class DuckDB<T extends Tables> {
 	/**
 	 * Automatically detect the type of each column
 	 */
-	private autoDetectFields(fields: ColumsSchema): Record<string, TargetType> {
+	private autoDetectFields(fields: ColumnsSchema): Record<string, TargetType> {
 		const casts: Record<string, TargetType> = {};
 
 		fields.forEach((f) => {
@@ -615,7 +615,7 @@ export class DuckDB<T extends Tables> {
 		return casts;
 	}
 
-	private getTimestampSourceField(fields: ColumsSchema): ColumsSchema[number] | undefined {
+	private getTimestampSourceField(fields: ColumnsSchema): ColumnsSchema[number] | undefined {
 		return fields.find((field) =>
 			TIMESTAMP_COLUMN_CANDIDATES.includes(
 				field.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number]
@@ -627,7 +627,7 @@ export class DuckDB<T extends Tables> {
 		return type.toUpperCase().includes('TIMESTAMP') || type.toUpperCase() === 'DATE';
 	}
 
-	private buildTimestampSelect(field: ColumsSchema[number]): string {
+	private buildTimestampSelect(field: ColumnsSchema[number]): string {
 		const column = this.escapeIdent(field.name);
 		if (this.isTimestampLikeType(field.type)) {
 			return field.type.toUpperCase() === 'DATE' ? `CAST(${column} AS TIMESTAMP)` : column;

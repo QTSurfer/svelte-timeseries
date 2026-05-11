@@ -9,7 +9,7 @@ export default class TimeSeriesFacade {
 		private timeSeriesChartBuilder: TimeSeriesChartAdapter
 	) {}
 
-	async initialize(table: string, columnesSelect: string) {
+	async initialize(table: string, columnsSelect: string) {
 		this.timeSeriesChartBuilder.setLegendIcon('rect');
 
 		const ohlc = this.duckDb.resolveOHLC(table);
@@ -20,7 +20,7 @@ export default class TimeSeriesFacade {
 			return;
 		}
 
-		const result = await this.duckDb.getSingleDimension(table, columnesSelect, false);
+		const result = await this.duckDb.getSingleDimension(table, columnsSelect, false);
 		this.timeSeriesChartBuilder.setDataset(result, Object.keys(result));
 	}
 
@@ -45,9 +45,9 @@ export default class TimeSeriesFacade {
 		return markersRows;
 	}
 
-	async addDimension(table: string, columnesSelect: string) {
-		const result = await this.duckDb.getSingleDimension(table, columnesSelect, true);
-		this.timeSeriesChartBuilder.addDimension(result, columnesSelect);
+	async addDimension(table: string, columnsSelect: string) {
+		const result = await this.duckDb.getSingleDimension(table, columnsSelect, true);
+		this.timeSeriesChartBuilder.addDimension(result, columnsSelect);
 	}
 
 	async loadAllColumns(table: string, excludeColumns: string[] = []): Promise<Columns> {

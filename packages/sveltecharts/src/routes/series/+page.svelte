@@ -15,7 +15,7 @@
 		const dataset = {
 			_ts: data.map((d) => d._ts),
 			price: data.map((d) => d.price),
-			volumen: data.map((d) => d.col2)
+			volume: data.map((d) => d.col2)
 		};
 
 		const timeSeries = new TimeSeriesChartBuilder(instance);
