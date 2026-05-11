@@ -73,27 +73,46 @@
 	let columns = $state<Columns>([]);
 	let matrix = $state([0, 0]);
 	let markersData = $state<MarkersTable[]>([]);
+	let loadToken = 0;
 
 	const loadChart = async (chartBuilder: TimeSeriesChartAdapter) => {
+		const currentTable = Object.keys(table)[0];
+		const entry = currentTable ? table[currentTable] : undefined;
+		if (!entry) return;
+		const columnsSelect = entry.mainColumn;
+		const myToken = ++loadToken;
+
 		loading = true;
 		const duckDb = await DuckDB.create(table, markers, debug);
-		timeSeriesFacade = new TimeSeriesFacade(duckDb, chartBuilder);
+		const discardIfStale = (): boolean => {
+			if (myToken === loadToken) return false;
+			duckDb.closeConnection().catch(() => {});
+			return true;
+		};
+		if (discardIfStale()) return;
 
-		const columnsSelect = table[tableName].mainColumn;
-		await timeSeriesFacade.initialize(tableName, columnsSelect);
+		const facade = new TimeSeriesFacade(duckDb, chartBuilder);
+		await facade.initialize(currentTable, columnsSelect);
+		if (discardIfStale()) return;
+
 		if (!externalManagerLegend) {
-			await timeSeriesFacade.loadAllColumns(tableName, [columnsSelect]);
+			await facade.loadAllColumns(currentTable, [columnsSelect]);
+			if (discardIfStale()) return;
 		}
 
+		let newMarkers: MarkersTable[] | undefined;
 		if (markers) {
-			markersData = await timeSeriesFacade.loadMarkers(markers.targetDimension);
+			newMarkers = await facade.loadMarkers(markers.targetDimension);
+			if (discardIfStale()) return;
 		}
 
-		loading = false;
+		timeSeriesFacade = facade;
+		if (newMarkers) markersData = newMarkers;
+		columns = facade.getColumns(currentTable);
+		matrix = facade.describe();
 		timer.end = performance.now();
-		columns = timeSeriesFacade.getColumns(tableName);
-		onFacadeReady?.(timeSeriesFacade);
-		matrix = timeSeriesFacade.describe();
+		loading = false;
+		onFacadeReady?.(facade);
 	};
 
 	const onLoadECharts = async (EChartInstance: ECharts) => {
