@@ -1,5 +1,16 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.10.0
+
+### Minor Changes
+
+- [`1014493`](https://github.com/QTSurfer/svelte-timeseries/commit/101449338198d49ce4366e751a0a7fc46f1bc676) Thanks [@leonardojgv](https://github.com/leonardojgv)! - Add support for the Lastra binary format. Tables can now be configured with a `lastra` source (Blob, File, ArrayBuffer, Uint8Array, or URL ending in `.lastra`). The DuckDB engine is upgraded to `@duckdb/duckdb-wasm@1.33.1-dev53.0` (DuckDB v1.5.2) which publishes the community `lastra` extension for WASM.
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @qtsurfer/sveltecharts@0.10.0
+
 ## 0.9.0
 
 ### Minor Changes
