@@ -133,6 +133,10 @@
 		}
 	}
 
+	function fileFormat(file: File): 'lastra' | 'parquet' {
+		return file.name.endsWith('.lastra') ? 'lastra' : 'parquet';
+	}
+
 	async function inspectCustomFile(file: File) {
 		inspectingCustomFile = true;
 		customError = '';
@@ -140,40 +144,27 @@
 		customMainColumn = '';
 		loadedCustomConfiguration = null;
 
-		let duckDb:
-			| Awaited<
-					ReturnType<
-						typeof DuckDB.create<{
-							uploaded_preview: {
-								parquet: File;
-								mainColumn: string;
-							};
-						}>
-					>
-			  >
-			| undefined;
+		const fmt = fileFormat(file);
+
+		let duckDb: Awaited<ReturnType<typeof DuckDB.create>> | undefined;
 
 		try {
-			duckDb = await DuckDB.create(
-				{
-					uploaded_preview: {
-						parquet: file,
-						mainColumn: '__preview__'
-					}
-				},
-				undefined,
-				false
-			);
+			const previewTable =
+				fmt === 'lastra'
+					? { lastra: file, mainColumn: '__preview__' }
+					: { parquet: file, mainColumn: '__preview__' };
+
+			duckDb = await DuckDB.create({ uploaded_preview: previewTable }, undefined, false);
 
 			customColumns = duckDb.getColumns('uploaded_preview');
 			customMainColumn = customColumns[0] ?? '';
 
 			if (!customColumns.length) {
-				customError = 'No plottable columns were found in the parquet file.';
+				customError = 'No plottable columns were found in the file.';
 			}
 		} catch (error) {
 			customError =
-				error instanceof Error ? error.message : 'The parquet file could not be inspected.';
+				error instanceof Error ? error.message : 'The file could not be inspected.';
 		} finally {
 			await duckDb?.closeConnection();
 			inspectingCustomFile = false;
@@ -220,14 +211,14 @@
 						: {};
 
 			loadedCustomConfiguration = {
-				name: `Remote parquet: ${url}`,
+				name: `Remote: ${url}`,
 				tables: {
 					remote: { url, mainColumn, ...candlestickOverride }
 				}
 			};
 		} else {
 			if (!customFile) {
-				customError = 'Select a parquet file first.';
+				customError = 'Select a file first.';
 				return;
 			}
 
@@ -243,11 +234,14 @@
 						? { resolution: customResolution }
 						: {};
 
+			const fmt = fileFormat(customFile);
+			const uploadedTable =
+				fmt === 'lastra'
+					? { lastra: customFile, mainColumn: customMainColumn, ...candlestickOverride }
+					: { parquet: customFile, mainColumn: customMainColumn, ...candlestickOverride };
 			loadedCustomConfiguration = {
-				name: `Local parquet: ${customFile.name}`,
-				tables: {
-					uploaded: { parquet: customFile, mainColumn: customMainColumn, ...candlestickOverride }
-				}
+				name: `Local ${fmt}: ${customFile.name}`,
+				tables: { uploaded: uploadedTable }
 			};
 		}
 
@@ -367,7 +361,7 @@
 				{#if sourceMode === 'url'}
 					<label class="form-control w-full max-w-md">
 						<div class="label pb-1">
-							<span class="label-text font-semibold">Parquet URL</span>
+							<span class="label-text font-semibold">File URL</span>
 						</div>
 						<input
 							class="input input-bordered"
@@ -391,12 +385,12 @@
 				{:else}
 					<label class="form-control w-full max-w-sm">
 						<div class="label pb-1">
-							<span class="label-text font-semibold">Parquet file</span>
+							<span class="label-text font-semibold">Data file</span>
 						</div>
 						<input
 							class="file-input file-input-bordered"
 							type="file"
-							accept=".parquet,.pqt,application/octet-stream"
+							accept=".parquet,.pqt,.lastra,application/octet-stream"
 							onchange={onCustomFileChange}
 						/>
 					</label>
@@ -429,16 +423,17 @@
 						? !customUrl.trim() || !customMainColumn.trim()
 						: !customFile || !customMainColumn || inspectingCustomFile}
 				>
-					{inspectingCustomFile ? 'Reading parquet...' : 'Load'}
+					{inspectingCustomFile ? 'Reading file...' : 'Load'}
 				</button>
 			{/if}
 		</div>
 
 		{#if selected === CUSTOM_CONFIGURATION_ID}
 			<div class="mt-3 text-sm text-base-content/70">
-				The parquet file can provide the time column as <code>_ts</code>, <code>ts</code>,
-				<code>_t</code>, or <code>t</code>. In file mode: 1. select the parquet file, 2. choose the
-				<code>mainColumn</code>, 3. press <code>Load</code>.
+				The file can provide the time column as <code>_ts</code>, <code>ts</code>,
+				<code>_t</code>, or <code>t</code>. Supported formats: Parquet (<code>.parquet</code>,
+				<code>.pqt</code>) and Lastra (<code>.lastra</code>). In file mode: 1. select the file, 2.
+				choose the <code>mainColumn</code>, 3. press <code>Load</code>.
 			</div>
 		{/if}
 

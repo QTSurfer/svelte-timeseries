@@ -1,6 +1,7 @@
 # Project / brand
 qtsurfer
 sveltecharts
+lastra
 
 # DuckDB / SQL types
 duckdb
