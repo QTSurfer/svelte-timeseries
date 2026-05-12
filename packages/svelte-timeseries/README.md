@@ -26,7 +26,7 @@
 
 `@qtsurfer/svelte-timeseries` ships everything you need to build financial, industrial, or scientific dashboards with millions of data points. The component offers:
 
-- Parquet/Arrow ingestion via DuckDB-WASM right in the browser.
+- Parquet/Arrow and **Lastra** ingestion via DuckDB-WASM right in the browser.
 - Columnar → ECharts transformations powered by Apache Arrow.
 - Marker/event overlays synchronized with any dimension.
 - Customizable side panels through Svelte snippets.
@@ -102,7 +102,7 @@ Forces Vite to include this library in the SSR build pipeline.
 Requirements:
 
 - SvelteKit project with TypeScript enabled.
-- Ability to provide Parquet files either by URL or directly in memory.
+- Ability to provide Parquet or [Lastra](https://github.com/QTSurfer/lastra) files either by URL or directly in memory.
 
 ## Getting started
 
@@ -158,11 +158,41 @@ You can also pass a Parquet file directly instead of a URL:
 {/if}
 ```
 
+### Lastra format
+
+The same `table` config accepts a `lastra` source (URL ending in `.lastra`, `Blob`, `File`, `ArrayBuffer`, or `Uint8Array`). The component lazy-loads the [DuckDB community `lastra` extension](https://community-extensions.duckdb.org/extensions/lastra.html) only when a Lastra source is present:
+
+```svelte
+<script lang="ts">
+	import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
+
+	const tables = {
+		signals: {
+			url: '/signals.lastra', // auto-detected by `.lastra` extension
+			mainColumn: 'price'
+		}
+	};
+</script>
+
+<SvelteTimeSeries table={tables} />
+```
+
+To pass a Lastra file directly from disk, use the `lastra` key instead of `parquet`:
+
+```ts
+const tables = {
+	uploaded: {
+		lastra: lastraFile, // Blob | File | ArrayBuffer | Uint8Array
+		mainColumn: 'price'
+	}
+};
+```
+
 ## Component API
 
 | Prop                     | Type                                                                                                                                             | Description                                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `table`                  | `Record<string, { mainColumn: string; columnsSelect?: string[] } & ({ url: string } \| { parquet: Blob \| File \| ArrayBuffer \| Uint8Array })>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name.                    |
+| `table`                  | `Record<string, { mainColumn: string; columnsSelect?: string[] } & ({ url: string } \| { parquet: BinarySource } \| { lastra: BinarySource })>` where `BinarySource = Blob \| File \| ArrayBuffer \| Uint8Array` | Defines the Parquet/Lastra sources and their primary column; the object key becomes the DuckDB view name. Lastra is auto-detected from URLs ending in `.lastra` or from the `lastra` field. |
 | `markers?`               | `MarkersTableOptions`                                                                                                                            | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).                        |
 | `debug?`                 | `boolean` (default `true`)                                                                                                                       | Enables verbose DuckDB/builder logging.                                                                               |
 | `externalManagerLegend?` | `boolean` (default `true`)                                                                                                                       | Passes `externalManagerLegend` to `TimeSeriesChartBuilder`. Disable it to let the chart manage the legend internally. |

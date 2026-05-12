@@ -17,18 +17,19 @@
 5. [Getting started](#getting-started)
 6. [Component API](#component-api)
 7. [Candlestick & OHLC](#candlestick--ohlc)
-8. [Chart libraries](#chart-libraries)
-9. [TimeSeriesFacade in practice](#timeseriesfacade-in-practice)
-10. [Advanced APIs](#advanced-apis)
-11. [Reference scenarios](#reference-scenarios)
-12. [Development & testing](#development--testing)
-13. [Support & contributions](#support--contributions)
+8. [Lastra binary format](#lastra-binary-format)
+9. [Chart libraries](#chart-libraries)
+10. [TimeSeriesFacade in practice](#timeseriesfacade-in-practice)
+11. [Advanced APIs](#advanced-apis)
+12. [Reference scenarios](#reference-scenarios)
+13. [Development & testing](#development--testing)
+14. [Support & contributions](#support--contributions)
 
 ## Overview
 
 `@qtsurfer/svelte-timeseries` ships everything you need to build financial, industrial, or scientific dashboards with millions of data points. The component offers:
 
-- Parquet/Arrow ingestion via DuckDB-WASM right in the browser.
+- Parquet/Arrow and **Lastra** ingestion via DuckDB-WASM right in the browser.
 - Columnar → chart transformations powered by Apache Arrow.
 - Marker/event overlays synchronized with any dimension.
 - Customizable side panels through Svelte snippets.
@@ -64,7 +65,7 @@ yarn add @qtsurfer/svelte-timeseries
 Requirements:
 
 - SvelteKit project with TypeScript enabled.
-- Ability to serve Parquet/Arrow files (local assets or CDN).
+- Ability to serve Parquet/Arrow or [Lastra](https://github.com/QTSurfer/lastra) files (local assets or CDN).
 
 ## Getting started
 
@@ -93,7 +94,7 @@ Requirements:
 
 | Prop                     | Type                                                                            | Description                                                                                        |
 | ------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `table`                  | `Record<string, { url: string; mainColumn: string; columnsSelect?: string[] }>` | Defines the Parquet sources and their primary column; the object key becomes the DuckDB view name. |
+| `table`                  | `Record<string, TableData>` (see [TableData reference](#tabledata-reference))    | Defines the Parquet/Lastra sources and their primary column; the object key becomes the DuckDB view name. |
 | `markers?`               | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).     |
 | `debug?`                 | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                            |
 | `chartLibrary?`          | `'echarts' \| 'lightweight'` (default `'echarts'`)                              | Selects the chart backend. `'lightweight'` renders via TradingView Lightweight Charts.             |
@@ -185,11 +186,15 @@ type OHLCColumns = {
 
 type OHLCResolution = `${number}${'s' | 'm' | 'h' | 'd'}`;
 
-// All OHLC fields live inside each table entry:
+type BinarySource = Blob | File | ArrayBuffer | Uint8Array;
+
+// One of three source variants per table entry:
 {
-  url: string;          // remote Parquet URL
+  url: string;          // remote Parquet or Lastra URL (.lastra auto-detected)
   // — or —
-  parquet: BinarySource; // Blob | ArrayBuffer | Uint8Array
+  parquet: BinarySource;
+  // — or —
+  lastra:  BinarySource; // Lastra binary format (DuckDB community extension)
 
   mainColumn: string;
   columnsSelect?: string[];
@@ -198,6 +203,58 @@ type OHLCResolution = `${number}${'s' | 'm' | 'h' | 'd'}`;
   resolution?:  OHLCResolution;       // resampling bucket size
 }
 ```
+
+## Lastra binary format
+
+In addition to Parquet, `SvelteTimeSeries` accepts [Lastra](https://github.com/QTSurfer/lastra) sources via the [DuckDB community `lastra` extension](https://community-extensions.duckdb.org/extensions/lastra.html). The extension is loaded lazily on first use — only when at least one table entry resolves to a Lastra source.
+
+### By URL
+
+URLs ending in `.lastra` are auto-detected:
+
+```ts
+const tables = {
+  signals: {
+    url: '/signals.lastra',
+    mainColumn: 'price'
+  }
+};
+```
+
+### By in-memory source
+
+Use the `lastra` field instead of `parquet` to pass a `Blob`, `File`, `ArrayBuffer`, or `Uint8Array`:
+
+```svelte
+<script lang="ts">
+  import { SvelteTimeSeries } from '@qtsurfer/svelte-timeseries';
+
+  let lastraFile = $state<File | null>(null);
+
+  const tables = $derived(
+    lastraFile
+      ? {
+          uploaded: {
+            lastra: lastraFile,
+            mainColumn: 'price'
+          }
+        }
+      : {}
+  );
+</script>
+
+<input
+  type="file"
+  accept=".lastra"
+  onchange={(event) => (lastraFile = event.currentTarget.files?.[0] ?? null)}
+/>
+
+{#if lastraFile}
+  <SvelteTimeSeries table={tables} />
+{/if}
+```
+
+Lastra entries support the same `columnsSelect`, `candlestick`, and `resolution` options as Parquet entries.
 
 ## Chart libraries
 
