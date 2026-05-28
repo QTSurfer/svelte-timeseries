@@ -1,37 +1,6 @@
 <script lang="ts" module>
-	import { init, use } from 'echarts/core';
-	import { LineChart, BarChart } from 'echarts/charts';
-	import {
-		DataZoomComponent,
-		LegendComponent,
-		TitleComponent,
-		TooltipComponent,
-		GridComponent,
-		DatasetComponent,
-		MarkLineComponent,
-		MarkPointComponent,
-		MarkAreaComponent
-	} from 'echarts/components';
-	import { LabelLayout } from 'echarts/features';
-	import { CanvasRenderer } from 'echarts/renderers';
+	import { init } from './echartsSetup';
 	import type { ECharts, EChartsOption } from './types';
-
-	// Register the required components
-	use([
-		LineChart,
-		BarChart,
-		DataZoomComponent,
-		LegendComponent,
-		TitleComponent,
-		TooltipComponent,
-		GridComponent,
-		DatasetComponent,
-		LabelLayout,
-		CanvasRenderer,
-		MarkLineComponent,
-		MarkPointComponent,
-		MarkAreaComponent
-	]);
 
 	export type EChartsTheme = string | object;
 	export type EChartsRenderer = 'canvas' | 'svg';
