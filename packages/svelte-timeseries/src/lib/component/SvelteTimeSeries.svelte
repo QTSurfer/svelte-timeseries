@@ -1,3 +1,7 @@
+<script lang="ts" module>
+	// Required so Tailwind v4 recognizes this file as a Svelte component and does not parse it as CSS
+</script>
+
 <script lang="ts">
 	import TimeSeriesFacade from '$lib/TimeSeriesFacade';
 	import type { Columns } from '$lib/TimeSeriesFacade';
