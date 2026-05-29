@@ -1,5 +1,18 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.10.1
+
+### Patch Changes
+
+- [#104](https://github.com/QTSurfer/svelte-timeseries/pull/104) [`b2cd719`](https://github.com/QTSurfer/svelte-timeseries/commit/b2cd719c67514b575f49e6b69792a44acfb7c986) Thanks [@mrmx](https://github.com/mrmx)! - Fix Tailwind v4 incorrectly parsing distributed Svelte files as CSS.
+
+  `SVECharts.svelte`: moved `init` and `use` echarts imports and component registration into a separate `echartsSetup.ts` module so the `.svelte` file no longer contains destructured imports that Tailwind's CSS parser misreads as CSS declarations.
+
+  `SvelteTimeSeries.svelte`: added an empty `<script lang="ts" module>` block so Tailwind v4 recognizes the file as a Svelte component instead of treating the entire file as a CSS document.
+
+- Updated dependencies [[`b2cd719`](https://github.com/QTSurfer/svelte-timeseries/commit/b2cd719c67514b575f49e6b69792a44acfb7c986)]:
+  - @qtsurfer/sveltecharts@0.10.1
+
 ## 0.10.0
 
 ### Minor Changes
