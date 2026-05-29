@@ -1,0 +1,53 @@
+name: Changesets Version PR
+
+# Opens (or keeps up-to-date) a "chore: version packages" pull request whenever
+# changesets land on main.  The PR runs `changeset version`, bumps package.json
+# files and CHANGELOG.md, and deletes the consumed .changeset/*.md files.
+#
+# Publishing is intentionally NOT done here — it is handled by publish.yaml,
+# which triggers after the CI workflow succeeds on main (i.e. after this PR is
+# merged).  The separation keeps the two concerns independent:
+#   push with changesets → this workflow creates the Version PR
+#   merge Version PR     → CI passes → publish.yaml publishes to npm
+
+on:
+  workflow_run:
+    workflows: ["CI workflow"]
+    branches: [main]
+    types: [completed]
+
+jobs:
+  version-pr:
+    name: Create or update Version PR
+    if: |
+      github.repository == 'QTSurfer/svelte-timeseries' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm ci:install
+
+      - name: Create or update Version PR
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset:version
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
