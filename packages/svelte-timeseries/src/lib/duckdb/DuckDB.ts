@@ -18,6 +18,8 @@ export type BinarySource = Blob | ArrayBuffer | Uint8Array;
 /** @deprecated Use BinarySource */
 export type ParquetSource = BinarySource;
 
+export type EpochUnit = 's' | 'ms' | 'us' | 'ns';
+
 type TableDataBase = {
 	mainColumn: string;
 	columnsSelect?: string[];
@@ -31,6 +33,7 @@ type TableDataBase = {
 	 * of the given size using time_bucket. Examples: '15s', '1m', '5m', '1h'.
 	 */
 	resolution?: OHLCResolution;
+	timestampUnit?: EpochUnit;
 };
 
 type TableDataFromUrl = TableDataBase & {
@@ -73,8 +76,6 @@ export type MarkersTable = {
 	text: string;
 };
 type ColumnsSchema = { name: string; type: string }[];
-
-type EpochUnit = 's' | 'ms' | 'us' | 'ns';
 
 type DuckDBType =
 	| 'BOOLEAN'
@@ -441,8 +442,15 @@ export class DuckDB<T extends Tables> {
 				);
 			}
 
+			const timestampUnit = await this.resolveTimestampUnit(
+				conn,
+				tempViewName,
+				sourceTimestampField,
+				tableConfiguration
+			);
+
 			// use the initial schema to build the casted select
-			const targetCasts = this.autoDetectFields(initialSchema);
+			const targetCasts = this.autoDetectFields(initialSchema, timestampUnit);
 
 			// Build the casted select
 			const castedSelect = this.buildCastedSelect(tempViewName, targetCasts);
@@ -453,7 +461,7 @@ export class DuckDB<T extends Tables> {
 			// Create markers view if needed
 			if (this._markersColumn?.table === viewName) {
 				const columnsSelect = [
-					`${this.buildTimestampSelect(sourceTimestampField)} AS ${this._tsColumn}`,
+					`${this.buildTimestampSelect(sourceTimestampField, timestampUnit)} AS ${this._tsColumn}`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.shape') AS VARCHAR), '^"(.*)"$', '\\1') AS shape`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.color') AS VARCHAR), '^"(.*)"$', '\\1') AS color`,
 					`regexp_replace(CAST(json_extract(${this._markersColumn.targetColumn}, '$.position') AS VARCHAR), '^"(.*)"$', '\\1') AS position`,
@@ -617,14 +625,48 @@ export class DuckDB<T extends Tables> {
 	/**
 	 * Automatically detect the type of each column
 	 */
-	private autoDetectFields(fields: ColumnsSchema): Record<string, TargetType> {
+	private async resolveTimestampUnit(
+		conn: AsyncDuckDBConnection,
+		tempViewName: string,
+		field: ColumnsSchema[number],
+		tableConfiguration: TableData
+	): Promise<EpochUnit> {
+		if (tableConfiguration.timestampUnit) return tableConfiguration.timestampUnit;
+		if (this.isTimestampLikeType(field.type)) return 'ms';
+
+		const column = this.escapeIdent(field.name);
+		const result = await conn.query(
+			`SELECT MAX(ABS(CAST(${column} AS DOUBLE))) AS timestamp_magnitude FROM ${this.escapeIdent(tempViewName)}`
+		);
+		const magnitude = Number(result.toArray()[0]?.timestamp_magnitude);
+
+		return this.inferEpochUnit(magnitude, field.name);
+	}
+
+	private inferEpochUnit(magnitude: number, fieldName: string): EpochUnit {
+		if (magnitude >= 1e17) return 'ns';
+		if (magnitude >= 1e14) return 'us';
+		if (magnitude >= 1e11) return 'ms';
+		if (magnitude >= 1e8) return 's';
+
+		throw new Error(
+			`Cannot infer epoch unit for numeric timestamp column "${fieldName}". Set timestampUnit to 's', 'ms', 'us', or 'ns'.`
+		);
+	}
+
+	private autoDetectFields(
+		fields: ColumnsSchema,
+		timestampUnit: EpochUnit
+	): Record<string, TargetType> {
 		const casts: Record<string, TargetType> = {};
 
 		fields.forEach((f) => {
 			if (
 				TIMESTAMP_COLUMN_CANDIDATES.includes(f.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number])
 			) {
-				casts[f.name] = this.isTimestampLikeType(f.type) ? 'TIMESTAMP' : 'TIMESTAMP(ms)';
+				casts[f.name] = this.isTimestampLikeType(f.type)
+					? 'TIMESTAMP'
+					: `TIMESTAMP(${timestampUnit})`;
 				return;
 			}
 
@@ -660,12 +702,12 @@ export class DuckDB<T extends Tables> {
 		return type.toUpperCase().includes('TIMESTAMP') || type.toUpperCase() === 'DATE';
 	}
 
-	private buildTimestampSelect(field: ColumnsSchema[number]): string {
+	private buildTimestampSelect(field: ColumnsSchema[number], timestampUnit: EpochUnit): string {
 		const column = this.escapeIdent(field.name);
 		if (this.isTimestampLikeType(field.type)) {
 			return field.type.toUpperCase() === 'DATE' ? `CAST(${column} AS TIMESTAMP)` : column;
 		}
-		return this.sqlTimestampFromEpoch(column, 'ms');
+		return this.sqlTimestampFromEpoch(column, timestampUnit);
 	}
 
 	private normalizeTimestampValue(value: unknown): number {

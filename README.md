@@ -185,6 +185,7 @@ type OHLCColumns = {
 };
 
 type OHLCResolution = `${number}${'s' | 'm' | 'h' | 'd'}`;
+type EpochUnit = 's' | 'ms' | 'us' | 'ns';
 
 type BinarySource = Blob | File | ArrayBuffer | Uint8Array;
 
@@ -198,11 +199,14 @@ type BinarySource = Blob | File | ArrayBuffer | Uint8Array;
 
   mainColumn: string;
   columnsSelect?: string[];
+  timestampUnit?: EpochUnit;          // raw numeric timestamp unit; auto-detected when omitted
 
   candlestick?: OHLCColumns | false;  // explicit map, or false to disable
   resolution?:  OHLCResolution;       // resampling bucket size
 }
 ```
+
+For numeric timestamp candidate columns (`_ts`, `ts`, `_t`, or `t`), the component infers the epoch unit from its magnitude. Set `timestampUnit` explicitly to override detection. If the magnitude is ambiguous, loading fails and requires an explicit unit. This applies equally to Parquet and Lastra sources; native DuckDB timestamp and date columns are unchanged.
 
 ## Lastra binary format
 
