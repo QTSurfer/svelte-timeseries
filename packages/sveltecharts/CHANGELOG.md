@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.13.0
+
+### Minor Changes
+
+- [`443f9fc`](https://github.com/QTSurfer/svelte-timeseries/commit/443f9fcec0225abad55ce945d75d536ae7825099) Thanks [@mrmx](https://github.com/mrmx)! - Support raw numeric epoch timestamp units per table.
+
 ## 0.10.1
 
 ### Patch Changes
