@@ -6,6 +6,7 @@ import {
 	type ISeriesApi,
 	type ISeriesMarkersPluginApi,
 	type LineData,
+	type WhitespaceData,
 	type CandlestickData,
 	type SeriesMarkerBarPosition,
 	type SeriesMarker,
@@ -15,6 +16,7 @@ import {
 } from 'lightweight-charts';
 import type {
 	ChartDataset,
+	ChartDataValue,
 	ChartDatasetFormatArray,
 	ChartDatasetFormatObject,
 	ChartDatasetFormatSimpleObject,
@@ -54,10 +56,11 @@ function getDecimalPrecision(value: number) {
 	return Math.max(0, Math.min(MAX_PRICE_PRECISION, significantDecimals - exponent));
 }
 
-export function getPricePrecision(values: number[]) {
+export function getPricePrecision(values: readonly ChartDataValue[]) {
 	let precision = DEFAULT_PRICE_PRECISION;
 
 	for (const value of values) {
+		if (value === null) continue;
 		precision = Math.max(precision, getDecimalPrecision(value));
 		if (precision >= MAX_PRICE_PRECISION) {
 			return MAX_PRICE_PRECISION;
@@ -126,6 +129,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	setCandlestickSeries(data: ChartDatasetFormatSimpleObject, dims: OHLCDimensions): this {
 		this._tsColumn = Object.keys(data)[0];
 		this.dataset = data;
+		this.yDimensions = [dims.open, dims.high, dims.low, dims.close];
+		this.yDimensionNames = [...this.yDimensions];
 		this._ohlcDims = dims;
 
 		// Remove existing candlestick series before recreating
@@ -203,6 +208,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this._dataDirty = false;
 
 		if (rebuildData) {
+			if (this._candlestickSeries && this._ohlcDims) {
+				this._candlestickSeries.setData(this.toCandlestickData(this._ohlcDims));
+			}
+
 			for (const dim of this.yDimensions) {
 				const series = this.series.get(dim);
 				if (!series) {
@@ -292,8 +301,35 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		return this.dataset[this._tsColumn]?.length ?? 0;
 	}
 
+	getLoadedDimensions(): string[] {
+		return [...this.yDimensions];
+	}
+
+	getActiveDimensions(): string[] {
+		return this.getLoadedDimensions();
+	}
+
+	updateDimension(data: ChartDatasetFormatSimpleObject, dimName: string) {
+		return this.updateDimensions(data, [dimName]);
+	}
+
+	updateDimensions(data: ChartDatasetFormatSimpleObject, dimNames: string[]) {
+		if (data[this._tsColumn]) {
+			this.dataset[this._tsColumn] = data[this._tsColumn];
+		}
+		for (const dimName of dimNames) {
+			if (data[dimName]) {
+				this.dataset[dimName] = data[dimName];
+			}
+		}
+		this._dataDirty = true;
+		return this.build();
+	}
+
 	getRangeValues(): [number, number] {
-		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const timestamps = (this.dataset[this._tsColumn] ?? []).filter(
+			(timestamp): timestamp is number => timestamp !== null
+		);
 		if (!timestamps.length) {
 			return [0, 0];
 		}
@@ -371,11 +407,11 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		}
 
 		const dataset: ChartDatasetFormatSimpleObject = {
-			[tsColumn]: data.map((row) => Number(row[tsColumn]))
+			[tsColumn]: data.map((row) => this.normalizeDataValue(row[tsColumn]))
 		};
 
 		for (const key of keys) {
-			dataset[key] = data.map((row) => Number(row[key]));
+			dataset[key] = data.map((row) => this.normalizeDataValue(row[key]));
 		}
 
 		return {
@@ -563,17 +599,25 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		const result: CandlestickData<Time>[] = [];
 
 		for (let i = 0; i < timestamps.length; i++) {
-			const t = this.toChartTime(timestamps[i]);
+			const timestamp = timestamps[i];
+			const open = opens[i];
+			const high = highs[i];
+			const low = lows[i];
+			const close = closes[i];
+			if (timestamp == null || open == null || high == null || low == null || close == null) {
+				continue;
+			}
+			const t = this.toChartTime(timestamp);
 			const tNum = t as number;
 			if (seen.has(tNum)) continue;
 			seen.add(tNum);
-			result.push({ time: t, open: opens[i], high: highs[i], low: lows[i], close: closes[i] });
+			result.push({ time: t, open, high, low, close });
 		}
 
 		return result;
 	}
 
-	private toLineData(dim: string): LineData<Time>[] {
+	private toLineData(dim: string): Array<LineData<Time> | WhitespaceData<Time>> {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const values = this.dataset[dim] ?? [];
 
@@ -582,14 +626,17 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		}
 
 		const seen = new Set<number>();
-		const result: LineData<Time>[] = [];
+		const result: Array<LineData<Time> | WhitespaceData<Time>> = [];
 
 		for (let i = 0; i < timestamps.length; i++) {
-			const t = this.toChartTime(timestamps[i]);
+			const timestamp = timestamps[i];
+			if (timestamp == null) continue;
+			const t = this.toChartTime(timestamp);
 			const tNum = t as number;
 			if (seen.has(tNum)) continue;
 			seen.add(tNum);
-			result.push({ time: t, value: values[i] });
+			const value = values[i];
+			result.push(value == null ? { time: t } : { time: t, value });
 		}
 
 		return result;
@@ -605,7 +652,9 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		}
 		this._timeRangeForced = true;
 
-		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const timestamps = (this.dataset[this._tsColumn] ?? []).filter(
+			(timestamp): timestamp is number => timestamp !== null
+		);
 		if (timestamps.length === 0) {
 			return;
 		}
@@ -629,6 +678,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 
 	private isPercentageDimension(dim: string) {
 		return !dim.startsWith('_') && dim.endsWith('%');
+	}
+
+	private normalizeDataValue(value: unknown): ChartDataValue {
+		return value == null ? null : Number(value);
 	}
 
 	private syncPriceScales() {

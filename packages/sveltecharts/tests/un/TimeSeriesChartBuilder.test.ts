@@ -57,6 +57,16 @@ describe('TimeSeriesChartBuilder', () => {
 			const result = builder.setDataset(data, ['Time', 'Price']);
 			expect(result).toBe(builder);
 		});
+
+		it('infers a non-standard timestamp key from direct datasets', () => {
+			builder.setDataset({
+				time: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			expect(builder.getDimensionKeys().x).toBe('time');
+			expect(builder.getRangeValues()).toEqual([1000, 3000]);
+		});
 	});
 
 	describe('setDataset — array format', () => {
@@ -238,6 +248,56 @@ describe('TimeSeriesChartBuilder', () => {
 			builder.addDimension({ ema: [99, 100] }, 'ema');
 			expect(echarts.setOption).toHaveBeenCalledTimes(2);
 		});
+
+		it('preserves existing series and markers after a window update', () => {
+			builder.setDataset({
+				_ts: [1000, 2000],
+				price: [100, 101]
+			});
+			builder.addMarkerPoint(1, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+
+			builder.updateDimensions({ _ts: [2000, 3000], price: [101, 102] }, ['price']);
+			builder.addDimension({ ema: [100, 101] }, 'ema');
+
+			const option = lastSetOptionCall(echarts)[0];
+			expect(option.dataset.source).toEqual({
+				_ts: [2000, 3000],
+				price: [101, 102],
+				ema: [100, 101]
+			});
+			expect(
+				option.series.find((series: any) => series.id === 'price').markPoint.data
+			).toHaveLength(1);
+			expect(option.series.find((series: any) => series.id === 'ema')).toBeDefined();
+			expect(builder.getLegendStatus()).toMatchObject({ price: true, ema: true });
+		});
+	});
+
+	describe('sparse dimensions', () => {
+		it('preserves null gaps while refreshing hidden loaded dimensions', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102],
+				ema: [null, null, 101]
+			});
+
+			builder.updateDimensions({ _ts: [2000, 3000], price: [101, 102], ema: [null, 101] }, [
+				'price',
+				'ema'
+			]);
+
+			const option = lastSetOptionCall(echarts)[0];
+			expect(option.dataset.source).toEqual({
+				_ts: [2000, 3000],
+				price: [101, 102],
+				ema: [null, 101]
+			});
+			expect(builder.getLoadedDimensions()).toEqual(['price', 'ema']);
+			expect(builder.getLegendStatus()).toEqual({ price: true, ema: false });
+
+			builder.toggleLegend('ema');
+			expect(builder.getLegendStatus().ema).toBe(true);
+		});
 	});
 
 	describe('fluent API — builder methods', () => {
@@ -379,6 +439,7 @@ describe('TimeSeriesChartBuilder', () => {
 		it('marks the candlestick legend entry as selected', () => {
 			builder.setCandlestickSeries(data, dims);
 			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
+			expect(builder.getLoadedDimensions()).toEqual(['open', 'high', 'low', 'close']);
 		});
 
 		it('sets dataset.dimensions in the [_ts, O, H, L, C] order', () => {
@@ -394,6 +455,40 @@ describe('TimeSeriesChartBuilder', () => {
 			const opts = lastSetOptionCall(echarts)[0];
 			const candles = opts.series.filter((s: any) => s.id === 'candlestick');
 			expect(candles).toHaveLength(1);
+		});
+
+		it('updates candle data in place without changing its legend state', () => {
+			builder.setCandlestickSeries(
+				{
+					_ts: [...data._ts],
+					open: [...data.open],
+					high: [...data.high],
+					low: [...data.low],
+					close: [...data.close]
+				},
+				dims
+			);
+			builder.updateDimensions(
+				{
+					_ts: [2000, 3000],
+					open: [201, 202],
+					high: [206, 207],
+					low: [200, 201],
+					close: [205, 206]
+				},
+				['open', 'high', 'low', 'close']
+			);
+
+			const opts = lastSetOptionCall(echarts)[0];
+			expect(opts.dataset.source).toEqual({
+				_ts: [2000, 3000],
+				open: [201, 202],
+				high: [206, 207],
+				low: [200, 201],
+				close: [205, 206]
+			});
+			expect(opts.series.filter((series: any) => series.id === 'candlestick')).toHaveLength(1);
+			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
 		});
 
 		it('exposes correct row count and range after rendering', () => {

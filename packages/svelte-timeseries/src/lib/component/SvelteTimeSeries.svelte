@@ -35,7 +35,6 @@
 		time: number;
 		matrix: number[];
 	};
-
 	let {
 		table,
 		markers,
@@ -126,6 +125,13 @@
 		await loadChart(timeSeriesBuilder);
 	};
 
+	const onDataZoom = ({ start, end }: { start: number; end: number }) => {
+		if (!timeSeriesFacade) return;
+		void timeSeriesFacade.onViewportPercentageChange(start, end).catch((error) => {
+			if (debug) console.error('Failed to reload the chart viewport.', error);
+		});
+	};
+
 	const onLoadLightweight = async (chartInstance: LightweightChartApi) => {
 		const timeSeriesBuilder = new LightweightTimeSeriesChartBuilder(chartInstance, {
 			externalManagerLegend
@@ -180,7 +186,7 @@
 		{#if chartLibrary === 'lightweight'}
 			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
 		{:else}
-			<SVECharts onLoad={onLoadECharts} {loading} {isDark} />
+			<SVECharts onLoad={onLoadECharts} {onDataZoom} {loading} {isDark} />
 		{/if}
 	</div>
 	{#if loading}

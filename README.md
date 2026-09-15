@@ -173,6 +173,10 @@ const tables = {
 Valid examples: `'15s'`, `'1m'`, `'5m'`, `'15m'`, `'1h'`, `'4h'`, `'1d'`.
 
 When `resolution` is set, DuckDB computes `open = FIRST`, `high = MAX`, `low = MIN`, `close = LAST` for each bucket.
+Viewport reloads aggregate the complete source bucket even when a visible boundary falls inside it,
+so retained candles keep the same OHLC values at every zoom level. When the viewport exceeds the
+configured point budget, complete candles are sampled deterministically across the requested interval.
+Additional loaded dimensions use their last value in each retained bucket.
 
 ### TableData reference
 
@@ -407,6 +411,10 @@ Key implementations (`src/lib/duckdb/DuckDB.ts`):
 - `getSingleDimension` normalizes timestamps (ms) and returns Arrow arrays ready for any chart builder.
 - `buildTablesAndSchemas` auto-detects types (casts `%` columns to `DOUBLE`, skips helper fields, builds the `markers` view).
 - `transformTableToMatrix` converts Arrow results into `[rows, columns]` matrices consumable by any UI.
+
+Viewport reloads treat `maxPoints` as a sampling budget rather than a prefix limit. When a window exceeds the budget, DuckDB selects uniformly distributed rows across the full interval, preserving the first and last rows for budgets above one. A one-point budget selects the middle row. This deterministic policy keeps every requested column aligned, but it does not guarantee that intermediate extrema are retained. Initial loading still reads the complete primary series.
+
+Viewport conversion resolves Arrow vectors once per column, including across record batches. It retains materialized queries on the shared DuckDB connection rather than adding streaming without query-lifecycle coordination. With `maxPoints`, the returned Arrow data and chart arrays are bounded by that budget; without it, both contain the full window. DuckDB's internal query working memory is not bounded by this output budget.
 
 ### 4. TimeSeriesChartBuilder
 

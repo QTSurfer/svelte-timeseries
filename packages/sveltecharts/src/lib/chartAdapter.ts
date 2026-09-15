@@ -1,4 +1,5 @@
-export type ChartDatasetFormatSimpleObject = Record<string, number[]>;
+export type ChartDataValue = number | null;
+export type ChartDatasetFormatSimpleObject = Record<string, ChartDataValue[]>;
 export type ChartDatasetFormatObject = Record<string, any>[];
 export type ChartDatasetFormatArray = number[][];
 
@@ -42,4 +43,9 @@ export interface TimeSeriesChartAdapter {
 	getTotalRows(): number;
 	toggleMarkers(id: number, dimName: string, shape: string): this;
 	clearMarkers(): this;
+	getLoadedDimensions?(): string[];
+	getActiveDimensions(): string[];
+	updateDimension(data: ChartDatasetFormatSimpleObject, dimName: string): this;
+	updateDimensions?(data: ChartDatasetFormatSimpleObject, dimNames: string[]): this;
+	setDataRange?(start: number, end: number): this;
 }

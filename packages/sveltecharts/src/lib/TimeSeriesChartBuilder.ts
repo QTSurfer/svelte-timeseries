@@ -48,7 +48,7 @@ type MarkerPointOption = {
 	symbolSize: number;
 };
 
-type DatasetFormatSimpleObject = Record<string, number[]>;
+type DatasetFormatSimpleObject = ChartDatasetFormatSimpleObject;
 type DatasetFormatObject = Record<string, any>[];
 type DatasetFormatArray = number[][];
 
@@ -348,10 +348,12 @@ export class TimeSeriesChartBuilder {
 		if (!ts.length) return 0;
 
 		let closest = 0;
-		let minDiff = Math.abs(ts[0] - timestamp);
+		let minDiff = Number.POSITIVE_INFINITY;
 
-		for (let i = 1; i < ts.length; i++) {
-			const diff = Math.abs(ts[i] - timestamp);
+		for (let i = 0; i < ts.length; i++) {
+			const value = ts[i];
+			if (value === null) continue;
+			const diff = Math.abs(value - timestamp);
 			if (diff < minDiff) {
 				minDiff = diff;
 				closest = i;
@@ -800,6 +802,7 @@ export class TimeSeriesChartBuilder {
 			if (!seriesDimension) throw new Error(`Dimension ${data.dimName} not found`);
 
 			let value = this.searchValueByDimensionKeyAndTimestamp(data.dimName, data.timestamp);
+			if (value == null) return this;
 
 			/**
 			 * Creates a data point for the marker
@@ -975,9 +978,50 @@ export class TimeSeriesChartBuilder {
 		}
 	}
 
-	private isSimpleObject(
-		s: DatasetFormatArray | DatasetFormatObject | DatasetFormatSimpleObject
-	): s is DatasetFormatSimpleObject {
+	getLoadedDimensions(): string[] {
+		return [...this.yDimensions];
+	}
+
+	getActiveDimensions(): string[] {
+		return this.getLoadedDimensions();
+	}
+
+	updateDimension(data: DatasetFormatSimpleObject, dimName: string) {
+		return this.updateDimensions(data, [dimName]);
+	}
+
+	updateDimensions(data: DatasetFormatSimpleObject, dimNames: string[]) {
+		const dataset = this.option.dataset;
+		if (!dataset || Array.isArray(dataset) || !this.isSimpleObject(dataset.source)) return this;
+
+		const source = dataset.source;
+
+		if (data[this._tsColumn]) {
+			source[this._tsColumn] = data[this._tsColumn];
+		}
+		for (const dimName of dimNames) {
+			if (data[dimName]) {
+				source[dimName] = data[dimName];
+			}
+		}
+
+		this.build();
+		return this;
+	}
+
+	setDataRange(start: number, end: number) {
+		const xAxis = this.option.xAxis;
+		if (Array.isArray(xAxis)) {
+			this.option.xAxis = xAxis.map((axis, index) =>
+				index === 0 ? { ...axis, min: start, max: end } : axis
+			);
+		} else {
+			this.option.xAxis = { ...xAxis, min: start, max: end };
+		}
+		return this.build();
+	}
+
+	private isSimpleObject(s: unknown): s is DatasetFormatSimpleObject {
 		return !Array.isArray(s) && typeof s === 'object' && s !== null;
 	}
 
@@ -1034,7 +1078,9 @@ export class TimeSeriesChartBuilder {
 		if (this.isSimpleObject(source)) {
 			const col = source[this._tsColumn];
 			if (!col?.length) return [0, 0];
-			return [col[0], col[col.length - 1]];
+			const timestamps = col.filter((timestamp): timestamp is number => timestamp !== null);
+			if (!timestamps.length) return [0, 0];
+			return [timestamps[0], timestamps[timestamps.length - 1]];
 		}
 
 		return [0, 0];

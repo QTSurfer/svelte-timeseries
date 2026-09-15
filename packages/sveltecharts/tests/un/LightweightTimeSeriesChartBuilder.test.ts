@@ -3,6 +3,7 @@ import {
 	LightweightTimeSeriesChartBuilder,
 	formatPreciseValue
 } from '../../src/lib/LightweightTimeSeriesChartBuilder';
+import { createSeriesMarkers } from 'lightweight-charts';
 
 function createMockSeries() {
 	return {
@@ -15,6 +16,7 @@ function createMockChart() {
 	const visibleLogicalRange = { from: 0, to: 10 };
 	const timeScale = {
 		getVisibleLogicalRange: vi.fn(() => visibleLogicalRange),
+		getVisibleRange: vi.fn(() => ({ from: 1, to: 3 })),
 		setVisibleLogicalRange: vi.fn(),
 		setVisibleRange: vi.fn(),
 		fitContent: vi.fn()
@@ -42,6 +44,7 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 	let builder: LightweightTimeSeriesChartBuilder;
 
 	beforeEach(() => {
+		vi.clearAllMocks();
 		chart = createMockChart();
 		builder = new LightweightTimeSeriesChartBuilder(chart as never);
 	});
@@ -56,6 +59,20 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		expect(chart.addSeries).toHaveBeenCalledTimes(1);
 		expect(builder.getRangeValues()).toEqual([1000, 3000]);
 		expect(builder.getLegendStatus()).toEqual({ price: true });
+	});
+
+	it('infers a non-standard timestamp key from direct datasets', () => {
+		builder.setDataset({
+			time: [1000, 2000, 3000],
+			price: [100, 101, 102]
+		});
+
+		expect(builder.getRangeValues()).toEqual([1000, 3000]);
+		expect(chart.addSeries.mock.results[0].value.setData).toHaveBeenCalledWith([
+			{ time: 1, value: 100 },
+			{ time: 2, value: 101 },
+			{ time: 3, value: 102 }
+		]);
 	});
 
 	it('configures price precision for very small values', () => {
@@ -92,6 +109,50 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 
 		expect(chart.addSeries).toHaveBeenCalledTimes(2);
 		expect(builder.getLegendStatus()).toEqual({ price: true, ema: true });
+	});
+
+	it('renders null values as gaps and keeps hidden dimensions loaded', () => {
+		builder.setDataset({
+			_ts: [1000, 2000, 3000],
+			price: [100, 101, 102],
+			ema: [null, null, 101]
+		});
+		const emaSeries = chart.addSeries.mock.results[1].value;
+
+		builder.updateDimensions({ _ts: [2000, 3000], price: [101, 102], ema: [null, 101] }, [
+			'price',
+			'ema'
+		]);
+
+		expect(builder.getLoadedDimensions()).toEqual(['price', 'ema']);
+		expect(builder.getLegendStatus()).toEqual({ price: true, ema: false });
+		expect(emaSeries.setData).toHaveBeenLastCalledWith([{ time: 2 }, { time: 3, value: 101 }]);
+
+		builder.toggleLegend('ema');
+		expect(builder.getLegendStatus().ema).toBe(true);
+		expect(emaSeries.applyOptions).toHaveBeenLastCalledWith({ visible: true });
+	});
+
+	it('preserves visibility and markers when adding a dimension after a window update', () => {
+		builder.setDataset({
+			_ts: [1000, 2000],
+			price: [100, 101]
+		});
+		builder.addMarkerPoint(1, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+		const markersPlugin = vi.mocked(createSeriesMarkers).mock.results[0].value;
+		builder.toggleLegend('price');
+
+		builder.updateDimensions({ _ts: [2000, 3000], price: [101, 102] }, ['price']);
+		builder.addDimension({ ema: [100, 101] }, 'ema');
+
+		expect(chart.addSeries).toHaveBeenCalledTimes(2);
+		expect(chart.removeSeries).not.toHaveBeenCalled();
+		expect(builder.getRangeValues()).toEqual([2000, 3000]);
+		expect(builder.getLegendStatus()).toEqual({ price: false, ema: true });
+		expect(createSeriesMarkers).toHaveBeenCalledTimes(2);
+		expect(markersPlugin.setMarkers).toHaveBeenLastCalledWith([
+			expect.objectContaining({ text: 'Buy' })
+		]);
 	});
 
 	it('toggles series visibility', () => {
@@ -153,6 +214,27 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		it('marks Candlestick as selected in the legend', () => {
 			builder.setCandlestickSeries(data, dims);
 			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
+			expect(builder.getLoadedDimensions()).toEqual(['open', 'high', 'low', 'close']);
+		});
+
+		it('skips incomplete candles instead of converting nulls to zero', () => {
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+
+			builder.setCandlestickSeries(
+				{
+					_ts: [1000, 2000],
+					open: [null, 101],
+					high: [105, 106],
+					low: [99, 100],
+					close: [104, 105]
+				},
+				dims
+			);
+
+			expect(candleSeries.setData).toHaveBeenLastCalledWith([
+				{ time: 2, open: 101, high: 106, low: 100, close: 105 }
+			]);
 		});
 
 		it('removes the previous candlestick before adding a new one on rebuild', () => {
@@ -162,6 +244,32 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 			// First call: add 1 candle. Second call: removeSeries on the old one, then add a new one.
 			expect(chart.removeSeries).toHaveBeenCalledTimes(1);
 			expect(chart.addSeries).toHaveBeenCalledTimes(2);
+		});
+
+		it('updates the existing candlestick series during viewport reloads', () => {
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+			builder.setCandlestickSeries(data, dims);
+
+			builder.updateDimensions(
+				{
+					_ts: [2000, 3000],
+					open: [201, 202],
+					high: [206, 207],
+					low: [200, 201],
+					close: [205, 206]
+				},
+				['open', 'high', 'low', 'close']
+			);
+
+			expect(candleSeries.setData).toHaveBeenLastCalledWith([
+				{ time: 2, open: 201, high: 206, low: 200, close: 205 },
+				{ time: 3, open: 202, high: 207, low: 201, close: 206 }
+			]);
+			expect(chart.addSeries).toHaveBeenCalledTimes(1);
+			expect(chart.removeSeries).not.toHaveBeenCalled();
+			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
+			expect(chart.timeScale().setVisibleLogicalRange).toHaveBeenCalledWith({ from: 0, to: 10 });
 		});
 
 		it('does not crash when addDimension is called after setCandlestickSeries (regression)', () => {

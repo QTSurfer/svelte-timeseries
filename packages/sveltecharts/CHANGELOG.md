@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.14.0
+
+### Minor Changes
+
+- Preserve sparse gaps and refresh candles during viewport updates.
+
 ## 0.13.0
 
 ### Minor Changes
