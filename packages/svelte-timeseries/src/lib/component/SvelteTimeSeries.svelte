@@ -75,6 +75,7 @@
 
 	let columns = $state<Columns>([]);
 	let matrix = $state([0, 0]);
+	let visibleRows = $state(0);
 	let markersData = $state<MarkersTable[]>([]);
 	let loadToken = 0;
 
@@ -113,6 +114,7 @@
 		if (newMarkers) markersData = newMarkers;
 		columns = facade.getColumns(currentTable);
 		matrix = facade.describe();
+		visibleRows = matrix[1];
 		timer.end = performance.now();
 		loading = false;
 		onFacadeReady?.(facade);
@@ -127,9 +129,14 @@
 
 	const onDataZoom = ({ start, end }: { start: number; end: number }) => {
 		if (!timeSeriesFacade) return;
-		void timeSeriesFacade.onViewportPercentageChange(start, end).catch((error) => {
-			if (debug) console.error('Failed to reload the chart viewport.', error);
-		});
+		void timeSeriesFacade
+			.onViewportPercentageChange(start, end)
+			.then(() => {
+				visibleRows = timeSeriesFacade?.describe()[1] ?? visibleRows;
+			})
+			.catch((error) => {
+				if (debug) console.error('Failed to reload the chart viewport.', error);
+			});
 	};
 
 	const onLoadLightweight = async (chartInstance: LightweightChartApi) => {
@@ -161,7 +168,7 @@
 	);
 </script>
 
-<div id="svelte-timeseries" class={containerClass}>
+<div id="svelte-timeseries" class={containerClass} data-visible-rows={visibleRows}>
 	<div class={snippetClass}>
 		{#if performanceTimer}
 			{@render performanceSnippet?.({ time: performanceTimer, matrix })}
