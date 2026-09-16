@@ -1,5 +1,14 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.14.1
+
+### Patch Changes
+
+- Fix sparse-line rendering and keep the viewport overview stable.
+
+- Updated dependencies []:
+  - @qtsurfer/sveltecharts@0.14.1
+
 ## 0.14.0
 
 ### Minor Changes

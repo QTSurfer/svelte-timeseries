@@ -31,11 +31,13 @@
     "publish": "pnpm -r publish --access public --no-git-checks",
     "publish:dry": "pnpm -r publish --access public --no-git-checks --dry-run",
     "spellcheck": "cspell --no-progress \"packages/**/src/**/*.{ts,svelte,js,md}\"",
-    "test": "pnpm -r --filter=./packages/* test"
+    "test": "pnpm -r --filter=./packages/* test",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",
     "@changesets/cli": "^2.30.0",
+    "@playwright/test": "1.61.1",
     "cspell": "^9.7.0",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.8.1",

@@ -462,6 +462,7 @@ pnpm ci:install
 pnpm dev --filter svelte-timeseries
 ```
 
+- Run `pnpm test:e2e` for Chromium screenshot regressions of the primary line and zoom overview. Install the browser with `pnpm exec playwright install chromium` first. Screenshots are platform-specific; update them on macOS with `pnpm test:e2e --update-snapshots` after reviewing visual changes.
 - Sample Parquet files live in `packages/svelte-timeseries/static`. Adjust the demo `baseUrl` when publishing behind a CDN.
 - Useful debugging helpers in `DuckDB.ts`: `closeConnection`, `getRangeData`, `getMarkers`.
 - Pass `debug={true}` to measure real load times per browser.

@@ -86,6 +86,7 @@ export class TimeSeriesChartBuilder {
 	private yDimensionNames?: string[];
 	private _tsColumn: string = '_ts';
 	private _ohlcDims: OHLCDimensions | null = null;
+	private overviewPaletteAdjusted = false;
 
 	constructor(instance: ECharts, builderConfig?: ConfigBuilder) {
 		this.ECharts = instance;
@@ -503,7 +504,57 @@ export class TimeSeriesChartBuilder {
 			this.option.dataset.source = data;
 		}
 
+		this.setOverviewSeries(data);
 		this.createSeriesData(this._tsColumn, timeDimensionName);
+	}
+
+	private setOverviewSeries(data: DatasetFormatSimpleObject) {
+		const timestamps = data[this._tsColumn] ?? [];
+		const values = data[this.yDimensions[0]] ?? [];
+		const points: [number, number][] = [];
+		const stride = Math.max(1, Math.ceil(timestamps.length / 2000));
+		for (let index = 0; index < timestamps.length; index += stride) {
+			const timestamp = timestamps[index];
+			const value = values[index];
+			if (typeof timestamp === 'number' && typeof value === 'number') {
+				points.push([timestamp, value]);
+			}
+		}
+		const lastIndex = timestamps.length - 1;
+		if (
+			lastIndex >= 0 &&
+			typeof timestamps[lastIndex] === 'number' &&
+			typeof values[lastIndex] === 'number' &&
+			points[points.length - 1]?.[0] !== timestamps[lastIndex]
+		) {
+			points.push([timestamps[lastIndex] as number, values[lastIndex] as number]);
+		}
+
+		const series = this.option.series as SeriesOption[];
+		const existing = series.findIndex((item) => item.id === '__overview');
+		if (existing >= 0) series.splice(existing, 1);
+		if (points.length < 2) return;
+
+		series.unshift({
+			id: '__overview',
+			type: 'line',
+			data: points,
+			showSymbol: false,
+			silent: true,
+			tooltip: { show: false },
+			lineStyle: { opacity: 0 },
+			itemStyle: { opacity: 0 },
+			animation: false,
+			sampling: 'minmax'
+		});
+	}
+
+	private lineSampling(dimension: string): 'lttb' | 'minmax' {
+		const dataset = this.option.dataset;
+		if (!dataset || Array.isArray(dataset) || !this.isSimpleObject(dataset.source)) {
+			return 'lttb';
+		}
+		return dataset.source[dimension]?.some((value) => value == null) ? 'minmax' : 'lttb';
 	}
 
 	addDimension(data: DatasetFormatSimpleObject, dimName: string) {
@@ -550,7 +601,7 @@ export class TimeSeriesChartBuilder {
 			},
 			connectNulls: false,
 			smooth: false,
-			sampling: 'lttb',
+			sampling: this.lineSampling(dim),
 			showSymbol: false,
 			progressive: 4000,
 			progressiveThreshold: 3000,
@@ -951,6 +1002,18 @@ export class TimeSeriesChartBuilder {
 			notMerge: false,
 			replaceMerge: ['dataset']
 		});
+		if (
+			!this.overviewPaletteAdjusted &&
+			Array.isArray(this.option.series) &&
+			this.option.series.some((series) => series.id === '__overview')
+		) {
+			const palette = this.option.color ?? this.ECharts.getOption()?.color;
+			if (Array.isArray(palette) && palette.length) {
+				this.option.color = [palette[0], ...palette];
+				this.ECharts.setOption({ color: this.option.color });
+				this.overviewPaletteAdjusted = true;
+			}
+		}
 
 		return this;
 	}
@@ -1002,6 +1065,8 @@ export class TimeSeriesChartBuilder {
 		for (const dimName of dimNames) {
 			if (data[dimName]) {
 				source[dimName] = data[dimName];
+				const series = (this.option.series as SeriesOption[]).find((item) => item.id === dimName);
+				if (series?.type === 'line') series.sampling = this.lineSampling(dimName);
 			}
 		}
 

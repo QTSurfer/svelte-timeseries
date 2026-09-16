@@ -38,3 +38,5 @@ build/
 # 
 playgrounds/dev
 internal/
+playwright-report/
+test-results/

@@ -36,6 +36,38 @@ describe('TimeSeriesChartBuilder', () => {
 	});
 
 	describe('setDataset — simple object format', () => {
+		it('preserves the chart palette when adding the hidden overview', () => {
+			(echarts.getOption as ReturnType<typeof vi.fn>).mockReturnValue({
+				dataZoom: [{ start: 45, end: 55 }],
+				color: ['blue', 'green']
+			});
+			builder.setDataset({ _ts: [1000, 2000], price: [10, 20] });
+
+			expect(lastSetOptionCall(echarts)[0]).toEqual({ color: ['blue', 'blue', 'green'] });
+		});
+
+		it('uses a sparse-safe sampler and retains a full-range overview', () => {
+			builder.setDataset({ _ts: [1000, 2000, 3000], price: [10, null, 30] });
+
+			const [overview, price] = (lastSetOptionCall(echarts)[0] as { series: any[] }).series;
+			expect(overview.id).toBe('__overview');
+			expect(overview.data).toEqual([
+				[1000, 10],
+				[3000, 30]
+			]);
+			expect(price.sampling).toBe('minmax');
+		});
+
+		it('updates sampling when a loaded dimension becomes sparse', () => {
+			builder.setDataset({ _ts: [1000, 2000, 3000], price: [10, 20, 30] });
+			expect((lastSetOptionCall(echarts)[0] as { series: any[] }).series[1].sampling).toBe('lttb');
+
+			builder.updateDimensions({ _ts: [1000, 2000, 3000], price: [10, null, 30] }, ['price']);
+			expect((lastSetOptionCall(echarts)[0] as { series: any[] }).series[1].sampling).toBe(
+				'minmax'
+			);
+		});
+
 		it('accepts Record<string, number[]> and builds chart', () => {
 			const data = {
 				_ts: [1000, 2000, 3000],

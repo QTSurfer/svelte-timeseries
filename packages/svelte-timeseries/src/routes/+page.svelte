@@ -163,8 +163,7 @@
 				customError = 'No plottable columns were found in the file.';
 			}
 		} catch (error) {
-			customError =
-				error instanceof Error ? error.message : 'The file could not be inspected.';
+			customError = error instanceof Error ? error.message : 'The file could not be inspected.';
 		} finally {
 			await duckDb?.closeConnection();
 			inspectingCustomFile = false;
