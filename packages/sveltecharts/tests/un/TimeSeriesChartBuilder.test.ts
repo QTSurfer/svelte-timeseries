@@ -36,6 +36,22 @@ describe('TimeSeriesChartBuilder', () => {
 	});
 
 	describe('setDataset — simple object format', () => {
+		it('formats small values on the axis, tooltip, and series labels', () => {
+			builder.setDataset({ _ts: [1000, 2000], price: [0, 0.0000024675805] });
+			const option = lastSetOptionCall(echarts)[0] as {
+				yAxis: { axisLabel: { formatter: (value: number) => string } }[];
+				tooltip: { valueFormatter: (value: number) => string };
+				series: { id: string; label: { formatter: (params: unknown) => string } }[];
+			};
+			const price = option.series.find((series) => series.id === 'price')!;
+
+			expect(option.yAxis[0].axisLabel.formatter(0.0000024675805)).toBe('0.0000024675805');
+			expect(option.tooltip.valueFormatter(0.0000024675805)).toBe('0.0000024675805');
+			expect(price.label.formatter({ seriesId: 'price', data: { price: 0 } })).toBe('0');
+			expect(price.label.formatter({ seriesId: 'price', data: { price: 0.0000024675805 } })).toBe(
+				'0.0000024675805'
+			);
+		});
 		it('preserves the chart palette when adding the hidden overview', () => {
 			(echarts.getOption as ReturnType<typeof vi.fn>).mockReturnValue({
 				dataZoom: [{ start: 45, end: 55 }],

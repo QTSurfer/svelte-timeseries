@@ -24,6 +24,8 @@ import type {
 	OHLCDimensions,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
+import { getPricePrecision } from './pricePrecision';
+export { getPricePrecision, formatPreciseValue } from './pricePrecision';
 
 type ConfigBuilder = {
 	externalManagerLegend?: boolean;
@@ -41,48 +43,6 @@ type MarkerState = {
 };
 
 const SERIES_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#d97706', '#0891b2'];
-const DEFAULT_PRICE_PRECISION = 2;
-const MAX_PRICE_PRECISION = 12;
-
-function getDecimalPrecision(value: number) {
-	if (!Number.isFinite(value) || value === 0) {
-		return 0;
-	}
-
-	const [mantissa, exponentValue] = Math.abs(value).toExponential(MAX_PRICE_PRECISION).split('e');
-	const exponent = Number(exponentValue);
-	const significantDecimals = (mantissa.split('.')[1] ?? '').replace(/0+$/, '').length;
-
-	return Math.max(0, Math.min(MAX_PRICE_PRECISION, significantDecimals - exponent));
-}
-
-export function getPricePrecision(values: readonly ChartDataValue[]) {
-	let precision = DEFAULT_PRICE_PRECISION;
-
-	for (const value of values) {
-		if (value === null) continue;
-		precision = Math.max(precision, getDecimalPrecision(value));
-		if (precision >= MAX_PRICE_PRECISION) {
-			return MAX_PRICE_PRECISION;
-		}
-	}
-
-	return precision;
-}
-
-export function formatPreciseValue(value: number) {
-	if (!Number.isFinite(value)) {
-		return String(value);
-	}
-
-	const precision = getDecimalPrecision(value);
-	if (precision === 0) {
-		return value.toString();
-	}
-
-	return value.toFixed(precision).replace(/\.?0+$/, '');
-}
-
 export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	public LightweightChart: IChartApi;
 	private builderConfig: ConfigBuilder = {
@@ -94,6 +54,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	private _tsColumn = '_ts';
 	private selected: Record<string, boolean> = {};
 	private series = new Map<string, ISeriesApi<'Line', Time>>();
+	private pricePrecisions = new Map<string, number>();
 	private _candlestickSeries: ISeriesApi<'Candlestick', Time> | null = null;
 	private _ohlcDims: OHLCDimensions | null = null;
 	private markersPlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
@@ -218,6 +179,13 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 					continue;
 				}
 				const lineData = this.toLineData(dim);
+				const precision = getPricePrecision(this.dataset[dim] ?? []);
+				if (precision !== this.pricePrecisions.get(dim)) {
+					series.applyOptions({
+						priceFormat: { type: 'price', precision, minMove: 10 ** -precision }
+					});
+					this.pricePrecisions.set(dim, precision);
+				}
 				series.setData(lineData);
 				series.applyOptions({ visible: this.selected[dim] ?? false });
 			}
@@ -498,6 +466,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		});
 
 		this.series.set(dim, series);
+		this.pricePrecisions.set(dim, pricePrecision);
 		this.selected[dim] = isSelected;
 		this.markersPlugins.set(dim, createSeriesMarkers(series, []));
 	}
@@ -582,6 +551,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		}
 
 		this.series.clear();
+		this.pricePrecisions.clear();
 		this.markersPlugins.clear();
 		this.markers.clear();
 		this._timeRangeForced = false;

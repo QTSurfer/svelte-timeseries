@@ -50,6 +50,7 @@
 - **Lazy dimensions**: additional columns download only when the user toggles them on.
 - **Native markers**: trading signals, alerts, or annotations rendered with custom icons and colors.
 - **Dual chart backends**: switch between ECharts and TradingView Lightweight Charts with `chartLibrary="lightweight"`.
+- **Adaptive decimal precision**: show micro-priced values without rounding them to zero, up to 30 decimal places.
 - **Replaceable panels**: default column/performance panels can be swapped with your own snippets.
 - **Debug mode**: detailed DuckDB/chart logs to diagnose cross-browser performance.
 

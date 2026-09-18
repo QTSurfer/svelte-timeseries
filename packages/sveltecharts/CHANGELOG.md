@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.14.2
+
+### Patch Changes
+
+- Display the decimal precision of small time-series values.
+
 ## 0.14.1
 
 ### Patch Changes

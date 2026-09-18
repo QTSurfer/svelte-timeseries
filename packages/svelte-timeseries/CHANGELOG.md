@@ -1,5 +1,14 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.14.2
+
+### Patch Changes
+
+- Display the decimal precision of small time-series values.
+
+- Updated dependencies []:
+  - @qtsurfer/sveltecharts@0.14.2
+
 ## 0.14.1
 
 ### Patch Changes

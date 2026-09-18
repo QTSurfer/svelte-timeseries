@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	LightweightTimeSeriesChartBuilder,
-	formatPreciseValue
+	formatPreciseValue,
+	getPricePrecision
 } from '../../src/lib/LightweightTimeSeriesChartBuilder';
 import { createSeriesMarkers } from 'lightweight-charts';
 
@@ -92,6 +93,33 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 			})
 		);
 		expect(formatPreciseValue(0.00000385)).toBe('0.00000385');
+	});
+
+	it('preserves precision for micro-priced tokens and smaller values', () => {
+		expect(getPricePrecision([null, 0.0000024675805])).toBe(13);
+		expect(formatPreciseValue(0.0000024675805)).toBe('0.0000024675805');
+		expect(formatPreciseValue(1.2e-18)).toBe('0.0000000000000000012');
+		expect(formatPreciseValue(0)).toBe('0');
+		expect(formatPreciseValue(100.25)).toBe('100.25');
+
+		builder.setDataset({ _ts: [1000, 2000], price: [0.0000024675805, 1.2e-18] });
+		expect(chart.addSeries).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				priceFormat: { type: 'price', precision: 19, minMove: 1e-19 }
+			})
+		);
+	});
+
+	it('updates precision when a new viewport contains smaller values', () => {
+		builder.setDataset({ _ts: [1000, 2000], price: [1, 2] });
+		const priceSeries = chart.addSeries.mock.results[0].value;
+
+		builder.updateDimension({ _ts: [3000, 4000], price: [0.0000024675805, null] }, 'price');
+
+		expect(priceSeries.applyOptions).toHaveBeenCalledWith({
+			priceFormat: { type: 'price', precision: 13, minMove: 1e-13 }
+		});
 	});
 
 	it('adds dimensions incrementally and marks them as visible', () => {

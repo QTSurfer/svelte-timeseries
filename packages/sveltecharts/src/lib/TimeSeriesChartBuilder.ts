@@ -14,6 +14,7 @@ import type {
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
 import type { MarkPointDataItemOption } from 'echarts/types/src/component/marker/MarkPointModel.js';
+import { formatPreciseValue } from './pricePrecision';
 
 type IconType =
 	| 'circle'
@@ -137,7 +138,9 @@ export class TimeSeriesChartBuilder {
 
 		this.option.tooltip = {
 			trigger: 'axis',
-			axisPointer: { type: 'cross' }
+			axisPointer: { type: 'cross' },
+			valueFormatter: (value) =>
+				typeof value === 'number' ? formatPreciseValue(value) : String(value)
 		};
 
 		this.option.xAxis = {
@@ -156,7 +159,8 @@ export class TimeSeriesChartBuilder {
 				type: 'value',
 				scale: true,
 				splitLine: { show: false },
-				axisLine: { show: true, lineStyle: { type: 'dashed' } }
+				axisLine: { show: true, lineStyle: { type: 'dashed' } },
+				axisLabel: { formatter: formatPreciseValue }
 			},
 			{
 				type: 'value',
@@ -164,7 +168,7 @@ export class TimeSeriesChartBuilder {
 				splitLine: { show: false },
 				axisLine: { show: true, lineStyle: { type: 'dashed' } },
 				axisLabel: {
-					formatter: (value) => `${value.toFixed(2)}%`
+					formatter: (value) => `${formatPreciseValue(value)}%`
 				},
 				name: '%'
 			}
@@ -585,6 +589,7 @@ export class TimeSeriesChartBuilder {
 		const percentageFields = this.detectPercentageFields();
 
 		const isPercentage = percentageFields.includes(dim);
+		const valueIndex = this.yDimensions.indexOf(dim) + 1;
 		const selected = this.getColumnsSelected();
 		Object.assign(selected, { [dimName]: isSelected });
 
@@ -623,13 +628,12 @@ export class TimeSeriesChartBuilder {
 					if (!params.seriesId || !params.data) return '';
 					const value = params.data as Record<string, any>;
 
-					if (value[params.seriesId]) {
-						return `${value[params.seriesId].toFixed(2)}${isPercentage ? '%' : ''}`;
+					if (typeof value[params.seriesId] === 'number') {
+						return `${formatPreciseValue(value[params.seriesId])}${isPercentage ? '%' : ''}`;
 					}
 
-					const idx = params.componentIndex + 1;
-					if (value[idx]) {
-						return `${value[idx].toFixed(2)}${isPercentage ? '%' : ''}`;
+					if (typeof value[valueIndex] === 'number') {
+						return `${formatPreciseValue(value[valueIndex])}${isPercentage ? '%' : ''}`;
 					}
 					return '-';
 				}
@@ -875,8 +879,8 @@ export class TimeSeriesChartBuilder {
 						offset: [0, 30],
 						formatter:
 							data.name && Number(data.name)
-								? Number(data.name).toFixed(2)
-								: (data.name ?? value.toFixed(2)),
+								? formatPreciseValue(Number(data.name))
+								: (data.name ?? formatPreciseValue(value)),
 						fontSize: 12,
 						fontWeight: 'bold',
 						color: 'white',
