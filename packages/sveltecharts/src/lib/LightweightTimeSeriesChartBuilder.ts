@@ -55,6 +55,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	private selected: Record<string, boolean> = {};
 	private series = new Map<string, ISeriesApi<'Line', Time>>();
 	private pricePrecisions = new Map<string, number>();
+	private candlestickPrecision: number | null = null;
 	private _candlestickSeries: ISeriesApi<'Candlestick', Time> | null = null;
 	private _ohlcDims: OHLCDimensions | null = null;
 	private markersPlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
@@ -105,8 +106,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			downColor: '#ef5350',
 			borderVisible: false,
 			wickUpColor: '#26a69a',
-			wickDownColor: '#ef5350'
+			wickDownColor: '#ef5350',
+			priceFormat: this.getCandlestickPriceFormat(dims)
 		});
+		this.candlestickPrecision = this.getCandlestickPrecision(dims);
 
 		this.selected['Candlestick'] = true;
 
@@ -170,6 +173,13 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 
 		if (rebuildData) {
 			if (this._candlestickSeries && this._ohlcDims) {
+				const precision = this.getCandlestickPrecision(this._ohlcDims);
+				if (precision !== this.candlestickPrecision) {
+					this._candlestickSeries.applyOptions({
+						priceFormat: this.getCandlestickPriceFormat(this._ohlcDims)
+					});
+					this.candlestickPrecision = precision;
+				}
 				this._candlestickSeries.setData(this.toCandlestickData(this._ohlcDims));
 			}
 
@@ -552,6 +562,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 
 		this.series.clear();
 		this.pricePrecisions.clear();
+		this.candlestickPrecision = null;
 		this.markersPlugins.clear();
 		this.markers.clear();
 		this._timeRangeForced = false;
@@ -585,6 +596,20 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		}
 
 		return result;
+	}
+
+	private getCandlestickPrecision(dims: OHLCDimensions): number {
+		return Math.max(
+			getPricePrecision(this.dataset[dims.open] ?? []),
+			getPricePrecision(this.dataset[dims.high] ?? []),
+			getPricePrecision(this.dataset[dims.low] ?? []),
+			getPricePrecision(this.dataset[dims.close] ?? [])
+		);
+	}
+
+	private getCandlestickPriceFormat(dims: OHLCDimensions) {
+		const precision = this.getCandlestickPrecision(dims);
+		return { type: 'price' as const, precision, minMove: 10 ** -precision };
 	}
 
 	private toLineData(dim: string): Array<LineData<Time> | WhitespaceData<Time>> {

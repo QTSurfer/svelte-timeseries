@@ -239,6 +239,29 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 			});
 		});
 
+		it('configures precision from all OHLC values', () => {
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+
+			builder.setCandlestickSeries(
+				{
+					_ts: [1000, 2000],
+					open: [0.0000024675805, 0.0000024675805],
+					high: [0.0000024675805, 0.0000024675805],
+					low: [0.0000024675805, 0.000000000000001],
+					close: [0.0000024675805, 0.0000024675805]
+				},
+				dims
+			);
+
+			expect(chart.addSeries).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					priceFormat: { type: 'price', precision: 15, minMove: 1e-15 }
+				})
+			);
+		});
+
 		it('marks Candlestick as selected in the legend', () => {
 			builder.setCandlestickSeries(data, dims);
 			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
@@ -298,6 +321,27 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 			expect(chart.removeSeries).not.toHaveBeenCalled();
 			expect(builder.getLegendStatus()).toHaveProperty('Candlestick', true);
 			expect(chart.timeScale().setVisibleLogicalRange).toHaveBeenCalledWith({ from: 0, to: 10 });
+		});
+
+		it('updates precision when a viewport loads smaller OHLC values', () => {
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+			builder.setCandlestickSeries(data, dims);
+
+			builder.updateDimensions(
+				{
+					_ts: [2000],
+					open: [0.0000024675805],
+					high: [0.0000024675805],
+					low: [0.0000024675805],
+					close: [0.0000024675805]
+				},
+				['open', 'high', 'low', 'close']
+			);
+
+			expect(candleSeries.applyOptions).toHaveBeenCalledWith({
+				priceFormat: { type: 'price', precision: 13, minMove: 1e-13 }
+			});
 		});
 
 		it('does not crash when addDimension is called after setCandlestickSeries (regression)', () => {
