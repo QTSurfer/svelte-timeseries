@@ -1,5 +1,12 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.14.3
+
+### Patch Changes
+
+- Updated dependencies [[`b74c764`](https://github.com/QTSurfer/svelte-timeseries/commit/b74c764bbe15abdccba706580cddecd08136d7df)]:
+  - @qtsurfer/sveltecharts@0.14.3
+
 ## 0.14.2
 
 ### Patch Changes

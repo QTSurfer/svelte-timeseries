@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.14.3
+
+### Patch Changes
+
+- [`b74c764`](https://github.com/QTSurfer/svelte-timeseries/commit/b74c764bbe15abdccba706580cddecd08136d7df) Thanks [@mrmx](https://github.com/mrmx)! - Preserve decimal precision for low-priced candlestick series.
+
 ## 0.14.2
 
 ### Patch Changes
