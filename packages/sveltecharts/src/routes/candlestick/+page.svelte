@@ -1,14 +1,18 @@
 <script lang="ts">
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { LightweightTimeSeriesChartBuilder } from '$lib/LightweightTimeSeriesChartBuilder';
+	import { VelaTimeSeriesChartBuilder } from '$lib/VelaTimeSeriesChartBuilder';
 	import { createOHLCDataSet } from '$lib/mockDataSet';
 	import type { ECharts } from 'echarts/core';
 	import type { IChartApi } from 'lightweight-charts';
+	import type { Vela } from '@luxalgo/vela';
 	import SVECharts from '$lib/SVECharts.svelte';
 	import SVELightweightCharts from '$lib/SVELightweightCharts.svelte';
+	import SVEVelaCharts from '$lib/SVEVelaCharts.svelte';
 
 	let loadingEcharts = $state(true);
 	let loadingLightweight = $state(true);
+	let loadingVela = $state(true);
 
 	const BARS = 500;
 	const ohlcDims = { open: 'open', high: 'high', low: 'low', close: 'close' };
@@ -27,6 +31,14 @@
 		const builder = new LightweightTimeSeriesChartBuilder(instance);
 		builder.setCandlestickSeries(data, ohlcDims);
 		loadingLightweight = false;
+	}
+
+	async function onLoadVela(instance: Vela) {
+		loadingVela = true;
+		const data = createOHLCDataSet(BARS);
+		const builder = new VelaTimeSeriesChartBuilder(instance);
+		builder.setCandlestickSeries(data, ohlcDims);
+		loadingVela = false;
 	}
 </script>
 
@@ -49,6 +61,13 @@
 					loading={loadingLightweight}
 					isDark={false}
 				/>
+			</div>
+		</div>
+
+		<div class="chart">
+			<h2>Vela</h2>
+			<div class="chart-wrapper">
+				<SVEVelaCharts onLoad={onLoadVela} loading={loadingVela} isDark={false} />
 			</div>
 		</div>
 	</div>
