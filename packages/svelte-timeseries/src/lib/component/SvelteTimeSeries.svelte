@@ -27,6 +27,12 @@
 		columns: Columns;
 		toggleColumn: (name: string) => void;
 		loading: boolean;
+		/**
+		 * True when the active chart engine can't add/remove columns after the initial
+		 * load (Vela renders a single OHLCV market — see VelaTimeSeriesChartBuilder).
+		 * Column toggles should be disabled rather than left clickable and failing.
+		 */
+		columnsDisabled: boolean;
 	};
 	type MarkersProps = {
 		markers: MarkersTable[];
@@ -190,6 +196,7 @@
 	const performanceTimer = $derived(
 		timer.start && timer.end ? (timer.end - timer.start) / 1000 : 0
 	);
+	const columnsDisabled = $derived(chartLibrary === 'vela');
 </script>
 
 <div id="svelte-timeseries" class={containerClass} data-visible-rows={visibleRows}>
@@ -201,7 +208,8 @@
 		{@render (columnsSnippet ?? renderColumns)({
 			columns,
 			toggleColumn,
-			loading
+			loading,
+			columnsDisabled
 		})}
 
 		{#if markersData.length}
@@ -252,6 +260,7 @@
 									<input
 										type="checkbox"
 										checked={column.checked}
+										disabled={props.columnsDisabled}
 										onchange={() => props.toggleColumn(column.name)}
 									/>
 								</label>

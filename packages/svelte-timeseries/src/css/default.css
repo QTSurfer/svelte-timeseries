@@ -51,6 +51,18 @@
 	cursor: pointer;
 }
 
+#svelte-timeseries .sts-details input[type='checkbox']:disabled {
+	cursor: not-allowed;
+}
+
+#svelte-timeseries .sts-details li:has(input[type='checkbox']:disabled) {
+	opacity: 0.5;
+}
+
+#svelte-timeseries .sts-details li:has(input[type='checkbox']:disabled):hover {
+	background: initial;
+}
+
 #svelte-timeseries .sts-details > summary {
 	cursor: pointer;
 	font-weight: 600;
