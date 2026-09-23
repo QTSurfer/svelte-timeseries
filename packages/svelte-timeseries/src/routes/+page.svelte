@@ -108,28 +108,48 @@
 			: (configurations[Number(selected.replace('preset:', ''))] ?? null)
 	);
 
+	// Set from TimeSeriesFacade.isOHLCMode() via onFacadeReady once the active table has
+	// actually loaded — see the isVelaCompatible doc comment below for why this is needed
+	// on top of each table's static `candlestick` config.
+	let ohlcConfirmed = $state(false);
+
 	/**
 	 * Vela only renders a single OHLCV market (see VelaTimeSeriesChartBuilder) — it has no
-	 * generic multi-dimension line series support. Whether a table resolves to OHLC can only
-	 * be known FOR SURE from its static config: `candlestick: false` opts out, an explicit
-	 * `candlestick: {open,high,low,close}` opts in. Column-name auto-detection (the default
-	 * when `candlestick` is omitted) requires loading the file first, so it's treated as
-	 * "not confirmed compatible" here rather than guessed at — Vela stays disabled for it.
+	 * generic multi-dimension line series support. A table's static config settles this
+	 * outright when it's explicit: `candlestick: false` opts out, an explicit
+	 * `candlestick: {open,high,low,close}` opts in. Left out, the table falls back to
+	 * column-name auto-detection, which can only be confirmed once the file is loaded —
+	 * `ohlcConfirmed` carries that real, post-load answer (from the facade that just
+	 * initialized, whichever chart engine loaded it) for that case.
 	 */
-	function isVelaCompatible(config: DemoConfiguration | null): boolean {
+	function isVelaCompatible(config: DemoConfiguration | null, ohlcConfirmed: boolean): boolean {
 		if (!config) return false;
 		const tables = Object.values(config.tables);
-		return tables.length > 0 && tables.every((t) => Boolean(t.candlestick));
+		if (!tables.length) return false;
+		if (tables.some((t) => t.candlestick === false)) return false;
+		return tables.every((t) => Boolean(t.candlestick)) || ohlcConfirmed;
 	}
 
-	const velaCompatible = $derived(isVelaCompatible(activeConfiguration));
+	const velaCompatible = $derived(isVelaCompatible(activeConfiguration, ohlcConfirmed));
 
-	const renderKey = $derived(
+	// Identifies the loaded TABLE, deliberately excluding legendMode/chartLibrary (unlike
+	// renderKey below) so it only changes when the underlying data changes — used to reset
+	// ohlcConfirmed without reacting to a chart-engine switch re-confirming the same table.
+	const dataKey = $derived(
 		selected === CUSTOM_CONFIGURATION_ID
-			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}-${legendMode}-${chartLibrary}`
-			: `${selected}-${legendMode}-${chartLibrary}`
+			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}`
+			: selected
 	);
+
+	const renderKey = $derived(`${dataKey}-${legendMode}-${chartLibrary}`);
 	const showCustomSidebar = $derived(legendMode === 'external');
+
+	// A newly loaded table hasn't been confirmed yet — reset while its own load resolves,
+	// instead of keeping the previous table's answer.
+	$effect(() => {
+		dataKey;
+		ohlcConfirmed = false;
+	});
 
 	$effect(() => {
 		if (chartLibrary !== 'echarts' && legendMode === 'internal') {
@@ -471,8 +491,9 @@
 
 		{#if !velaCompatible}
 			<div class="mt-3 text-sm text-base-content/70">
-				Vela is disabled for this scenario: it only renders candlestick (OHLC) data with an explicit
-				column mapping, such as "BTC/USDT — 1s Candlestick".
+				Vela is disabled for this scenario: it only renders candlestick (OHLC) data. It enables
+				itself once a table with candlestick data finishes loading (e.g. "BTC/USDT — 1s
+				Candlestick", or a custom file whose columns resolve to OHLC).
 			</div>
 		{/if}
 
@@ -493,6 +514,7 @@
 					debug={false}
 					externalManagerLegend={legendMode === 'external'}
 					{chartLibrary}
+					onFacadeReady={(facade) => (ohlcConfirmed = facade.isOHLCMode())}
 					containerClass={showCustomSidebar
 						? 'relative grid grid-cols-[300px_1fr] size-full'
 						: 'relative size-full'}

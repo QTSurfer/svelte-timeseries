@@ -509,4 +509,50 @@ describe('TimeSeriesFacade viewport loading', () => {
 			/does not support addDimension/
 		);
 	});
+
+	describe('isOHLCMode', () => {
+		it('is false before initialize has run', () => {
+			const facade = new TimeSeriesFacade(createDuckDB() as never, createChartAdapter() as never);
+			expect(facade.isOHLCMode()).toBe(false);
+		});
+
+		it('is true after initializing a table that resolves to OHLC', async () => {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC.mockReturnValue({
+				open: 'open',
+				high: 'high',
+				low: 'low',
+				close: 'close'
+			});
+			const facade = new TimeSeriesFacade(duckDb as never, createChartAdapter() as never);
+
+			await facade.initialize('candles', 'close');
+
+			expect(facade.isOHLCMode()).toBe(true);
+		});
+
+		it('is false after initializing a non-OHLC table', async () => {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC.mockReturnValue(undefined);
+			const facade = new TimeSeriesFacade(duckDb as never, createChartAdapter() as never);
+
+			await facade.initialize('prices', 'price');
+
+			expect(facade.isOHLCMode()).toBe(false);
+		});
+
+		it('flips back to false when a later table is not OHLC', async () => {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC
+				.mockReturnValueOnce({ open: 'open', high: 'high', low: 'low', close: 'close' })
+				.mockReturnValueOnce(undefined);
+			const facade = new TimeSeriesFacade(duckDb as never, createChartAdapter() as never);
+
+			await facade.initialize('candles', 'close');
+			expect(facade.isOHLCMode()).toBe(true);
+
+			await facade.initialize('prices', 'price');
+			expect(facade.isOHLCMode()).toBe(false);
+		});
+	});
 });

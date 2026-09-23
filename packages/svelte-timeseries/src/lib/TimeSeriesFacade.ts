@@ -276,4 +276,14 @@ export default class TimeSeriesFacade {
 	getChartAdapter(): TimeSeriesChartAdapter {
 		return this.timeSeriesChartBuilder;
 	}
+
+	/**
+	 * Whether the active table resolved to an OHLC candlestick series (explicit
+	 * `candlestick` config, or column-name auto-detection) after `initialize`. This is
+	 * the real, post-load answer — unlike a table's static config, it also covers
+	 * auto-detected OHLC columns, which can only be confirmed once the file is loaded.
+	 */
+	isOHLCMode(): boolean {
+		return this._ohlcMode !== null;
+	}
 }
