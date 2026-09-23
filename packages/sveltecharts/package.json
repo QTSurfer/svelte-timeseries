@@ -45,6 +45,7 @@
 	},
 	"types": "./dist/index.d.ts",
 	"peerDependencies": {
+		"@luxalgo/vela": "^0.7.7",
 		"echarts": "^6.0.0",
 		"lightweight-charts": "^5.1.0",
 		"svelte": "^5.43.14"
@@ -52,6 +53,7 @@
 	"devDependencies": {
 		"@eslint/eslintrc": "^3.3.5",
 		"@eslint/js": "^9.39.1",
+		"@luxalgo/vela": "^0.7.7",
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/kit": "^2.55.0",
 		"@sveltejs/package": "^2.5.7",
