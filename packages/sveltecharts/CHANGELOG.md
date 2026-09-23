@@ -1,5 +1,11 @@
 # @qtsurfer/sveltecharts
 
+## 0.14.4
+
+### Patch Changes
+
+- [#107](https://github.com/QTSurfer/svelte-timeseries/pull/107) [`75789ef`](https://github.com/QTSurfer/svelte-timeseries/commit/75789efba38a67f1f4d6bfbf3dbccf0ec186739d) Thanks [@leonardojgv](https://github.com/leonardojgv)! - Cap chart price precision at lightweight-charts' own 16-digit limit, so a series with extremely small values (near-zero prices) no longer crashes on render.
+
 ## 0.14.3
 
 ### Patch Changes
