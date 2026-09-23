@@ -1,5 +1,6 @@
 import {
 	TimeSeriesChartBuilder,
+	VelaTimeSeriesChartBuilder,
 	type ChartDatasetFormatSimpleObject,
 	type TimeSeriesChartAdapter
 } from '@qtsurfer/sveltecharts';
@@ -41,6 +42,13 @@ export default class TimeSeriesFacade {
 			this.timeSeriesChartBuilder.setCandlestickSeries(result, ohlc);
 			this.captureFullDataRange();
 			return;
+		}
+
+		if (this.timeSeriesChartBuilder instanceof VelaTimeSeriesChartBuilder) {
+			throw new Error(
+				`Table "${table}" has no OHLC columns to render as a candlestick series. ` +
+					'The Vela chart engine only supports candlestick data — pick a different chart engine for this table.'
+			);
 		}
 
 		const result = await this.duckDb.getSingleDimension(table, columnsSelect, false);

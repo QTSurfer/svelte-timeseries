@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import TimeSeriesFacade from '../../src/lib/TimeSeriesFacade';
+import { VelaTimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
 
 type ViewportData = { _ts: number[]; price: number[] };
 type ChartData = Record<string, (number | null)[]>;
@@ -462,6 +463,50 @@ describe('TimeSeriesFacade viewport loading', () => {
 			['price'],
 			{ start: 2000, end: 3000 },
 			500000
+		);
+	});
+
+	it('rejects a non-OHLC table when the chart builder is Vela', async () => {
+		const duckDb = createDuckDB();
+		duckDb.resolveOHLC.mockReturnValue(undefined);
+		const velaChart = { setMarket: vi.fn(), marks: { set: vi.fn(), clear: vi.fn() } };
+		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
+		const facade = new TimeSeriesFacade(duckDb as never, builder);
+
+		await expect(facade.initialize('prices', 'price')).rejects.toThrow(
+			/Vela chart engine only supports candlestick data/
+		);
+		expect(velaChart.setMarket).not.toHaveBeenCalled();
+	});
+
+	it('lets Vela initialize normally against an OHLC table', async () => {
+		const duckDb = createDuckDB();
+		const ohlc = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		duckDb.resolveOHLC.mockReturnValue(ohlc);
+		const velaChart = { setMarket: vi.fn(), marks: { set: vi.fn(), clear: vi.fn() } };
+		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
+		const facade = new TimeSeriesFacade(duckDb as never, builder);
+
+		await expect(facade.initialize('candles', 'close')).resolves.toBeUndefined();
+		expect(velaChart.setMarket).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects toggling an extra column into a Vela candlestick chart', async () => {
+		// Regression: toggling an extra column (e.g. an EMA overlay) after an OHLC
+		// table has loaded routes through addDimension, which Vela does not support
+		// (it renders a single OHLCV market, not overlaid line series). The error
+		// must propagate from toggleColumn so the host UI can catch and display it,
+		// instead of surfacing as an unhandled promise rejection.
+		const duckDb = createDuckDB();
+		const ohlc = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		duckDb.resolveOHLC.mockReturnValue(ohlc);
+		const velaChart = { setMarket: vi.fn(), marks: { set: vi.fn(), clear: vi.fn() } };
+		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
+		const facade = new TimeSeriesFacade(duckDb as never, builder);
+		await facade.initialize('candles', 'close');
+
+		await expect(facade.toggleColumn('candles', 'ema')).rejects.toThrow(
+			/does not support addDimension/
 		);
 	});
 });
