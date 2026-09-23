@@ -78,11 +78,7 @@
 			tables: {
 				btc: {
 					url: `${baseUrl}BTC_USDT_2026-04-19_h01_klines.parquet`,
-					mainColumn: 'cls',
-					// Declared explicitly (rather than left to column-name auto-detection) so this
-					// table is statically known as OHLC-compatible — that's what lets the Vela
-					// chart engine option be enabled for it in the selector below.
-					candlestick: { open: 'opn', high: 'hig', low: 'low', close: 'cls' }
+					mainColumn: 'cls'
 				}
 			}
 		},
@@ -108,58 +104,16 @@
 			: (configurations[Number(selected.replace('preset:', ''))] ?? null)
 	);
 
-	// Set from TimeSeriesFacade.isOHLCMode() via onFacadeReady once the active table has
-	// actually loaded — see the isVelaCompatible doc comment below for why this is needed
-	// on top of each table's static `candlestick` config.
-	let ohlcConfirmed = $state(false);
-
-	/**
-	 * Vela only renders a single OHLCV market (see VelaTimeSeriesChartBuilder) — it has no
-	 * generic multi-dimension line series support. A table's static config settles this
-	 * outright when it's explicit: `candlestick: false` opts out, an explicit
-	 * `candlestick: {open,high,low,close}` opts in. Left out, the table falls back to
-	 * column-name auto-detection, which can only be confirmed once the file is loaded —
-	 * `ohlcConfirmed` carries that real, post-load answer (from the facade that just
-	 * initialized, whichever chart engine loaded it) for that case.
-	 */
-	function isVelaCompatible(config: DemoConfiguration | null, ohlcConfirmed: boolean): boolean {
-		if (!config) return false;
-		const tables = Object.values(config.tables);
-		if (!tables.length) return false;
-		if (tables.some((t) => t.candlestick === false)) return false;
-		return tables.every((t) => Boolean(t.candlestick)) || ohlcConfirmed;
-	}
-
-	const velaCompatible = $derived(isVelaCompatible(activeConfiguration, ohlcConfirmed));
-
-	// Identifies the loaded TABLE, deliberately excluding legendMode/chartLibrary (unlike
-	// renderKey below) so it only changes when the underlying data changes — used to reset
-	// ohlcConfirmed without reacting to a chart-engine switch re-confirming the same table.
-	const dataKey = $derived(
+	const renderKey = $derived(
 		selected === CUSTOM_CONFIGURATION_ID
-			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}`
-			: selected
+			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}-${legendMode}-${chartLibrary}`
+			: `${selected}-${legendMode}-${chartLibrary}`
 	);
-
-	const renderKey = $derived(`${dataKey}-${legendMode}-${chartLibrary}`);
 	const showCustomSidebar = $derived(legendMode === 'external');
-
-	// A newly loaded table hasn't been confirmed yet — reset while its own load resolves,
-	// instead of keeping the previous table's answer.
-	$effect(() => {
-		dataKey;
-		ohlcConfirmed = false;
-	});
 
 	$effect(() => {
 		if (chartLibrary !== 'echarts' && legendMode === 'internal') {
 			legendMode = 'external';
-		}
-	});
-
-	$effect(() => {
-		if (chartLibrary === 'vela' && !velaCompatible) {
-			chartLibrary = 'echarts';
 		}
 	});
 
@@ -367,7 +321,7 @@
 				<select class="select select-bordered" bind:value={chartLibrary}>
 					<option value="echarts">ECharts</option>
 					<option value="lightweight">Lightweight Charts</option>
-					<option value="vela" disabled={!velaCompatible}>Vela</option>
+					<option value="vela">Vela</option>
 				</select>
 			</label>
 
@@ -489,11 +443,10 @@
 			</div>
 		{/if}
 
-		{#if !velaCompatible}
+		{#if chartLibrary === 'vela'}
 			<div class="mt-3 text-sm text-base-content/70">
-				Vela is disabled for this scenario: it only renders candlestick (OHLC) data. It enables
-				itself once a table with candlestick data finishes loading (e.g. "BTC/USDT — 1s
-				Candlestick", or a custom file whose columns resolve to OHLC).
+				Vela only renders candlestick (OHLC) data. If the selected table has none, loading will fail
+				with an error shown below.
 			</div>
 		{/if}
 
@@ -514,7 +467,6 @@
 					debug={false}
 					externalManagerLegend={legendMode === 'external'}
 					{chartLibrary}
-					onFacadeReady={(facade) => (ohlcConfirmed = facade.isOHLCMode())}
 					containerClass={showCustomSidebar
 						? 'relative grid grid-cols-[300px_1fr] size-full'
 						: 'relative size-full'}
