@@ -78,7 +78,11 @@
 			tables: {
 				btc: {
 					url: `${baseUrl}BTC_USDT_2026-04-19_h01_klines.parquet`,
-					mainColumn: 'cls'
+					mainColumn: 'cls',
+					// Declared explicitly (rather than left to column-name auto-detection) so this
+					// table is statically known as OHLC-compatible — that's what lets the Vela
+					// chart engine option be enabled for it in the selector below.
+					candlestick: { open: 'opn', high: 'hig', low: 'low', close: 'cls' }
 				}
 			}
 		},
@@ -104,6 +108,22 @@
 			: (configurations[Number(selected.replace('preset:', ''))] ?? null)
 	);
 
+	/**
+	 * Vela only renders a single OHLCV market (see VelaTimeSeriesChartBuilder) — it has no
+	 * generic multi-dimension line series support. Whether a table resolves to OHLC can only
+	 * be known FOR SURE from its static config: `candlestick: false` opts out, an explicit
+	 * `candlestick: {open,high,low,close}` opts in. Column-name auto-detection (the default
+	 * when `candlestick` is omitted) requires loading the file first, so it's treated as
+	 * "not confirmed compatible" here rather than guessed at — Vela stays disabled for it.
+	 */
+	function isVelaCompatible(config: DemoConfiguration | null): boolean {
+		if (!config) return false;
+		const tables = Object.values(config.tables);
+		return tables.length > 0 && tables.every((t) => Boolean(t.candlestick));
+	}
+
+	const velaCompatible = $derived(isVelaCompatible(activeConfiguration));
+
 	const renderKey = $derived(
 		selected === CUSTOM_CONFIGURATION_ID
 			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}-${legendMode}-${chartLibrary}`
@@ -114,6 +134,12 @@
 	$effect(() => {
 		if (chartLibrary !== 'echarts' && legendMode === 'internal') {
 			legendMode = 'external';
+		}
+	});
+
+	$effect(() => {
+		if (chartLibrary === 'vela' && !velaCompatible) {
+			chartLibrary = 'echarts';
 		}
 	});
 
@@ -321,7 +347,7 @@
 				<select class="select select-bordered" bind:value={chartLibrary}>
 					<option value="echarts">ECharts</option>
 					<option value="lightweight">Lightweight Charts</option>
-					<option value="vela">Vela</option>
+					<option value="vela" disabled={!velaCompatible}>Vela</option>
 				</select>
 			</label>
 
@@ -441,10 +467,12 @@
 			<div class="mt-3 text-sm text-base-content/70">
 				Lightweight Charts uses the external schema controls in this demo.
 			</div>
-		{:else if chartLibrary === 'vela'}
+		{/if}
+
+		{#if !velaCompatible}
 			<div class="mt-3 text-sm text-base-content/70">
-				Vela only renders candlestick (OHLC) data — pick a scenario with candlestick data, such as
-				"BTC/USDT — 1s Candlestick".
+				Vela is disabled for this scenario: it only renders candlestick (OHLC) data with an explicit
+				column mapping, such as "BTC/USDT — 1s Candlestick".
 			</div>
 		{/if}
 
