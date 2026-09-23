@@ -102,11 +102,14 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		expect(formatPreciseValue(0)).toBe('0');
 		expect(formatPreciseValue(100.25)).toBe('100.25');
 
+		// 1.2e-18 alone would need precision 19, but lightweight-charts' own price
+		// formatter throws for any precision outside 0-16 — getPricePrecision caps
+		// there so the series can still render instead of crashing.
 		builder.setDataset({ _ts: [1000, 2000], price: [0.0000024675805, 1.2e-18] });
 		expect(chart.addSeries).toHaveBeenCalledWith(
 			expect.anything(),
 			expect.objectContaining({
-				priceFormat: { type: 'price', precision: 19, minMove: 1e-19 }
+				priceFormat: { type: 'price', precision: 16, minMove: 1e-16 }
 			})
 		);
 	});
@@ -258,6 +261,33 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 				expect.anything(),
 				expect.objectContaining({
 					priceFormat: { type: 'price', precision: 15, minMove: 1e-15 }
+				})
+			);
+		});
+
+		it('caps precision at 16 instead of crashing on a near-zero DEX price', () => {
+			// A dying pool's price crashing towards zero can produce a close with 20+
+			// decimal digits. lightweight-charts throws `TypeError: invalid length` for
+			// any priceFormat.precision outside 0-16, so this must clamp there rather
+			// than pass through whatever getDecimalPrecision computes.
+			const candleSeries = createMockSeries();
+			chart.addSeries.mockImplementationOnce(() => candleSeries);
+
+			builder.setCandlestickSeries(
+				{
+					_ts: [1000, 2000],
+					open: [0.0000024675805, 0.0000024675805],
+					high: [0.0000024675805, 0.0000024675805],
+					low: [0.0000024675805, 1.2e-22],
+					close: [0.0000024675805, 0.0000024675805]
+				},
+				dims
+			);
+
+			expect(chart.addSeries).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					priceFormat: { type: 'price', precision: 16, minMove: 1e-16 }
 				})
 			);
 		});
