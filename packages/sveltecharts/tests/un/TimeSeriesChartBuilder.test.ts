@@ -430,6 +430,45 @@ describe('TimeSeriesChartBuilder', () => {
 		});
 	});
 
+	describe('toggleMarkers', () => {
+		it('toggles an existing marker point between shown and hidden', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+
+			builder.toggleMarkers(0, 'price', 'pin');
+
+			const opts = lastSetOptionCall(echarts)[0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
+		});
+
+		it('does not throw when the marker was never placed (regression)', () => {
+			// Regression: addMarkerPoint returns early without ever setting markPoint when the
+			// dimension has a null value at that exact timestamp — a later toggleMarkers for
+			// that marker id previously crashed on `seriesDimension.markPoint.data` because
+			// markPoint was undefined, instead of leaving the (nonexistent) marker alone.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, null, 102]
+			});
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+
+			expect(() => builder.toggleMarkers(0, 'price', 'pin')).not.toThrow();
+		});
+
+		it('does not throw when the dimension has no markers at all', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			expect(() => builder.toggleMarkers(0, 'price', 'pin')).not.toThrow();
+		});
+	});
+
 	describe('setSeriesStyle', () => {
 		it('applies style to all series', () => {
 			builder.setDataset({

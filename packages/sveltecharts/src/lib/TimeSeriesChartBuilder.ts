@@ -1169,8 +1169,10 @@ export class TimeSeriesChartBuilder {
 			return s.encode && s.encode.y && s.encode.y === dimName;
 		});
 
-		const markerPoints = seriesDimension?.markPoint.data as MarkPointDataItemOption[];
-		const point = markerPoints.find((mp) => mp.name === `markerpoint-${id}`);
+		const markerPoints = seriesDimension?.markPoint?.data as MarkPointDataItemOption[] | undefined;
+		// No markPoint at all means addMarkerPoint never actually placed this marker (e.g. its
+		// value at that timestamp was null) — nothing to toggle.
+		const point = markerPoints?.find((mp) => mp.name === `markerpoint-${id}`);
 
 		if (!point) {
 			return this;
