@@ -1,4 +1,15 @@
-import type { Vela, OHLCV, TimelineMark, MarkShape } from '@luxalgo/vela';
+import {
+	registerNativeIndicator,
+	type Vela,
+	type OHLCV,
+	type MarkShape,
+	type NativeIndicator,
+	type NativeIndicatorContext,
+	type SeriesPoint,
+	type MarkerPoint,
+	type LineLikeSeries,
+	type MarkerSeries
+} from '@luxalgo/vela';
 import type {
 	ChartDataset,
 	ChartDatasetFormatSimpleObject,
@@ -23,15 +34,82 @@ type MarkerState = {
 	visible: boolean;
 };
 
-const CANDLESTICK_GROUP = 'candlestick';
+const OVERLAY_INDICATOR_TYPE = 'qtsurfer-overlay';
+const OVERLAY_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#d97706', '#0891b2'];
+
+let overlayRegistered = false;
 
 /**
- * Vela (`@luxalgo/vela`) renders a single market (symbol/timeframe/OHLCV), not
- * arbitrary N-dimension line series. This builder therefore only supports the
- * candlestick-oriented slice of {@link TimeSeriesChartAdapter}: setCandlestickSeries,
- * zoom/scroll, and marker points (approximated with Vela's timeline marks, since the
- * public API has no per-value price-anchored marker primitive). Generic multi-line
- * methods (setDataset, addDimension, ...) are not supported by this builder and throw.
+ * Set immediately before each `chart.addNativeIndicator(OVERLAY_INDICATOR_TYPE)` call and
+ * consumed by the descriptor's `create()` below. This works because Vela's orchestrator calls
+ * `descriptor.create()` SYNCHRONOUSLY inside `addNativeIndicator` (confirmed against the
+ * compiled source: `native: { instance: descriptor.create(), ... }` happens before the async
+ * `startNativeIndicator` is even invoked) — so no two builders' constructors can interleave
+ * between setting this and `create()` reading it, despite `registerNativeIndicator`'s type
+ * registration being module-global rather than per-chart.
+ */
+let pendingOnReady: ((ctx: NativeIndicatorContext) => void) | null = null;
+
+/**
+ * Registers the (single, module-level) native-indicator TYPE every VelaTimeSeriesChartBuilder
+ * instance adds to its own chart. `registerNativeIndicator` registers a TYPE globally, not a
+ * per-chart instance — but `chart.addNativeIndicator` still mints one NativeIndicator instance
+ * per chart (single-instance type, no `multiInstance`), each wired to that particular builder's
+ * `onReady` via `pendingOnReady`. This is safe with multiple Vela charts on one page.
+ *
+ * `legend: false` keeps this out of Vela's own indicator legend/settings/remove UI — it exists
+ * purely to give this builder an `emit` channel for the extra line/marker series the
+ * TimeSeriesChartAdapter contract asks for (addDimension, addMarkerPoint, ...), which Vela's
+ * public API otherwise has no direct way to add outside a native/scripted indicator.
+ */
+function ensureOverlayRegistered() {
+	if (overlayRegistered) return;
+	overlayRegistered = true;
+
+	registerNativeIndicator({
+		type: OVERLAY_INDICATOR_TYPE,
+		title: 'QTSurfer overlay',
+		paneHint: 'price',
+		overlay: true,
+		legend: false,
+		multiInstance: false,
+		inputsSchema: () => [],
+		defaultInputs: () => ({}),
+		create: (): NativeIndicator => new OverlayNativeIndicator(pendingOnReady ?? undefined)
+	});
+}
+
+/**
+ * The NativeIndicator instance backing one chart's overlay channel. It computes nothing itself —
+ * `start` just hands its `NativeIndicatorContext` to the owning builder's `onReady` callback, so
+ * the builder can call `ctx.emit(...)` on demand from addDimension / addMarkerPoint /
+ * updateDimension(s), instead of Vela driving the compute. `start` runs after Vela's own async
+ * readiness wait (see `startNativeIndicator` in the compiled source), so `overlayCtx` on the
+ * builder is only available once that resolves — emits before then are silently skipped and
+ * re-sent on the next mutation.
+ */
+class OverlayNativeIndicator implements NativeIndicator {
+	constructor(private readonly onReady?: (ctx: NativeIndicatorContext) => void) {}
+
+	start(ctx: NativeIndicatorContext): void {
+		this.onReady?.(ctx);
+	}
+
+	onBars(): void {}
+	onViewport(): void {}
+	setInputs(): void {}
+	suspend(): void {}
+	resume(): void {}
+	stop(): void {}
+}
+
+/**
+ * Vela (`@luxalgo/vela`) renders a single OHLCV market as its base series. Extra line series and
+ * markers (addDimension, addMarkerPoint) are added through a small always-on native indicator
+ * (see `ensureOverlayRegistered`/`OverlayNativeIndicator`) that this builder owns per chart and
+ * feeds directly with already-loaded data — no computation happens on Vela's side, it only
+ * renders what this builder emits. Generic multi-series datasets without an OHLC base
+ * (setDataset) are still not supported: Vela's market model always has exactly one base series.
  */
 export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	public VelaChart: Vela;
@@ -41,12 +119,25 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	private dataset: ChartDatasetFormatSimpleObject = {};
 	private _tsColumn = '_ts';
 	private _ohlcDims: OHLCDimensions | null = null;
-	private markers = new Map<string, MarkerState[]>();
 	private selected: Record<string, boolean> = {};
+	private extraDimensions: string[] = [];
+	private markers = new Map<string, MarkerState[]>();
+	private overlayCtx: NativeIndicatorContext | null = null;
 
 	constructor(instance: Vela, builderConfig?: ConfigBuilder) {
 		this.VelaChart = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
+
+		ensureOverlayRegistered();
+		pendingOnReady = (ctx) => {
+			this.overlayCtx = ctx;
+			this.emitOverlay();
+		};
+		try {
+			this.VelaChart.addNativeIndicator(OVERLAY_INDICATOR_TYPE);
+		} finally {
+			pendingOnReady = null;
+		}
 	}
 
 	setLegendIcon(_icon: string): this {
@@ -74,15 +165,20 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		this.selected['Candlestick'] = true;
 
 		this.VelaChart.setMarket({ data: this.toOHLCV(dims) });
-		this.syncMarksGroup();
+		this.emitOverlay();
 
 		return this;
 	}
 
-	addDimension(_data: ChartDatasetFormatSimpleObject, _dimName: string): this {
-		throw new Error(
-			'VelaTimeSeriesChartBuilder does not support addDimension. Vela renders a single OHLCV market.'
-		);
+	addDimension(data: ChartDatasetFormatSimpleObject, dimName: string): this {
+		this.dataset[dimName] = data[dimName];
+		if (!this.extraDimensions.includes(dimName)) {
+			this.extraDimensions.push(dimName);
+		}
+		this.selected[dimName] = true;
+
+		this.emitOverlay();
+		return this;
 	}
 
 	build(): this {
@@ -102,7 +198,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		const markers = this.markers.get(data.dimName) ?? [];
 		markers.push(markerState);
 		this.markers.set(data.dimName, markers);
-		this.syncMarksGroup();
+		this.emitOverlay();
 		return this;
 	}
 
@@ -113,6 +209,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	toggleLegend(column: string): this {
 		if (!column) return this;
 		this.selected[column] = !(this.selected[column] ?? false);
+		this.emitOverlay();
 		return this;
 	}
 
@@ -160,9 +257,10 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	getLoadedDimensions(): string[] {
-		return this._ohlcDims
+		const ohlc = this._ohlcDims
 			? [this._ohlcDims.open, this._ohlcDims.high, this._ohlcDims.low, this._ohlcDims.close]
 			: [];
+		return [...ohlc, ...this.extraDimensions];
 	}
 
 	getActiveDimensions(): string[] {
@@ -174,8 +272,6 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	updateDimensions(data: ChartDatasetFormatSimpleObject, dimNames: string[]): this {
-		if (!this._ohlcDims) return this;
-
 		if (data[this._tsColumn]) {
 			this.dataset[this._tsColumn] = data[this._tsColumn];
 		}
@@ -185,7 +281,11 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			}
 		}
 
-		this.VelaChart.setMarket({ data: this.toOHLCV(this._ohlcDims) });
+		if (this._ohlcDims && dimNames.some((d) => this.isOHLCDimension(d))) {
+			this.VelaChart.setMarket({ data: this.toOHLCV(this._ohlcDims) });
+		}
+
+		this.emitOverlay();
 		return this;
 	}
 
@@ -200,14 +300,24 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		if (marker.visible) {
 			marker.shape = this.mapShape(icon);
 		}
-		this.syncMarksGroup();
+		this.emitOverlay();
 		return this;
 	}
 
 	clearMarkers(): this {
 		this.markers.clear();
-		this.VelaChart.marks.clear();
+		this.emitOverlay();
 		return this;
+	}
+
+	private isOHLCDimension(dim: string): boolean {
+		if (!this._ohlcDims) return false;
+		return (
+			dim === this._ohlcDims.open ||
+			dim === this._ohlcDims.high ||
+			dim === this._ohlcDims.low ||
+			dim === this._ohlcDims.close
+		);
 	}
 
 	private toOHLCV(dims: OHLCDimensions): OHLCV[] {
@@ -234,27 +344,69 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	/**
-	 * Vela has no price-anchored marker primitive in its public API — markers are
-	 * approximated with `chart.marks`, a timeline lane above the time axis (a glyph
-	 * per bar, opening a popup on click), not a glyph placed at the marker's value.
+	 * Pushes every extra dimension (as a line series) and every visible marker (as a marker
+	 * series) through the overlay native indicator's emit channel. A no-op before the chart has
+	 * called start(ctx) on it (overlayCtx not yet captured) — the next mutation re-emits once
+	 * it is.
 	 */
-	private syncMarksGroup(): void {
-		const marks: TimelineMark[] = [];
+	private emitOverlay(): void {
+		if (!this.overlayCtx) return;
 
-		for (const [dimName, markerList] of this.markers) {
-			for (const marker of markerList) {
+		const series: LineLikeSeries[] = this.extraDimensions.map((dimName, index) => ({
+			id: `overlay-line-${dimName}`,
+			title: dimName,
+			paneId: 'price',
+			kind: 'line',
+			visible: this.selected[dimName] ?? true,
+			points: this.toSeriesPoints(dimName),
+			style: {
+				color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
+				width: 1,
+				lineStyle: 'solid'
+			}
+		}));
+
+		const markerSeries: MarkerSeries = {
+			id: 'overlay-markers',
+			title: 'Markers',
+			paneId: 'price',
+			kind: 'markers',
+			markers: this.toMarkerPoints()
+		};
+
+		this.overlayCtx.emit({
+			series: markerSeries.markers.length ? [...series, markerSeries] : series
+		});
+	}
+
+	private toSeriesPoints(dimName: string): SeriesPoint[] {
+		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const values = this.dataset[dimName] ?? [];
+
+		const points: SeriesPoint[] = [];
+		for (let i = 0; i < timestamps.length; i++) {
+			const time = timestamps[i];
+			if (time == null) continue;
+			points.push({ time, value: values[i] ?? null });
+		}
+		return points;
+	}
+
+	private toMarkerPoints(): MarkerPoint[] {
+		const points: MarkerPoint[] = [];
+		for (const markers of this.markers.values()) {
+			for (const marker of markers) {
 				if (!marker.visible) continue;
-				marks.push({
-					id: `${dimName}-${marker.id}`,
+				points.push({
 					time: marker.timestamp,
-					title: marker.text,
-					glyph: { shape: marker.shape, color: marker.color },
-					group: CANDLESTICK_GROUP
+					position: 'aboveBar',
+					shape: marker.shape,
+					color: marker.color,
+					text: marker.text
 				});
 			}
 		}
-
-		this.VelaChart.marks.set(marks);
+		return points;
 	}
 
 	/**

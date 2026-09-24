@@ -2,6 +2,33 @@ import { describe, expect, it, vi } from 'vitest';
 import TimeSeriesFacade from '../../src/lib/TimeSeriesFacade';
 import { VelaTimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
 
+// VelaTimeSeriesChartBuilder registers a native-indicator type with @luxalgo/vela on
+// construction (see its module-level ensureOverlayRegistered) — mocked here the same way
+// tests/un/VelaTimeSeriesChartBuilder.test.ts does, so a mock Vela chart instance can be
+// constructed without pulling in the real (heavy) Vela renderer.
+let registeredDescriptor: { create: () => { start: (ctx: unknown) => void } } | null = null;
+
+vi.mock('@luxalgo/vela', () => ({
+	registerNativeIndicator: vi.fn((descriptor) => {
+		registeredDescriptor = descriptor;
+	})
+}));
+
+function createMockVelaChart() {
+	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
+	return {
+		setMarket: vi.fn(),
+		getVisibleRange: vi.fn(() => visibleRange),
+		setVisibleRange: vi.fn((range: { from: number; to: number }) => {
+			visibleRange = range;
+		}),
+		addNativeIndicator: vi.fn(() => {
+			registeredDescriptor?.create();
+			return { id: 'native-1' };
+		})
+	};
+}
+
 type ViewportData = { _ts: number[]; price: number[] };
 type ChartData = Record<string, (number | null)[]>;
 
@@ -469,7 +496,7 @@ describe('TimeSeriesFacade viewport loading', () => {
 	it('rejects a non-OHLC table when the chart builder is Vela', async () => {
 		const duckDb = createDuckDB();
 		duckDb.resolveOHLC.mockReturnValue(undefined);
-		const velaChart = { setMarket: vi.fn(), marks: { set: vi.fn(), clear: vi.fn() } };
+		const velaChart = createMockVelaChart();
 		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
 		const facade = new TimeSeriesFacade(duckDb as never, builder);
 
@@ -483,7 +510,7 @@ describe('TimeSeriesFacade viewport loading', () => {
 		const duckDb = createDuckDB();
 		const ohlc = { open: 'open', high: 'high', low: 'low', close: 'close' };
 		duckDb.resolveOHLC.mockReturnValue(ohlc);
-		const velaChart = { setMarket: vi.fn(), marks: { set: vi.fn(), clear: vi.fn() } };
+		const velaChart = createMockVelaChart();
 		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
 		const facade = new TimeSeriesFacade(duckDb as never, builder);
 
@@ -491,23 +518,22 @@ describe('TimeSeriesFacade viewport loading', () => {
 		expect(velaChart.setMarket).toHaveBeenCalledTimes(1);
 	});
 
-	it('rejects toggling an extra column into a Vela candlestick chart', async () => {
-		// Regression: toggling an extra column (e.g. an EMA overlay) after an OHLC
-		// table has loaded routes through addDimension, which Vela does not support
-		// (it renders a single OHLCV market, not overlaid line series). The error
-		// must propagate from toggleColumn so the host UI can catch and display it,
-		// instead of surfacing as an unhandled promise rejection.
+	it('adds an extra column onto a Vela candlestick chart', async () => {
+		// Vela's overlay native indicator (see VelaTimeSeriesChartBuilder) lets addDimension
+		// add extra line series (e.g. an EMA overlay) on top of an already-loaded candlestick
+		// chart — toggleColumn must resolve normally instead of throwing.
 		const duckDb = createDuckDB();
 		const ohlc = { open: 'open', high: 'high', low: 'low', close: 'close' };
 		duckDb.resolveOHLC.mockReturnValue(ohlc);
-		const velaChart = { setMarket: vi.fn(), marks: { set: vi.fn(), clear: vi.fn() } };
+		const velaChart = createMockVelaChart();
 		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
 		const facade = new TimeSeriesFacade(duckDb as never, builder);
 		await facade.initialize('candles', 'close');
 
-		await expect(facade.toggleColumn('candles', 'ema')).rejects.toThrow(
-			/does not support addDimension/
-		);
+		await facade.addDimension('candles', 'ema');
+
+		expect(builder.getLoadedDimensions()).toContain('ema');
+		expect(builder.getLegendStatus()).toHaveProperty('ema', true);
 	});
 
 	describe('isOHLCMode', () => {

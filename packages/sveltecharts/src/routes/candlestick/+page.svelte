@@ -38,6 +38,29 @@
 		const data = createOHLCDataSet(BARS);
 		const builder = new VelaTimeSeriesChartBuilder(instance);
 		builder.setCandlestickSeries(data, ohlcDims);
+
+		// Demonstrates the overlay channel: an extra line series computed from already-loaded
+		// data (a simple moving average over `close`, no scripting engine involved) and a
+		// couple of markers, both rendered on top of the candlestick.
+		const period = 20;
+		const sma: (number | null)[] = data.close.map((_, i, arr) => {
+			if (i < period - 1) return null;
+			const window = arr.slice(i - period + 1, i + 1);
+			return window.reduce((sum, v) => sum + (v ?? 0), 0) / period;
+		});
+		builder.addDimension({ sma20: sma }, 'sma20');
+
+		builder.addMarkerPoint(
+			1,
+			{ dimName: 'close', timestamp: data._ts[100], name: 'Buy' },
+			{ color: '#16a34a', icon: 'circle' }
+		);
+		builder.addMarkerPoint(
+			2,
+			{ dimName: 'close', timestamp: data._ts[300], name: 'Sell' },
+			{ color: '#dc2626', icon: 'circle' }
+		);
+
 		loadingVela = false;
 	}
 </script>

@@ -484,17 +484,16 @@
 								<div class="collapse-content text-sm p-0 h-100">
 									<ul class="list overflow-auto h-full bg-base-100">
 										{#each props.columns as column (column.name)}
-											<li class="list-row" class:opacity-50={props.columnsDisabled}>
+											<li class="list-row">
 												<div class="list-col-grow">
 													{column.name}
 												</div>
 												<div>
-													<label class:cursor-not-allowed={props.columnsDisabled}>
+													<label>
 														<input
 															type="checkbox"
 															hidden
 															checked={column.checked}
-															disabled={props.columnsDisabled}
 															onchange={() => props.toggleColumn(column.name)}
 														/>
 														{#if column.checked}

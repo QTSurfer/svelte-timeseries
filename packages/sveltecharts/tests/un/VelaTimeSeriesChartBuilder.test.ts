@@ -1,8 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VelaTimeSeriesChartBuilder } from '../../src/lib/VelaTimeSeriesChartBuilder';
 
+// Mirrors the relevant slice of Vela's real native-indicator registration + lifecycle:
+// registerNativeIndicator stores one descriptor (module-global, like the real API);
+// addNativeIndicator synchronously calls descriptor.create() (as the real orchestrator does)
+// but only calls start(ctx) once the test explicitly resolves it via resolveOverlayReady,
+// mirroring the real API's async readiness wait before start() fires.
+let registeredDescriptor: {
+	create: () => { start: (ctx: unknown) => void };
+} | null = null;
+
+vi.mock('@luxalgo/vela', () => ({
+	registerNativeIndicator: vi.fn((descriptor) => {
+		registeredDescriptor = descriptor;
+	})
+}));
+
 function createMockChart() {
 	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
+	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
 
 	return {
 		setMarket: vi.fn(),
@@ -10,11 +26,20 @@ function createMockChart() {
 		setVisibleRange: vi.fn((range: { from: number; to: number }) => {
 			visibleRange = range;
 		}),
-		marks: {
-			set: vi.fn(),
-			clear: vi.fn()
+		addNativeIndicator: vi.fn(() => {
+			if (!registeredDescriptor) throw new Error('No native indicator registered');
+			pendingInstance = registeredDescriptor.create();
+			return { id: 'native-1' };
+		}),
+		/** Test-only helper: fires the instance's start(ctx), like Vela's async readiness wait resolving. */
+		resolveOverlayReady(ctx: unknown) {
+			pendingInstance?.start(ctx);
 		}
 	};
+}
+
+function createMockOverlayCtx() {
+	return { emit: vi.fn() };
 }
 
 const dims = { open: 'open', high: 'high', low: 'low', close: 'close' };
@@ -31,8 +56,22 @@ describe('VelaTimeSeriesChartBuilder', () => {
 	let builder: VelaTimeSeriesChartBuilder;
 
 	beforeEach(() => {
+		// registeredDescriptor is deliberately NOT reset here: the real
+		// ensureOverlayRegistered() registers its type once per process (module-level guard),
+		// so only the first VelaTimeSeriesChartBuilder instance across this whole test file
+		// actually calls registerNativeIndicator — every later instance's addNativeIndicator
+		// reuses that same descriptor, exactly like in production with multiple charts.
 		chart = createMockChart();
 		builder = new VelaTimeSeriesChartBuilder(chart as never);
+	});
+
+	it('registers a single-instance, legend-less native indicator to back the overlay channel', () => {
+		expect(chart.addNativeIndicator).toHaveBeenCalledTimes(1);
+		expect(registeredDescriptor).toMatchObject({
+			type: expect.any(String),
+			legend: false,
+			multiInstance: false
+		});
 	});
 
 	describe('setCandlestickSeries', () => {
@@ -89,6 +128,65 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		});
 	});
 
+	describe('addDimension (overlay line series)', () => {
+		it('is a no-op on the emit channel until the overlay context is ready', () => {
+			builder.setCandlestickSeries(data, dims);
+			expect(() => builder.addDimension({ ema: [100, 101, 102] }, 'ema')).not.toThrow();
+			expect(builder.getLoadedDimensions()).toEqual(['open', 'high', 'low', 'close', 'ema']);
+		});
+
+		it('emits the extra dimension as a visible line series once the overlay is ready', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						title: 'ema',
+						kind: 'line',
+						visible: true,
+						points: [
+							{ time: 1000, value: 100 },
+							{ time: 2000, value: 101 },
+							{ time: 3000, value: 102 }
+						]
+					})
+				]
+			});
+		});
+
+		it('re-emits after addDimension once the overlay context is already available', () => {
+			builder.setCandlestickSeries(data, dims);
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			ctx.emit.mockClear();
+
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+
+			expect(ctx.emit).toHaveBeenCalledTimes(1);
+			expect(ctx.emit).toHaveBeenCalledWith({
+				series: [expect.objectContaining({ title: 'ema' })]
+			});
+		});
+
+		it('honors toggleLegend visibility for the emitted line series', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			ctx.emit.mockClear();
+
+			builder.toggleLegend('ema');
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [expect.objectContaining({ title: 'ema', visible: false })]
+			});
+		});
+	});
+
 	describe('updateDimensions', () => {
 		it('re-feeds the chart with merged OHLC columns', () => {
 			builder.setCandlestickSeries(data, dims);
@@ -112,8 +210,12 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			});
 		});
 
-		it('is a no-op before a candlestick series has been set', () => {
-			builder.updateDimensions({ _ts: [1000], open: [1] }, ['open']);
+		it('does not touch the market when only a non-OHLC dimension updates', () => {
+			builder.setCandlestickSeries(data, dims);
+			chart.setMarket.mockClear();
+
+			builder.updateDimensions({ ema: [1, 2, 3] }, ['ema']);
+
 			expect(chart.setMarket).not.toHaveBeenCalled();
 		});
 	});
@@ -139,51 +241,61 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		});
 	});
 
-	describe('markers', () => {
-		it('adds a marker and syncs it to the chart as a timeline mark', () => {
+	describe('markers (overlay marker series)', () => {
+		it('emits a visible marker as a marker series once the overlay is ready', () => {
 			builder.setCandlestickSeries(data, dims);
-			chart.marks.set.mockClear();
-
 			builder.addMarkerPoint(
 				1,
 				{ dimName: 'close', timestamp: 2000, name: 'Buy' },
-				{
-					color: '#ff0000',
-					icon: 'circle'
-				}
+				{ color: '#ff0000', icon: 'circle' }
 			);
 
-			expect(chart.marks.set).toHaveBeenCalledWith([
-				expect.objectContaining({
-					id: 'close-1',
-					time: 2000,
-					title: 'Buy',
-					glyph: { shape: 'circle', color: '#ff0000' }
-				})
-			]);
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						kind: 'markers',
+						markers: [
+							expect.objectContaining({
+								time: 2000,
+								shape: 'circle',
+								color: '#ff0000',
+								text: 'Buy'
+							})
+						]
+					})
+				]
+			});
 		});
 
 		it('toggles a marker off and back on', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 });
-			chart.marks.set.mockClear();
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			ctx.emit.mockClear();
 
 			builder.toggleMarkers(1, 'close', 'circle');
-			expect(chart.marks.set).toHaveBeenLastCalledWith([]);
+			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
 
 			builder.toggleMarkers(1, 'close', 'circle');
-			expect(chart.marks.set).toHaveBeenLastCalledWith([
-				expect.objectContaining({ id: 'close-1' })
-			]);
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [expect.objectContaining({ kind: 'markers' })]
+			});
 		});
 
 		it('clears all markers', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 });
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			ctx.emit.mockClear();
 
 			builder.clearMarkers();
 
-			expect(chart.marks.clear).toHaveBeenCalledTimes(1);
+			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
 		});
 	});
 
@@ -191,13 +303,6 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		it('throws on setDataset', () => {
 			expect(() => builder.setDataset({ _ts: [1000], price: [1] })).toThrow(
 				/does not support setDataset/
-			);
-		});
-
-		it('throws on addDimension', () => {
-			builder.setCandlestickSeries(data, dims);
-			expect(() => builder.addDimension({ ema: [1, 2, 3] }, 'ema')).toThrow(
-				/does not support addDimension/
 			);
 		});
 	});
