@@ -16,6 +16,10 @@ vi.mock('@luxalgo/vela', () => ({
 
 function createMockVelaChart() {
 	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
+	// Only the LATEST addNativeIndicator's instance is live — a remove() on an older handle
+	// doesn't matter here since the builder never touches a handle it removed.
+	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
+
 	return {
 		setMarket: vi.fn(),
 		getVisibleRange: vi.fn(() => visibleRange),
@@ -23,9 +27,14 @@ function createMockVelaChart() {
 			visibleRange = range;
 		}),
 		addNativeIndicator: vi.fn(() => {
-			registeredDescriptor?.create();
-			return { id: 'native-1' };
-		})
+			pendingInstance = registeredDescriptor?.create() ?? null;
+			return { remove: vi.fn() };
+		}),
+		/** Fires the LATEST instance's start(ctx) — call again after a structural change, which
+		 *  removes + re-adds the overlay indicator and mints a fresh instance. */
+		resolveOverlayReady(ctx: unknown) {
+			pendingInstance?.start(ctx);
+		}
 	};
 }
 
@@ -535,6 +544,15 @@ describe('TimeSeriesFacade viewport loading', () => {
 		expect(builder.getLoadedDimensions()).toContain('ema');
 		expect(builder.getLegendStatus()).toHaveProperty('ema', true);
 	});
+
+	// A regression test for two concurrent addDimension calls racing (each one's own async
+	// DuckDB query resolving in either order) lives in
+	// packages/sveltecharts/tests/un/VelaTimeSeriesChartBuilder.test.ts instead of here: the
+	// behavior under test — the overlay ending up with both series regardless of call order —
+	// is entirely inside VelaTimeSeriesChartBuilder (TimeSeriesFacade.addDimension just awaits
+	// one query and forwards its result), and @luxalgo/vela isn't a direct dependency of this
+	// package, so vi.mock('@luxalgo/vela', ...) here doesn't reliably intercept the import
+	// @qtsurfer/sveltecharts's compiled output resolves.
 
 	describe('isOHLCMode', () => {
 		it('is false before initialize has run', () => {

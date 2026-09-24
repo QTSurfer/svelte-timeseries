@@ -128,14 +128,31 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	// A fingerprint of the LAST emit's series (ids + visibility + marker identities) — see
 	// emitOverlay's structural-change check.
 	private lastOverlayFingerprint = '';
+	// True between removing the overlay indicator and its replacement's context becoming ready
+	// — blocks emitOverlay from running (there's no live overlayCtx/overlayHandle to use) while
+	// still letting dataset/extraDimensions/markers mutations accumulate normally.
+	private remounting = false;
+	// False until the overlay indicator's FIRST emit has gone out. That first emit always takes
+	// Vela's full mountIndicator path on its own (no renderHandle exists yet) — skip the
+	// remove+re-add cycle for it, it would just be a redundant extra round trip.
+	private overlayEverEmitted = false;
 
 	constructor(instance: Vela, builderConfig?: ConfigBuilder) {
 		this.VelaChart = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
 		ensureOverlayRegistered();
+		this.mountOverlayIndicator();
+	}
+
+	/**
+	 * Adds (or re-adds, after a remove()) the overlay native indicator to this chart and wires
+	 * its NativeIndicatorContext to this builder once Vela's async readiness resolves.
+	 */
+	private mountOverlayIndicator(): void {
 		pendingOnReady = (ctx) => {
 			this.overlayCtx = ctx;
+			this.remounting = false;
 			this.emitOverlay();
 		};
 		try {
@@ -350,23 +367,31 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 
 	/**
 	 * Pushes every extra dimension (as a line series) and every visible marker (as a marker
-	 * series) through the overlay native indicator's emit channel. A no-op before the chart has
-	 * called start(ctx) on it (overlayCtx not yet captured) — the next mutation re-emits once
-	 * it is.
+	 * series) through the overlay native indicator's emit channel.
 	 *
 	 * Vela's native-indicator patch path (`modelToValuePatch`/`applyPatch` in its compiled
 	 * source) only ever UPDATES a series's `points` for an id already present in the model
-	 * from the indicator's last full mount — it never re-reads that series's `visible` flag,
+	 * from the indicator's LAST FULL MOUNT — it never re-reads that series's `visible` flag,
 	 * an `emit()` naming a NEW id is silently dropped, and `MarkerSeries` isn't patched at all
 	 * (only `line*`/`candle`/`bar` kinds are, so a marker add/remove never reaches the chart
-	 * through a plain emit). So whenever anything other than a line's `points` changes —
-	 * series ids added/removed, a line's visibility flipping, or the marker set changing at
-	 * all — this forces a fresh mount via `handle.setVisible(false)` + `setVisible(true)`
-	 * (Vela's own documented remount path — see `EngineOrchestrator.setVisible`) before
-	 * emitting, instead of relying on the patch to pick it up.
+	 * through a plain emit). So whenever anything other than a line's `points` changes — series
+	 * ids added/removed, a line's visibility flipping, or the marker set changing at all — this
+	 * removes and re-adds the overlay indicator (`handle.remove()` + `addNativeIndicator` again)
+	 * instead of emitting in place: a freshly (re-)added indicator's first `applyModel` always
+	 * takes the full `mountIndicator` path (no `renderHandle` yet), never the patch path, so
+	 * this sidesteps the patch's id-matching/visible/markers gaps entirely rather than relying
+	 * on a same-instance remount signal.
+	 *
+	 * The remount is async (a fresh `addNativeIndicator` only calls `start(ctx)` after Vela's
+	 * own readiness wait — see `ensureOverlayRegistered`), so `overlayCtx`/`overlayHandle` are
+	 * unavailable for the duration: further mutations during that window are captured by
+	 * `dataset`/`extraDimensions`/`markers` as usual and simply re-run `emitOverlay()` once the
+	 * new context arrives (via `mountOverlayIndicator`'s `pendingOnReady` callback), so nothing
+	 * is lost — only the LAST state before the callback fires is what gets emitted.
 	 */
 	private emitOverlay(): void {
-		if (!this.overlayCtx) return;
+		if (this.remounting) return;
+		if (!this.overlayCtx || !this.overlayHandle) return;
 
 		const series: LineLikeSeries[] = this.extraDimensions.map((dimName, index) => ({
 			id: `overlay-line-${dimName}`,
@@ -400,12 +425,23 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			markers: markerPoints
 		});
 
-		if (fingerprint !== this.lastOverlayFingerprint && this.overlayHandle) {
-			this.overlayHandle.setVisible(false);
-			this.overlayHandle.setVisible(true);
-		}
+		const changed = fingerprint !== this.lastOverlayFingerprint;
 		this.lastOverlayFingerprint = fingerprint;
 
+		if (changed && this.overlayEverEmitted) {
+			this.remounting = true;
+			this.overlayCtx = null;
+			this.overlayHandle.remove();
+			this.overlayHandle = null;
+			// mountOverlayIndicator's onReady callback clears `remounting` and re-enters
+			// emitOverlay once the fresh indicator's context is ready, re-reading current state
+			// (dataset/extraDimensions/markers/selected) at that point — so this remount doesn't
+			// need to (and, with overlayCtx cleared, can't) emit itself synchronously here.
+			this.mountOverlayIndicator();
+			return;
+		}
+
+		this.overlayEverEmitted = true;
 		this.overlayCtx.emit({ series: allSeries });
 	}
 

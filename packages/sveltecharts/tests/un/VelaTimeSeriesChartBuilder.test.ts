@@ -5,7 +5,9 @@ import { VelaTimeSeriesChartBuilder } from '../../src/lib/VelaTimeSeriesChartBui
 // registerNativeIndicator stores one descriptor (module-global, like the real API);
 // addNativeIndicator synchronously calls descriptor.create() (as the real orchestrator does)
 // but only calls start(ctx) once the test explicitly resolves it via resolveOverlayReady,
-// mirroring the real API's async readiness wait before start() fires.
+// mirroring the real API's async readiness wait before start() fires. Each addNativeIndicator
+// call (the constructor's first one, and one per remount after a remove()) mints a fresh
+// instance/handle, exactly like Vela's real addNativeIndicator does.
 let registeredDescriptor: {
 	create: () => { start: (ctx: unknown) => void };
 } | null = null;
@@ -18,8 +20,10 @@ vi.mock('@luxalgo/vela', () => ({
 
 function createMockChart() {
 	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
+	// Only the LATEST addNativeIndicator's instance/handle is live — a remove() on an older
+	// handle doesn't matter here since the builder never touches a handle it removed.
 	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
-	const overlayHandle = { setVisible: vi.fn() };
+	let currentHandle: { remove: ReturnType<typeof vi.fn> } | null = null;
 
 	return {
 		setMarket: vi.fn(),
@@ -30,12 +34,16 @@ function createMockChart() {
 		addNativeIndicator: vi.fn(() => {
 			if (!registeredDescriptor) throw new Error('No native indicator registered');
 			pendingInstance = registeredDescriptor.create();
-			return overlayHandle;
+			currentHandle = { remove: vi.fn() };
+			return currentHandle;
 		}),
-		overlayHandle,
-		/** Test-only helper: fires the instance's start(ctx), like Vela's async readiness wait resolving. */
+		/** Test-only helper: fires the LATEST instance's start(ctx), like Vela's async readiness wait resolving. */
 		resolveOverlayReady(ctx: unknown) {
 			pendingInstance?.start(ctx);
+		},
+		/** Test-only helper: the handle from the most recent addNativeIndicator call. */
+		currentOverlayHandle() {
+			return currentHandle;
 		}
 	};
 }
@@ -164,12 +172,17 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			builder.setCandlestickSeries(data, dims);
 			const ctx = createMockOverlayCtx();
 			chart.resolveOverlayReady(ctx);
-			ctx.emit.mockClear();
 
 			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
 
-			expect(ctx.emit).toHaveBeenCalledTimes(1);
-			expect(ctx.emit).toHaveBeenCalledWith({
+			// A new dimension is a structural change: it goes through remove + re-add, so the
+			// FRESH indicator's own context (not the original `ctx`, which was removed) is what
+			// actually emits — resolve it to observe the result.
+			const freshCtx = createMockOverlayCtx();
+			chart.resolveOverlayReady(freshCtx);
+
+			expect(freshCtx.emit).toHaveBeenCalledTimes(1);
+			expect(freshCtx.emit).toHaveBeenCalledWith({
 				series: [expect.objectContaining({ title: 'ema' })]
 			});
 		});
@@ -177,11 +190,11 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		it('honors toggleLegend visibility for the emitted line series', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
-			const ctx = createMockOverlayCtx();
-			chart.resolveOverlayReady(ctx);
-			ctx.emit.mockClear();
+			chart.resolveOverlayReady(createMockOverlayCtx());
 
 			builder.toggleLegend('ema');
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
 
 			expect(ctx.emit).toHaveBeenLastCalledWith({
 				series: [expect.objectContaining({ title: 'ema', visible: false })]
@@ -194,11 +207,13 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			// series id was silently dropped, so adding a second/third dimension after the
 			// first never showed up.
 			builder.setCandlestickSeries(data, dims);
-			const ctx = createMockOverlayCtx();
-			chart.resolveOverlayReady(ctx);
+			chart.resolveOverlayReady(createMockOverlayCtx());
 
 			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+			chart.resolveOverlayReady(createMockOverlayCtx());
 			builder.addDimension({ sma: [99, 100, 101] }, 'sma');
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
 
 			expect(ctx.emit).toHaveBeenLastCalledWith({
 				series: [
@@ -208,41 +223,69 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			});
 		});
 
-		it('forces a remount (setVisible false/true) only when the set of series ids changes', () => {
+		it('remounts (remove + re-add) only when the set of series ids changes', () => {
 			builder.setCandlestickSeries(data, dims);
-			const ctx = createMockOverlayCtx();
-			chart.resolveOverlayReady(ctx);
-			chart.overlayHandle.setVisible.mockClear();
+			chart.resolveOverlayReady(createMockOverlayCtx());
+			chart.addNativeIndicator.mockClear();
 
 			// First dimension: the series id set grows from [] to ['overlay-line-ema'] — remount.
 			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
-			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(1, false);
-			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(2, true);
-			chart.overlayHandle.setVisible.mockClear();
+			expect(chart.addNativeIndicator).toHaveBeenCalledTimes(1);
+			chart.resolveOverlayReady(createMockOverlayCtx());
+			chart.addNativeIndicator.mockClear();
 
 			// Re-adding the SAME dimension (a value update, e.g. from updateDimensions) keeps
-			// the same series id set — no remount needed.
+			// the same series id set — no remount needed, straight to emit on the live context.
 			builder.addDimension({ ema: [200, 201, 202] }, 'ema');
-			expect(chart.overlayHandle.setVisible).not.toHaveBeenCalled();
+			expect(chart.addNativeIndicator).not.toHaveBeenCalled();
 		});
 
-		it('forces a remount when toggleLegend would otherwise leave the hidden line stuck visible (regression)', () => {
+		it('remounts so a hidden line actually disappears (regression)', () => {
 			// Regression: toggling a dimension off/on had no visual effect because Vela's patch
-			// path only updates a series's `points`, never its `visible` flag — the remount
-			// forces the hidden state to actually take effect.
+			// path only updates a series's `points`, never its `visible` flag — the remove +
+			// re-add forces the hidden state to actually take effect (via a fresh mount).
 			builder.setCandlestickSeries(data, dims);
 			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
-			const ctx = createMockOverlayCtx();
-			chart.resolveOverlayReady(ctx);
-			chart.overlayHandle.setVisible.mockClear();
+			chart.resolveOverlayReady(createMockOverlayCtx());
+			chart.addNativeIndicator.mockClear();
 
 			// toggleLegend does not change the series id set (still ['overlay-line-ema']), only
-			// its visible flag — a remount is still required for the visibility flip to render,
-			// since Vela's patch path never re-reads `visible` on an existing series.
+			// its visible flag — still expected to trigger a remount.
 			builder.toggleLegend('ema');
 
-			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(1, false);
-			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(2, true);
+			expect(chart.addNativeIndicator).toHaveBeenCalledTimes(1);
+		});
+
+		it('removes the previous overlay indicator before mounting the replacement', () => {
+			builder.setCandlestickSeries(data, dims);
+			chart.resolveOverlayReady(createMockOverlayCtx());
+			const firstHandle = chart.currentOverlayHandle();
+
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+
+			expect(firstHandle?.remove).toHaveBeenCalledTimes(1);
+		});
+
+		it('ends up with both dimensions regardless of which async caller resolves last (regression)', () => {
+			// Regression: TimeSeriesFacade.addDimension is async (it awaits a DuckDB query per
+			// column) — toggling two schema columns in quick succession fires two independent
+			// addDimension calls on this builder whose CALLERS can resolve in either order. Each
+			// call here stands in for one such caller's `await` finally landing; the overlay must
+			// end up showing both lines no matter which one lands first.
+			builder.setCandlestickSeries(data, dims);
+			chart.resolveOverlayReady(createMockOverlayCtx());
+
+			// Simulates the second click's query (bid) winning the race and landing first.
+			builder.addDimension({ bid: [1, 2, 3] }, 'bid');
+			chart.resolveOverlayReady(createMockOverlayCtx());
+			// Then the first click's query (vol) lands.
+			builder.addDimension({ vol: [4, 5, 6] }, 'vol');
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			const titles = ctx.emit.mock.calls.at(-1)?.[0].series.map((s: { title: string }) => s.title);
+			expect(titles).toEqual(expect.arrayContaining(['bid', 'vol']));
+			expect(titles).toHaveLength(2);
 		});
 	});
 
@@ -332,15 +375,17 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		it('toggles a marker off and back on', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 });
-			const ctx = createMockOverlayCtx();
-			chart.resolveOverlayReady(ctx);
-			ctx.emit.mockClear();
+			chart.resolveOverlayReady(createMockOverlayCtx());
 
 			builder.toggleMarkers(1, 'close', 'circle');
-			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
+			const offCtx = createMockOverlayCtx();
+			chart.resolveOverlayReady(offCtx);
+			expect(offCtx.emit).toHaveBeenLastCalledWith({ series: [] });
 
 			builder.toggleMarkers(1, 'close', 'circle');
-			expect(ctx.emit).toHaveBeenLastCalledWith({
+			const onCtx = createMockOverlayCtx();
+			chart.resolveOverlayReady(onCtx);
+			expect(onCtx.emit).toHaveBeenLastCalledWith({
 				series: [expect.objectContaining({ kind: 'markers' })]
 			});
 		});
@@ -348,11 +393,11 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		it('clears all markers', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 });
-			const ctx = createMockOverlayCtx();
-			chart.resolveOverlayReady(ctx);
-			ctx.emit.mockClear();
+			chart.resolveOverlayReady(createMockOverlayCtx());
 
 			builder.clearMarkers();
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
 
 			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
 		});
