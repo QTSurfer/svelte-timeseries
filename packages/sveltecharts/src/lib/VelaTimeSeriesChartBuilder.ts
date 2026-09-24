@@ -8,7 +8,8 @@ import {
 	type SeriesPoint,
 	type MarkerPoint,
 	type LineLikeSeries,
-	type MarkerSeries
+	type MarkerSeries,
+	type IndicatorHandle
 } from '@luxalgo/vela';
 import type {
 	ChartDataset,
@@ -123,6 +124,10 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	private extraDimensions: string[] = [];
 	private markers = new Map<string, MarkerState[]>();
 	private overlayCtx: NativeIndicatorContext | null = null;
+	private overlayHandle: IndicatorHandle | null = null;
+	// A fingerprint of the LAST emit's series (ids + visibility + marker identities) — see
+	// emitOverlay's structural-change check.
+	private lastOverlayFingerprint = '';
 
 	constructor(instance: Vela, builderConfig?: ConfigBuilder) {
 		this.VelaChart = instance;
@@ -134,7 +139,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			this.emitOverlay();
 		};
 		try {
-			this.VelaChart.addNativeIndicator(OVERLAY_INDICATOR_TYPE);
+			this.overlayHandle = this.VelaChart.addNativeIndicator(OVERLAY_INDICATOR_TYPE);
 		} finally {
 			pendingOnReady = null;
 		}
@@ -348,6 +353,17 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	 * series) through the overlay native indicator's emit channel. A no-op before the chart has
 	 * called start(ctx) on it (overlayCtx not yet captured) — the next mutation re-emits once
 	 * it is.
+	 *
+	 * Vela's native-indicator patch path (`modelToValuePatch`/`applyPatch` in its compiled
+	 * source) only ever UPDATES a series's `points` for an id already present in the model
+	 * from the indicator's last full mount — it never re-reads that series's `visible` flag,
+	 * an `emit()` naming a NEW id is silently dropped, and `MarkerSeries` isn't patched at all
+	 * (only `line*`/`candle`/`bar` kinds are, so a marker add/remove never reaches the chart
+	 * through a plain emit). So whenever anything other than a line's `points` changes —
+	 * series ids added/removed, a line's visibility flipping, or the marker set changing at
+	 * all — this forces a fresh mount via `handle.setVisible(false)` + `setVisible(true)`
+	 * (Vela's own documented remount path — see `EngineOrchestrator.setVisible`) before
+	 * emitting, instead of relying on the patch to pick it up.
 	 */
 	private emitOverlay(): void {
 		if (!this.overlayCtx) return;
@@ -366,17 +382,31 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			}
 		}));
 
+		const markerPoints = this.toMarkerPoints();
 		const markerSeries: MarkerSeries = {
 			id: 'overlay-markers',
 			title: 'Markers',
 			paneId: 'price',
 			kind: 'markers',
-			markers: this.toMarkerPoints()
+			markers: markerPoints
 		};
 
-		this.overlayCtx.emit({
-			series: markerSeries.markers.length ? [...series, markerSeries] : series
+		const allSeries = markerPoints.length ? [...series, markerSeries] : series;
+
+		// Everything except each line's `points` (which the patch path DOES update correctly) —
+		// id + visible per line, plus a full marker snapshot since markers are never patched.
+		const fingerprint = JSON.stringify({
+			lines: series.map((s) => ({ id: s.id, visible: s.visible })),
+			markers: markerPoints
 		});
+
+		if (fingerprint !== this.lastOverlayFingerprint && this.overlayHandle) {
+			this.overlayHandle.setVisible(false);
+			this.overlayHandle.setVisible(true);
+		}
+		this.lastOverlayFingerprint = fingerprint;
+
+		this.overlayCtx.emit({ series: allSeries });
 	}
 
 	private toSeriesPoints(dimName: string): SeriesPoint[] {

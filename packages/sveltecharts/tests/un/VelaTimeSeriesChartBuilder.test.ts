@@ -19,6 +19,7 @@ vi.mock('@luxalgo/vela', () => ({
 function createMockChart() {
 	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
 	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
+	const overlayHandle = { setVisible: vi.fn() };
 
 	return {
 		setMarket: vi.fn(),
@@ -29,8 +30,9 @@ function createMockChart() {
 		addNativeIndicator: vi.fn(() => {
 			if (!registeredDescriptor) throw new Error('No native indicator registered');
 			pendingInstance = registeredDescriptor.create();
-			return { id: 'native-1' };
+			return overlayHandle;
 		}),
+		overlayHandle,
 		/** Test-only helper: fires the instance's start(ctx), like Vela's async readiness wait resolving. */
 		resolveOverlayReady(ctx: unknown) {
 			pendingInstance?.start(ctx);
@@ -184,6 +186,63 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			expect(ctx.emit).toHaveBeenLastCalledWith({
 				series: [expect.objectContaining({ title: 'ema', visible: false })]
 			});
+		});
+
+		it('emits every added dimension, not just the first one (regression)', () => {
+			// Regression: Vela's native-indicator patch path only updates a series whose id
+			// was already present at the indicator's last mount — a plain emit() naming a new
+			// series id was silently dropped, so adding a second/third dimension after the
+			// first never showed up.
+			builder.setCandlestickSeries(data, dims);
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+			builder.addDimension({ sma: [99, 100, 101] }, 'sma');
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({ title: 'ema' }),
+					expect.objectContaining({ title: 'sma' })
+				]
+			});
+		});
+
+		it('forces a remount (setVisible false/true) only when the set of series ids changes', () => {
+			builder.setCandlestickSeries(data, dims);
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			chart.overlayHandle.setVisible.mockClear();
+
+			// First dimension: the series id set grows from [] to ['overlay-line-ema'] — remount.
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(1, false);
+			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(2, true);
+			chart.overlayHandle.setVisible.mockClear();
+
+			// Re-adding the SAME dimension (a value update, e.g. from updateDimensions) keeps
+			// the same series id set — no remount needed.
+			builder.addDimension({ ema: [200, 201, 202] }, 'ema');
+			expect(chart.overlayHandle.setVisible).not.toHaveBeenCalled();
+		});
+
+		it('forces a remount when toggleLegend would otherwise leave the hidden line stuck visible (regression)', () => {
+			// Regression: toggling a dimension off/on had no visual effect because Vela's patch
+			// path only updates a series's `points`, never its `visible` flag — the remount
+			// forces the hidden state to actually take effect.
+			builder.setCandlestickSeries(data, dims);
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			chart.overlayHandle.setVisible.mockClear();
+
+			// toggleLegend does not change the series id set (still ['overlay-line-ema']), only
+			// its visible flag — a remount is still required for the visibility flip to render,
+			// since Vela's patch path never re-reads `visible` on an existing series.
+			builder.toggleLegend('ema');
+
+			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(1, false);
+			expect(chart.overlayHandle.setVisible).toHaveBeenNthCalledWith(2, true);
 		});
 	});
 
