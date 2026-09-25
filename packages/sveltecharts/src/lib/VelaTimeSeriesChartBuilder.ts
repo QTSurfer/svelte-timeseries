@@ -2,13 +2,10 @@ import {
 	registerNativeIndicator,
 	type Vela,
 	type OHLCV,
-	type MarkShape,
 	type NativeIndicator,
 	type NativeIndicatorContext,
 	type SeriesPoint,
-	type MarkerPoint,
 	type LineLikeSeries,
-	type MarkerSeries,
 	type IndicatorHandle
 } from '@luxalgo/vela';
 import type {
@@ -30,13 +27,13 @@ type MarkerState = {
 	id: number;
 	timestamp: number;
 	color: string;
-	shape: MarkShape;
 	text?: string;
 	visible: boolean;
 };
 
 const OVERLAY_INDICATOR_TYPE = 'qtsurfer-overlay';
 const OVERLAY_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#d97706', '#0891b2'];
+const MARKERS_LINE_ID = 'overlay-markers';
 
 let overlayRegistered = false;
 
@@ -212,7 +209,6 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			id,
 			timestamp: data.timestamp,
 			color: options?.color ?? '#000000',
-			shape: this.mapShape(options?.icon),
 			text: data.name,
 			visible: true
 		};
@@ -311,7 +307,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		return this;
 	}
 
-	toggleMarkers(id: number, dimName: string, icon: string): this {
+	toggleMarkers(id: number, dimName: string, _icon: string): this {
 		const markers = this.markers.get(dimName);
 		if (!markers) return this;
 
@@ -319,9 +315,6 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		if (!marker) return this;
 
 		marker.visible = !marker.visible;
-		if (marker.visible) {
-			marker.shape = this.mapShape(icon);
-		}
 		this.emitOverlay();
 		return this;
 	}
@@ -407,13 +400,20 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			}
 		}));
 
-		const markerPoints = this.toMarkerPoints();
-		const markerSeries: MarkerSeries = {
-			id: 'overlay-markers',
+		// Vela's native renderer has no separate pipeline for `kind: 'markers'` (`MarkerSeries`)
+		// — `emitSeries` only handles `candle`/`bar` and isLineLikeSeries kinds, so a
+		// MarkerSeries silently paints nothing. A price-anchored marker is instead a
+		// `LineLikeSeries` with `kind: 'circles'`: `emitPointMarkers` paints one point per
+		// series entry at (time, value), which is exactly what markPoint/createSeriesMarkers do
+		// for the ECharts/Lightweight builders.
+		const markerPoints = this.toMarkerSeriesPoints();
+		const markerSeries: LineLikeSeries = {
+			id: MARKERS_LINE_ID,
 			title: 'Markers',
 			paneId: 'price',
-			kind: 'markers',
-			markers: markerPoints
+			kind: 'circles',
+			points: markerPoints,
+			style: { color: '#000000', width: 5, lineStyle: 'solid' }
 		};
 
 		const allSeries = markerPoints.length ? [...series, markerSeries] : series;
@@ -458,30 +458,31 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		return points;
 	}
 
-	private toMarkerPoints(): MarkerPoint[] {
-		const points: MarkerPoint[] = [];
-		for (const markers of this.markers.values()) {
+	/**
+	 * Resolves each visible marker to the actual value of its dimension at its timestamp — the
+	 * same anchor point markPoint (ECharts) and createSeriesMarkers (Lightweight) place their
+	 * marker at, so it renders sitting on the line/candle it annotates instead of an arbitrary
+	 * position. A marker whose dimension has no matching or non-null value at that exact
+	 * timestamp is skipped (nothing to anchor it to).
+	 */
+	private toMarkerSeriesPoints(): SeriesPoint[] {
+		const points: SeriesPoint[] = [];
+		for (const [dimName, markers] of this.markers) {
 			for (const marker of markers) {
 				if (!marker.visible) continue;
-				points.push({
-					time: marker.timestamp,
-					position: 'aboveBar',
-					shape: marker.shape,
-					color: marker.color,
-					text: marker.text
-				});
+				const value = this.findValueAt(dimName, marker.timestamp);
+				if (value == null) continue;
+				points.push({ time: marker.timestamp, value, color: marker.color });
 			}
 		}
 		return points;
 	}
 
-	/**
-	 * Vela's MarkShape has no arrow outlines — icon markers fall back to 'diamond' to
-	 * stay visually distinct from the default 'circle'.
-	 */
-	private mapShape(icon?: string): MarkShape {
-		if (icon === 'circle') return 'circle';
-		if (icon === 'arrowUp' || icon === 'arrowDown') return 'diamond';
-		return 'circle';
+	private findValueAt(dimName: string, timestamp: number): number | null {
+		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const values = this.dataset[dimName] ?? [];
+		const index = timestamps.indexOf(timestamp);
+		if (index === -1) return null;
+		return values[index] ?? null;
 	}
 }

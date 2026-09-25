@@ -343,8 +343,13 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		});
 	});
 
-	describe('markers (overlay marker series)', () => {
-		it('emits a visible marker as a marker series once the overlay is ready', () => {
+	describe('markers (overlay circles series)', () => {
+		// Vela's native renderer has no painter for `kind: 'markers'` (MarkerSeries) — see
+		// emitOverlay's comment. A marker is instead one point in a `kind: 'circles'` line-like
+		// series, anchored at its dimension's actual value at that timestamp (close is 105 at
+		// timestamp 2000 in `data`), the same way markPoint/createSeriesMarkers anchor markers
+		// for the ECharts/Lightweight builders.
+		it('emits a visible marker as a circles-series point anchored at its real value', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(
 				1,
@@ -358,18 +363,22 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			expect(ctx.emit).toHaveBeenLastCalledWith({
 				series: [
 					expect.objectContaining({
-						kind: 'markers',
-						markers: [
-							expect.objectContaining({
-								time: 2000,
-								shape: 'circle',
-								color: '#ff0000',
-								text: 'Buy'
-							})
-						]
+						kind: 'circles',
+						points: [expect.objectContaining({ time: 2000, value: 105, color: '#ff0000' })]
 					})
 				]
 			});
+		});
+
+		it('skips a marker whose dimension has no value at that timestamp', () => {
+			builder.setCandlestickSeries(data, dims);
+			// timestamp 4000 doesn't exist in `data._ts` — nothing to anchor the marker to.
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 4000 });
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
 		});
 
 		it('toggles a marker off and back on', () => {
@@ -386,7 +395,7 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			const onCtx = createMockOverlayCtx();
 			chart.resolveOverlayReady(onCtx);
 			expect(onCtx.emit).toHaveBeenLastCalledWith({
-				series: [expect.objectContaining({ kind: 'markers' })]
+				series: [expect.objectContaining({ kind: 'circles' })]
 			});
 		});
 
