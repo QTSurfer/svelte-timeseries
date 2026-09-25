@@ -838,6 +838,15 @@ export class TimeSeriesChartBuilder {
 				color: 'black',
 				...(options as Partial<MarkerPointOption>)
 			};
+			// 'none' means "no icon specified" at the ChartMarkerPointOptions level (shared with
+			// the Lightweight/Vela builders, which both fall back to a visible default shape for
+			// it) — but ECharts' own `symbol: 'none'` means "draw nothing at all". Passing it
+			// straight through left a marker with no explicit icon (the default above, or a
+			// data-sourced shape of 'none') invisible with no error, unlike the other two
+			// engines. Falls back to a visible default here so all three engines agree.
+			if (opt.icon === 'none') {
+				opt.icon = 'circle';
+			}
 
 			if (!Array.isArray(this.option.series)) {
 				throw new Error('Series must be an array');

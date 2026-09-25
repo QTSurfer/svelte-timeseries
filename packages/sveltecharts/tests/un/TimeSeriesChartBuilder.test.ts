@@ -428,6 +428,40 @@ describe('TimeSeriesChartBuilder', () => {
 			expect(priceSeries.markPoint.data).toHaveLength(1);
 			expect(priceSeries.markPoint.data[0].name).toBe('markerpoint-0');
 		});
+
+		it('renders a visible symbol when no icon is given (regression)', () => {
+			// Regression: the default icon is 'none', which ChartMarkerPointOptions/the other
+			// builders treat as "no icon specified", but ECharts' own symbol:'none' means "draw
+			// nothing" — a marker added without an explicit icon (or one sourced from data as
+			// 'none') rendered completely invisible with no error.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
+		});
+
+		it('renders a visible symbol when the icon is explicitly "none" (regression)', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			builder.addMarkerPoint(
+				0,
+				{ dimName: 'price', timestamp: 2000, name: 'Buy' },
+				{ icon: 'none' }
+			);
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
+		});
 	});
 
 	describe('toggleMarkers', () => {
@@ -437,12 +471,18 @@ describe('TimeSeriesChartBuilder', () => {
 				price: [100, 101, 102]
 			});
 			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+			// Visible (a real symbol, not ECharts' hide-it symbol:'none') as soon as it's added.
+			const priceSeriesFor = () => {
+				const opts = lastSetOptionCall(echarts)[0];
+				return opts.series.find((s: any) => s.id === 'price');
+			};
+			expect(priceSeriesFor().markPoint.data[0].symbol).not.toBe('none');
 
 			builder.toggleMarkers(0, 'price', 'pin');
+			expect(priceSeriesFor().markPoint.data[0].symbol).toBe('none');
 
-			const opts = lastSetOptionCall(echarts)[0];
-			const priceSeries = opts.series.find((s: any) => s.id === 'price');
-			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
+			builder.toggleMarkers(0, 'price', 'pin');
+			expect(priceSeriesFor().markPoint.data[0].symbol).not.toBe('none');
 		});
 
 		it('does not throw when the marker was never placed (regression)', () => {
