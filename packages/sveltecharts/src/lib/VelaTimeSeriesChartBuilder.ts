@@ -462,15 +462,15 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	 * Resolves each visible marker to the actual value of its dimension at its timestamp — the
 	 * same anchor point markPoint (ECharts) and createSeriesMarkers (Lightweight) place their
 	 * marker at, so it renders sitting on the line/candle it annotates instead of an arbitrary
-	 * position. A marker whose dimension has no matching or non-null value at that exact
-	 * timestamp is skipped (nothing to anchor it to).
+	 * position. A marker whose dimension has no non-null value anywhere is skipped (nothing to
+	 * anchor it to).
 	 */
 	private toMarkerSeriesPoints(): SeriesPoint[] {
 		const points: SeriesPoint[] = [];
 		for (const [dimName, markers] of this.markers) {
 			for (const marker of markers) {
 				if (!marker.visible) continue;
-				const value = this.findValueAt(dimName, marker.timestamp);
+				const value = this.findClosestValue(dimName, marker.timestamp);
 				if (value == null) continue;
 				points.push({ time: marker.timestamp, value, color: marker.color });
 			}
@@ -478,11 +478,33 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		return points;
 	}
 
-	private findValueAt(dimName: string, timestamp: number): number | null {
+	/**
+	 * The dimension's value at the timestamp CLOSEST to `timestamp`, among rows where that value
+	 * is non-null. Markers are sourced separately from the loaded series (e.g. a DuckDB `markers`
+	 * table), so a marker's timestamp has no guarantee of landing exactly on a loaded sample, and
+	 * a "partial data" dataset can independently have null gaps in the dimension's own values —
+	 * this must skip both an exact-match miss and a null-value hit at the closest timestamp
+	 * rather than giving up on either (see the equivalent fix in TimeSeriesChartBuilder for the
+	 * two real-world cases that made this necessary).
+	 */
+	private findClosestValue(dimName: string, timestamp: number): number | null {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const values = this.dataset[dimName] ?? [];
-		const index = timestamps.indexOf(timestamp);
-		if (index === -1) return null;
-		return values[index] ?? null;
+
+		let closestValue: number | null = null;
+		let smallestDiff = Number.POSITIVE_INFINITY;
+
+		for (let i = 0; i < timestamps.length; i++) {
+			const time = timestamps[i];
+			const value = values[i];
+			if (time == null || value == null) continue;
+			const diff = Math.abs(time - timestamp);
+			if (diff < smallestDiff) {
+				smallestDiff = diff;
+				closestValue = value;
+			}
+		}
+
+		return closestValue;
 	}
 }

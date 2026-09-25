@@ -370,15 +370,58 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			});
 		});
 
-		it('skips a marker whose dimension has no value at that timestamp', () => {
+		it('anchors to the closest sample when the timestamp has no exact match (regression)', () => {
+			// Regression: markers are sourced separately from the candlestick series (e.g. a
+			// DuckDB `markers` table), so a marker's timestamp isn't guaranteed to land exactly
+			// on a loaded bar. An exact-match lookup silently dropped the marker — this finds
+			// the closest sample instead, the same fix applied to the ECharts builder.
 			builder.setCandlestickSeries(data, dims);
-			// timestamp 4000 doesn't exist in `data._ts` — nothing to anchor the marker to.
+			// timestamp 4000 doesn't exist in `data._ts` (max is 3000) — closest is 3000 (close: 106).
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 4000 });
 
 			const ctx = createMockOverlayCtx();
 			chart.resolveOverlayReady(ctx);
 
-			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						kind: 'circles',
+						points: [expect.objectContaining({ time: 4000, value: 106 })]
+					})
+				]
+			});
+		});
+
+		it('skips a null value at the closest timestamp and keeps searching (regression)', () => {
+			// Regression: a "partial data" dataset can have a null in the dimension's own value
+			// column independently of which timestamps exist — the closest-timestamp row can
+			// land exactly on such a gap. Must fall through to the next-closest non-null value
+			// instead of anchoring to null.
+			builder.setCandlestickSeries(
+				{
+					_ts: [1000, 2000, 3000],
+					open: [100, 101, 102],
+					high: [105, 106, 107],
+					low: [99, 100, 101],
+					close: [104, null, 106]
+				},
+				dims
+			);
+			// 2000 is the closest timestamp to 2100, but close is null there — falls through to
+			// 3000 (close: 106), the next closest with a non-null value.
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2100 });
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						kind: 'circles',
+						points: [expect.objectContaining({ time: 2100, value: 106 })]
+					})
+				]
+			});
 		});
 
 		it('toggles a marker off and back on', () => {
