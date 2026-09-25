@@ -462,6 +462,26 @@ describe('TimeSeriesChartBuilder', () => {
 			const priceSeries = opts.series.find((s: any) => s.id === 'price');
 			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
 		});
+
+		it('anchors the marker to the closest sample when its timestamp has no exact match (regression)', () => {
+			// Regression: markers are sourced from a separate table (e.g. DuckDB's `markers`
+			// table) than the series they annotate, so a marker's timestamp isn't guaranteed to
+			// land exactly on one of the series' samples. An exact-match lookup silently dropped
+			// the marker (caught by addMarkerPoint's try/catch, no chart error) whenever it
+			// didn't — this finds the closest sample instead of requiring an exact hit.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			// 2400 has no exact match; 2000 (value 101) is the closest sample.
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2400, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint).toBeDefined();
+			expect(priceSeries.markPoint.data[0].coord).toEqual([2400, 101]);
+		});
 	});
 
 	describe('toggleMarkers', () => {

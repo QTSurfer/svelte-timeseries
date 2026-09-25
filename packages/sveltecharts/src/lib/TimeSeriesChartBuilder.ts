@@ -944,6 +944,14 @@ export class TimeSeriesChartBuilder {
 
 	/**
 	 * Search for the dimension key and timestamp
+	 *
+	 * Markers are sourced from a separate table/query than the price series (e.g. DuckDB's
+	 * `markers` table), so a marker's timestamp is not guaranteed to land on an exact sample of
+	 * the series it annotates — Lightweight Charts' createSeriesMarkers already tolerates this
+	 * (it anchors purely by time, with no explicit value lookup at all). Exact-match lookups
+	 * here silently dropped any marker whose timestamp didn't hit a sample exactly (caught by
+	 * addMarkerPoint's try/catch, no error in the chart), so this finds the CLOSEST sample
+	 * instead of requiring an exact hit.
 	 */
 	private searchValueByDimensionKeyAndTimestamp(yDimKey: string, timestamp: number): any {
 		const dataset = this.option.dataset as {
@@ -957,31 +965,50 @@ export class TimeSeriesChartBuilder {
 
 		if (Array.isArray(dataset.source)) {
 			if (this.isNumberArray(dataset.source)) {
-				const dataFind = dataset.source.find((row) => {
-					return row[0] === timestamp;
-				});
-
-				if (!dataFind) {
+				const timestamps = dataset.source.map((row) => row[0]);
+				const index = this.findClosestIndex(timestamps, timestamp);
+				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
 				const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
-				return dataFind[yDimensionKey];
+				return dataset.source[index][yDimensionKey];
 			} else if (this.isRecordArray(dataset.source)) {
-				const dataFind = dataset.source.find((row) => {
-					return row[this._tsColumn] === timestamp;
-				});
-				if (!dataFind) {
+				const timestamps = dataset.source.map((row) => row[this._tsColumn]);
+				const index = this.findClosestIndex(timestamps, timestamp);
+				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
-				return dataFind[yDimKey];
+				return dataset.source[index][yDimKey];
 			}
 		} else {
-			const dataFind = dataset.source[this._tsColumn].indexOf(timestamp);
-			if (dataFind === -1) {
+			const timestamps = dataset.source[this._tsColumn];
+			const index = this.findClosestIndex(timestamps, timestamp);
+			if (index === -1) {
 				throw new Error(`No data found in timestamp ${timestamp}`);
 			}
-			return dataset.source[yDimKey][dataFind];
+			return dataset.source[yDimKey][index];
 		}
+	}
+
+	/**
+	 * Index of the timestamp closest to `target` in an ordered (or near-ordered) array,
+	 * tolerating null gaps. Returns -1 for an empty/all-null array.
+	 */
+	private findClosestIndex(timestamps: readonly (number | null)[], target: number): number {
+		let closest = -1;
+		let smallestDiff = Number.POSITIVE_INFINITY;
+
+		for (let i = 0; i < timestamps.length; i++) {
+			const value = timestamps[i];
+			if (value == null) continue;
+			const diff = Math.abs(value - target);
+			if (diff < smallestDiff) {
+				smallestDiff = diff;
+				closest = i;
+			}
+		}
+
+		return closest;
 	}
 
 	/**
