@@ -12,12 +12,15 @@
 		LightweightTimeSeriesChartBuilder,
 		SVECharts,
 		SVELightweightCharts,
-		TimeSeriesChartBuilder
+		SVEVelaCharts,
+		TimeSeriesChartBuilder,
+		VelaTimeSeriesChartBuilder
 	} from '@qtsurfer/sveltecharts';
 	import type {
 		ECharts,
 		LightweightChartApi,
-		TimeSeriesChartAdapter
+		TimeSeriesChartAdapter,
+		VelaChartApi
 	} from '@qtsurfer/sveltecharts';
 
 	type DataColumnsProps = {
@@ -61,13 +64,14 @@
 		containerClass?: string;
 		snippetClass?: string;
 		chartClass?: string;
-		chartLibrary?: 'echarts' | 'lightweight';
+		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
 		isDark?: boolean;
 		onFacadeReady?: (facade: TimeSeriesFacade) => void;
 		loadingSnippet?: Snippet;
 	} = $props();
 
 	let loading = $state(false);
+	let loadError = $state('');
 	let timer = $state({ start: performance.now(), end: 0 });
 
 	let timeSeriesFacade = $state<TimeSeriesFacade>();
@@ -87,6 +91,7 @@
 		const myToken = ++loadToken;
 
 		loading = true;
+		loadError = '';
 		const duckDb = await DuckDB.create(table, markers, debug);
 		const discardIfStale = (): boolean => {
 			if (myToken === loadToken) return false;
@@ -95,29 +100,36 @@
 		};
 		if (discardIfStale()) return;
 
-		const facade = new TimeSeriesFacade(duckDb, chartBuilder);
-		await facade.initialize(currentTable, columnsSelect);
-		if (discardIfStale()) return;
-
-		if (!externalManagerLegend) {
-			await facade.loadAllColumns(currentTable, [columnsSelect]);
+		try {
+			const facade = new TimeSeriesFacade(duckDb, chartBuilder);
+			await facade.initialize(currentTable, columnsSelect);
 			if (discardIfStale()) return;
-		}
 
-		let newMarkers: MarkersTable[] | undefined;
-		if (markers) {
-			newMarkers = await facade.loadMarkers(markers.targetDimension);
+			if (!externalManagerLegend) {
+				await facade.loadAllColumns(currentTable, [columnsSelect]);
+				if (discardIfStale()) return;
+			}
+
+			let newMarkers: MarkersTable[] | undefined;
+			if (markers) {
+				newMarkers = await facade.loadMarkers(markers.targetDimension);
+				if (discardIfStale()) return;
+			}
+
+			timeSeriesFacade = facade;
+			if (newMarkers) markersData = newMarkers;
+			columns = facade.getColumns(currentTable);
+			matrix = facade.describe();
+			visibleRows = matrix[1];
+			timer.end = performance.now();
+			onFacadeReady?.(facade);
+		} catch (error) {
 			if (discardIfStale()) return;
+			loadError = error instanceof Error ? error.message : 'Failed to load the chart.';
+			if (debug) console.error(error);
+		} finally {
+			if (myToken === loadToken) loading = false;
 		}
-
-		timeSeriesFacade = facade;
-		if (newMarkers) markersData = newMarkers;
-		columns = facade.getColumns(currentTable);
-		matrix = facade.describe();
-		visibleRows = matrix[1];
-		timer.end = performance.now();
-		loading = false;
-		onFacadeReady?.(facade);
 	};
 
 	const onLoadECharts = async (EChartInstance: ECharts) => {
@@ -146,12 +158,24 @@
 		await loadChart(timeSeriesBuilder);
 	};
 
+	const onLoadVela = async (chartInstance: VelaChartApi) => {
+		const timeSeriesBuilder = new VelaTimeSeriesChartBuilder(chartInstance);
+		await loadChart(timeSeriesBuilder);
+	};
+
 	async function toggleColumn(name: string) {
 		if (!timeSeriesFacade) return;
 		loading = true;
-		columns = await timeSeriesFacade.toggleColumn(tableName, name);
-		matrix = timeSeriesFacade.describe();
-		loading = false;
+		loadError = '';
+		try {
+			columns = await timeSeriesFacade.toggleColumn(tableName, name);
+			matrix = timeSeriesFacade.describe();
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'Failed to toggle the column.';
+			if (debug) console.error(error);
+		} finally {
+			loading = false;
+		}
 	}
 
 	function toggleMarker(id: number, shape: string) {
@@ -192,6 +216,8 @@
 	<div class={chartClass}>
 		{#if chartLibrary === 'lightweight'}
 			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
+		{:else if chartLibrary === 'vela'}
+			<SVEVelaCharts onLoad={onLoadVela} {loading} {isDark} />
 		{:else}
 			<SVECharts onLoad={onLoadECharts} {onDataZoom} {loading} {isDark} />
 		{/if}
@@ -204,6 +230,9 @@
 				<div class="spinner"></div>
 			</div>
 		{/if}
+	{/if}
+	{#if loadError}
+		<div class="wrapper-error">{loadError}</div>
 	{/if}
 </div>
 
@@ -289,5 +318,19 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.wrapper-error {
+		position: absolute;
+		left: 1rem;
+		right: 1rem;
+		top: 1rem;
+		z-index: 3;
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+		background-color: rgba(220, 38, 38, 0.1);
+		border: 1px solid rgba(220, 38, 38, 0.4);
+		color: #dc2626;
+		font-size: 0.875rem;
 	}
 </style>

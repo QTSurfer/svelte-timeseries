@@ -428,6 +428,126 @@ describe('TimeSeriesChartBuilder', () => {
 			expect(priceSeries.markPoint.data).toHaveLength(1);
 			expect(priceSeries.markPoint.data[0].name).toBe('markerpoint-0');
 		});
+
+		it('renders a visible symbol when no icon is given (regression)', () => {
+			// Regression: the default icon is 'none', which ChartMarkerPointOptions/the other
+			// builders treat as "no icon specified", but ECharts' own symbol:'none' means "draw
+			// nothing" — a marker added without an explicit icon (or one sourced from data as
+			// 'none') rendered completely invisible with no error.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
+		});
+
+		it('renders a visible symbol when the icon is explicitly "none" (regression)', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			builder.addMarkerPoint(
+				0,
+				{ dimName: 'price', timestamp: 2000, name: 'Buy' },
+				{ icon: 'none' }
+			);
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint.data[0].symbol).not.toBe('none');
+		});
+
+		it('anchors the marker to the closest sample when its timestamp has no exact match (regression)', () => {
+			// Regression: markers are sourced from a separate table (e.g. DuckDB's `markers`
+			// table) than the series they annotate, so a marker's timestamp isn't guaranteed to
+			// land exactly on one of the series' samples. An exact-match lookup silently dropped
+			// the marker (caught by addMarkerPoint's try/catch, no chart error) whenever it
+			// didn't — this finds the closest sample instead of requiring an exact hit.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			// 2400 has no exact match; 2000 (value 101) is the closest sample.
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2400, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint).toBeDefined();
+			expect(priceSeries.markPoint.data[0].coord).toEqual([2400, 101]);
+		});
+
+		it('skips a null gap in the value column and anchors to the next closest non-null sample (regression)', () => {
+			// Regression: a "Partial data" dataset can have a null in the VALUE column
+			// independently of the timestamp column — the closest-timestamp row can land
+			// exactly on such a gap. Confirmed against a real 1.8M-row dataset where every
+			// marker resolved to null this way (the closest timestamp existed, but its price
+			// was null) and was silently dropped, despite the earlier closest-timestamp fix.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000, 4000],
+				price: [100, null, 103, 104]
+			});
+
+			// 2000 is the closest timestamp to 2100, but its price is null — must fall through
+			// to 3000 (the next closest with a non-null price), not give up.
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2100, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint).toBeDefined();
+			expect(priceSeries.markPoint.data[0].coord).toEqual([2100, 103]);
+		});
+	});
+
+	describe('toggleMarkers', () => {
+		it('toggles an existing marker point between shown and hidden', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+			// Visible (a real symbol, not ECharts' hide-it symbol:'none') as soon as it's added.
+			const priceSeriesFor = () => {
+				const opts = lastSetOptionCall(echarts)[0];
+				return opts.series.find((s: any) => s.id === 'price');
+			};
+			expect(priceSeriesFor().markPoint.data[0].symbol).not.toBe('none');
+
+			builder.toggleMarkers(0, 'price', 'pin');
+			expect(priceSeriesFor().markPoint.data[0].symbol).toBe('none');
+
+			builder.toggleMarkers(0, 'price', 'pin');
+			expect(priceSeriesFor().markPoint.data[0].symbol).not.toBe('none');
+		});
+
+		it('does not throw when the marker was never placed (regression)', () => {
+			// Regression: addMarkerPoint returns early without ever setting markPoint when the
+			// dimension has a null value at that exact timestamp — a later toggleMarkers for
+			// that marker id previously crashed on `seriesDimension.markPoint.data` because
+			// markPoint was undefined, instead of leaving the (nonexistent) marker alone.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, null, 102]
+			});
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+
+			expect(() => builder.toggleMarkers(0, 'price', 'pin')).not.toThrow();
+		});
+
+		it('does not throw when the dimension has no markers at all', () => {
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			expect(() => builder.toggleMarkers(0, 'price', 'pin')).not.toThrow();
+		});
 	});
 
 	describe('setSeriesStyle', () => {

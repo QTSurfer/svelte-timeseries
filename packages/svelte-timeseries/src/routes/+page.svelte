@@ -20,7 +20,7 @@
 
 	type SourceMode = 'url' | 'file';
 	type LegendMode = 'external' | 'internal';
-	type ChartLibrary = 'echarts' | 'lightweight';
+	type ChartLibrary = 'echarts' | 'lightweight' | 'vela';
 
 	const CUSTOM_CONFIGURATION_ID = 'custom';
 
@@ -112,7 +112,7 @@
 	const showCustomSidebar = $derived(legendMode === 'external');
 
 	$effect(() => {
-		if (chartLibrary === 'lightweight' && legendMode === 'internal') {
+		if (chartLibrary !== 'echarts' && legendMode === 'internal') {
 			legendMode = 'external';
 		}
 	});
@@ -310,7 +310,7 @@
 				</div>
 				<select class="select select-bordered" bind:value={legendMode}>
 					<option value="external">External</option>
-					<option value="internal" disabled={chartLibrary === 'lightweight'}>Internal</option>
+					<option value="internal" disabled={chartLibrary !== 'echarts'}>Internal</option>
 				</select>
 			</label>
 
@@ -321,6 +321,7 @@
 				<select class="select select-bordered" bind:value={chartLibrary}>
 					<option value="echarts">ECharts</option>
 					<option value="lightweight">Lightweight Charts</option>
+					<option value="vela">Vela</option>
 				</select>
 			</label>
 
@@ -439,6 +440,13 @@
 		{#if chartLibrary === 'lightweight'}
 			<div class="mt-3 text-sm text-base-content/70">
 				Lightweight Charts uses the external schema controls in this demo.
+			</div>
+		{/if}
+
+		{#if chartLibrary === 'vela'}
+			<div class="mt-3 text-sm text-base-content/70">
+				Vela only renders candlestick (OHLC) data. If the selected table has none, loading will fail
+				with an error shown below.
 			</div>
 		{/if}
 

@@ -838,6 +838,15 @@ export class TimeSeriesChartBuilder {
 				color: 'black',
 				...(options as Partial<MarkerPointOption>)
 			};
+			// 'none' means "no icon specified" at the ChartMarkerPointOptions level (shared with
+			// the Lightweight/Vela builders, which both fall back to a visible default shape for
+			// it) — but ECharts' own `symbol: 'none'` means "draw nothing at all". Passing it
+			// straight through left a marker with no explicit icon (the default above, or a
+			// data-sourced shape of 'none') invisible with no error, unlike the other two
+			// engines. Falls back to a visible default here so all three engines agree.
+			if (opt.icon === 'none') {
+				opt.icon = 'circle';
+			}
 
 			if (!Array.isArray(this.option.series)) {
 				throw new Error('Series must be an array');
@@ -935,6 +944,14 @@ export class TimeSeriesChartBuilder {
 
 	/**
 	 * Search for the dimension key and timestamp
+	 *
+	 * Markers are sourced from a separate table/query than the price series (e.g. DuckDB's
+	 * `markers` table), so a marker's timestamp is not guaranteed to land on an exact sample of
+	 * the series it annotates — Lightweight Charts' createSeriesMarkers already tolerates this
+	 * (it anchors purely by time, with no explicit value lookup at all). Exact-match lookups
+	 * here silently dropped any marker whose timestamp didn't hit a sample exactly (caught by
+	 * addMarkerPoint's try/catch, no error in the chart), so this finds the CLOSEST sample
+	 * instead of requiring an exact hit.
 	 */
 	private searchValueByDimensionKeyAndTimestamp(yDimKey: string, timestamp: number): any {
 		const dataset = this.option.dataset as {
@@ -948,31 +965,60 @@ export class TimeSeriesChartBuilder {
 
 		if (Array.isArray(dataset.source)) {
 			if (this.isNumberArray(dataset.source)) {
-				const dataFind = dataset.source.find((row) => {
-					return row[0] === timestamp;
-				});
-
-				if (!dataFind) {
-					throw new Error(`No data found in timestamp ${timestamp}`);
-				}
 				const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
-				return dataFind[yDimensionKey];
-			} else if (this.isRecordArray(dataset.source)) {
-				const dataFind = dataset.source.find((row) => {
-					return row[this._tsColumn] === timestamp;
-				});
-				if (!dataFind) {
+				const timestamps = dataset.source.map((row) => row[0]);
+				const values = dataset.source.map((row) => row[yDimensionKey]);
+				const index = this.findClosestIndex(timestamps, values, timestamp);
+				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
-				return dataFind[yDimKey];
+				return dataset.source[index][yDimensionKey];
+			} else if (this.isRecordArray(dataset.source)) {
+				const timestamps = dataset.source.map((row) => row[this._tsColumn]);
+				const values = dataset.source.map((row) => row[yDimKey]);
+				const index = this.findClosestIndex(timestamps, values, timestamp);
+				if (index === -1) {
+					throw new Error(`No data found in timestamp ${timestamp}`);
+				}
+				return dataset.source[index][yDimKey];
 			}
 		} else {
-			const dataFind = dataset.source[this._tsColumn].indexOf(timestamp);
-			if (dataFind === -1) {
+			const timestamps = dataset.source[this._tsColumn];
+			const values = dataset.source[yDimKey];
+			const index = this.findClosestIndex(timestamps, values, timestamp);
+			if (index === -1) {
 				throw new Error(`No data found in timestamp ${timestamp}`);
 			}
-			return dataset.source[yDimKey][dataFind];
+			return values[index];
 		}
+	}
+
+	/**
+	 * Index of the timestamp closest to `target`, among positions where the DIMENSION VALUE is
+	 * also non-null. A "Partial data" dataset can have gaps (null) in the value column
+	 * independently of the timestamp column, so the closest-timestamp row can land on exactly
+	 * such a gap — this must keep searching past it (and past null timestamps) rather than
+	 * anchoring the marker to a row with nothing to plot. Returns -1 if no row has both.
+	 */
+	private findClosestIndex(
+		timestamps: readonly (number | null)[],
+		values: readonly (number | null)[],
+		target: number
+	): number {
+		let closest = -1;
+		let smallestDiff = Number.POSITIVE_INFINITY;
+
+		for (let i = 0; i < timestamps.length; i++) {
+			const time = timestamps[i];
+			if (time == null || values[i] == null) continue;
+			const diff = Math.abs(time - target);
+			if (diff < smallestDiff) {
+				smallestDiff = diff;
+				closest = i;
+			}
+		}
+
+		return closest;
 	}
 
 	/**
@@ -1169,8 +1215,10 @@ export class TimeSeriesChartBuilder {
 			return s.encode && s.encode.y && s.encode.y === dimName;
 		});
 
-		const markerPoints = seriesDimension?.markPoint.data as MarkPointDataItemOption[];
-		const point = markerPoints.find((mp) => mp.name === `markerpoint-${id}`);
+		const markerPoints = seriesDimension?.markPoint?.data as MarkPointDataItemOption[] | undefined;
+		// No markPoint at all means addMarkerPoint never actually placed this marker (e.g. its
+		// value at that timestamp was null) — nothing to toggle.
+		const point = markerPoints?.find((mp) => mp.name === `markerpoint-${id}`);
 
 		if (!point) {
 			return this;
