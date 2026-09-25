@@ -965,16 +965,18 @@ export class TimeSeriesChartBuilder {
 
 		if (Array.isArray(dataset.source)) {
 			if (this.isNumberArray(dataset.source)) {
+				const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
 				const timestamps = dataset.source.map((row) => row[0]);
-				const index = this.findClosestIndex(timestamps, timestamp);
+				const values = dataset.source.map((row) => row[yDimensionKey]);
+				const index = this.findClosestIndex(timestamps, values, timestamp);
 				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
-				const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
 				return dataset.source[index][yDimensionKey];
 			} else if (this.isRecordArray(dataset.source)) {
 				const timestamps = dataset.source.map((row) => row[this._tsColumn]);
-				const index = this.findClosestIndex(timestamps, timestamp);
+				const values = dataset.source.map((row) => row[yDimKey]);
+				const index = this.findClosestIndex(timestamps, values, timestamp);
 				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
@@ -982,26 +984,34 @@ export class TimeSeriesChartBuilder {
 			}
 		} else {
 			const timestamps = dataset.source[this._tsColumn];
-			const index = this.findClosestIndex(timestamps, timestamp);
+			const values = dataset.source[yDimKey];
+			const index = this.findClosestIndex(timestamps, values, timestamp);
 			if (index === -1) {
 				throw new Error(`No data found in timestamp ${timestamp}`);
 			}
-			return dataset.source[yDimKey][index];
+			return values[index];
 		}
 	}
 
 	/**
-	 * Index of the timestamp closest to `target` in an ordered (or near-ordered) array,
-	 * tolerating null gaps. Returns -1 for an empty/all-null array.
+	 * Index of the timestamp closest to `target`, among positions where the DIMENSION VALUE is
+	 * also non-null. A "Partial data" dataset can have gaps (null) in the value column
+	 * independently of the timestamp column, so the closest-timestamp row can land on exactly
+	 * such a gap — this must keep searching past it (and past null timestamps) rather than
+	 * anchoring the marker to a row with nothing to plot. Returns -1 if no row has both.
 	 */
-	private findClosestIndex(timestamps: readonly (number | null)[], target: number): number {
+	private findClosestIndex(
+		timestamps: readonly (number | null)[],
+		values: readonly (number | null)[],
+		target: number
+	): number {
 		let closest = -1;
 		let smallestDiff = Number.POSITIVE_INFINITY;
 
 		for (let i = 0; i < timestamps.length; i++) {
-			const value = timestamps[i];
-			if (value == null) continue;
-			const diff = Math.abs(value - target);
+			const time = timestamps[i];
+			if (time == null || values[i] == null) continue;
+			const diff = Math.abs(time - target);
 			if (diff < smallestDiff) {
 				smallestDiff = diff;
 				closest = i;

@@ -482,6 +482,27 @@ describe('TimeSeriesChartBuilder', () => {
 			expect(priceSeries.markPoint).toBeDefined();
 			expect(priceSeries.markPoint.data[0].coord).toEqual([2400, 101]);
 		});
+
+		it('skips a null gap in the value column and anchors to the next closest non-null sample (regression)', () => {
+			// Regression: a "Partial data" dataset can have a null in the VALUE column
+			// independently of the timestamp column — the closest-timestamp row can land
+			// exactly on such a gap. Confirmed against a real 1.8M-row dataset where every
+			// marker resolved to null this way (the closest timestamp existed, but its price
+			// was null) and was silently dropped, despite the earlier closest-timestamp fix.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000, 4000],
+				price: [100, null, 103, 104]
+			});
+
+			// 2000 is the closest timestamp to 2100, but its price is null — must fall through
+			// to 3000 (the next closest with a non-null price), not give up.
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2100, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint).toBeDefined();
+			expect(priceSeries.markPoint.data[0].coord).toEqual([2100, 103]);
+		});
 	});
 
 	describe('toggleMarkers', () => {
