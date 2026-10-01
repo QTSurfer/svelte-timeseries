@@ -13,3 +13,5 @@ Also fixes two long-standing correctness bugs in `TimeSeriesChartBuilder` (EChar
 
 - `toggleMarkers` no longer throws when a marker was never actually placed (e.g. its value at that timestamp was `null`).
 - Markers now render visibly by default (an unset icon no longer maps to ECharts' own "draw nothing" symbol) and anchor to the closest sample with a non-null value, instead of requiring an exact timestamp match — markers come from a separate source than the series they annotate, so an exact match was never guaranteed. The equivalent fix is applied to the new Vela builder as well.
+
+To keep marker icons consistent across engines, the guaranteed cross-engine icon set is now `circle` / `square` / `arrowUp` / `arrowDown` / `none` (lightweight-charts' own native shape set, the narrowest of the three engines). ECharts' additional native symbols (`rect`, `roundRect`, `triangle`, `diamond`, `pin`) still render distinctly there but now collapse to `square` in Lightweight Charts instead of an inconsistent fallback. The demo app's navbar links to a new "Markers Format" page documenting this.

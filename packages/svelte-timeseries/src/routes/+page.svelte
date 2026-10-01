@@ -11,6 +11,7 @@
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
 	import Icon from '@iconify/svelte';
+	import { base } from '$app/paths';
 
 	type DemoConfiguration = {
 		name: string;
@@ -261,7 +262,12 @@
 			</div>
 		</div>
 
-		<div class="navbar-center"></div>
+		<div class="navbar-center">
+			<a href="{base}/markers-format" class="btn btn-sm btn-ghost text-primary-content gap-2">
+				<Icon icon="mdi:map-marker-outline" width="1.1em" height="1.1em" />
+				Markers Format
+			</a>
+		</div>
 		<div class="navbar-end">
 			<div class="flex gap-8 text-primary-content px-4">
 				<a href="https://github.com/QTSurfer/svelte-timeseries" target="_blank">
