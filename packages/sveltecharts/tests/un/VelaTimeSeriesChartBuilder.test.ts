@@ -349,7 +349,14 @@ describe('VelaTimeSeriesChartBuilder', () => {
 		// series, anchored at its dimension's actual value at that timestamp (close is 105 at
 		// timestamp 2000 in `data`), the same way markPoint/createSeriesMarkers anchor markers
 		// for the ECharts/Lightweight builders.
-		it('emits a visible marker as a circles-series point anchored at its real value', () => {
+		//
+		// `emitPointMarkers` (Vela's compiled renderer) reads a circles series' `points` by BAR
+		// INDEX — `points[i - offset]` for chart bar `i`, no time lookup — so the array must be
+		// index-aligned with the chart's own bars, one entry per retained bar, not a sparse list
+		// of just the markers. A point's own `value`/`color` carry the content; its `time` is
+		// along for the ride (unused by the renderer, which positions purely by loop index) but
+		// set to the bar's own time for consistency with `toSeriesPoints`.
+		it('emits a visible marker as a circles-series point anchored at its bar position', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(
 				1,
@@ -364,19 +371,25 @@ describe('VelaTimeSeriesChartBuilder', () => {
 				series: [
 					expect.objectContaining({
 						kind: 'circles',
-						points: [expect.objectContaining({ time: 2000, value: 105, color: '#ff0000' })]
+						points: [
+							{ time: 1000, value: null },
+							{ time: 2000, value: 105, color: '#ff0000' },
+							{ time: 3000, value: null }
+						]
 					})
 				]
 			});
 		});
 
-		it('anchors to the closest sample when the timestamp has no exact match (regression)', () => {
+		it('anchors to the closest bar when the timestamp has no exact match (regression)', () => {
 			// Regression: markers are sourced separately from the candlestick series (e.g. a
 			// DuckDB `markers` table), so a marker's timestamp isn't guaranteed to land exactly
 			// on a loaded bar. An exact-match lookup silently dropped the marker — this finds
-			// the closest sample instead, the same fix applied to the ECharts builder.
+			// the closest bar instead, the same fix applied to the ECharts builder.
 			builder.setCandlestickSeries(data, dims);
-			// timestamp 4000 doesn't exist in `data._ts` (max is 3000) — closest is 3000 (close: 106).
+			// timestamp 4000 doesn't exist in `data._ts` (max is 3000) — closest bar is index 2
+			// (time 3000, close: 106); the point's `time` is that BAR's time, not the marker's own
+			// requested timestamp (unused by the renderer — see the describe-level comment).
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 4000 });
 
 			const ctx = createMockOverlayCtx();
@@ -386,17 +399,24 @@ describe('VelaTimeSeriesChartBuilder', () => {
 				series: [
 					expect.objectContaining({
 						kind: 'circles',
-						points: [expect.objectContaining({ time: 4000, value: 106 })]
+						points: [
+							{ time: 1000, value: null },
+							{ time: 2000, value: null },
+							{ time: 3000, value: 106, color: '#000000' }
+						]
 					})
 				]
 			});
 		});
 
-		it('skips a null value at the closest timestamp and keeps searching (regression)', () => {
+		it('skips a null value at the closest bar and keeps searching (regression)', () => {
 			// Regression: a "partial data" dataset can have a null in the dimension's own value
-			// column independently of which timestamps exist — the closest-timestamp row can
-			// land exactly on such a gap. Must fall through to the next-closest non-null value
-			// instead of anchoring to null.
+			// column independently of which timestamps exist — the closest-timestamp bar can
+			// land exactly on such a gap. Must fall through to the next-closest bar with a
+			// non-null value instead of anchoring to null. The gap (timestamp 2000) also has a
+			// null `close`, so it fails the candlestick's own completeness filter and is excluded
+			// from the retained bars entirely (barIndices = [0, 2], not [0, 1, 2]) — the marker
+			// lands at ARRAY POSITION 1 (the second retained bar, time 3000), not index 2.
 			builder.setCandlestickSeries(
 				{
 					_ts: [1000, 2000, 3000],
@@ -407,8 +427,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 				},
 				dims
 			);
-			// 2000 is the closest timestamp to 2100, but close is null there — falls through to
-			// 3000 (close: 106), the next closest with a non-null value.
+			// 2000 is the closest timestamp to 2100, but its candle is incomplete (excluded from
+			// the retained bars) — falls through to the next retained bar (3000, close: 106).
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2100 });
 
 			const ctx = createMockOverlayCtx();
@@ -418,7 +438,50 @@ describe('VelaTimeSeriesChartBuilder', () => {
 				series: [
 					expect.objectContaining({
 						kind: 'circles',
-						points: [expect.objectContaining({ time: 2100, value: 106 })]
+						points: [
+							{ time: 1000, value: null },
+							{ time: 3000, value: 106, color: '#000000' }
+						]
+					})
+				]
+			});
+		});
+
+		it('aligns an extra dimension line with the OHLC-filtered bars, not the raw dataset (regression)', () => {
+			// Regression: `toOHLCV` drops a bar whenever any OHLC component is null, shrinking
+			// and re-indexing the chart's own bar array. An overlay line that instead kept one
+			// point per raw dataset row (including the dropped bar) was index-misaligned with
+			// the chart's bars from that point on — every later value plotted one bar early.
+			builder.setCandlestickSeries(
+				{
+					_ts: [1000, 2000, 3000, 4000],
+					open: [100, 101, 102, 103],
+					high: [105, 106, 107, 108],
+					low: [99, 100, 101, 102],
+					close: [104, null, 106, 107] // bar at 2000 is incomplete — excluded from the chart
+				},
+				dims
+			);
+			chart.resolveOverlayReady(createMockOverlayCtx());
+
+			builder.addDimension({ sma: [10, 20, 30, 40] }, 'sma');
+			// A new dimension is a structural change (remove + re-add) — resolve the fresh
+			// indicator's own context to observe the result (same pattern as the addDimension
+			// tests above).
+			const freshCtx = createMockOverlayCtx();
+			chart.resolveOverlayReady(freshCtx);
+
+			expect(freshCtx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						id: 'overlay-line-sma',
+						// 3 points (bars 1000, 3000, 4000), not 4 — the 2000 row has no bar to
+						// align to, and its sma value (20) has nowhere valid to render.
+						points: [
+							{ time: 1000, value: 10 },
+							{ time: 3000, value: 30 },
+							{ time: 4000, value: 40 }
+						]
 					})
 				]
 			});

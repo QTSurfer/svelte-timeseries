@@ -503,6 +503,46 @@ describe('TimeSeriesChartBuilder', () => {
 			expect(priceSeries.markPoint).toBeDefined();
 			expect(priceSeries.markPoint.data[0].coord).toEqual([2100, 103]);
 		});
+
+		it('finds the closest non-null sample without copying the dataset (array-of-arrays regression)', () => {
+			// Regression: searchValueByDimensionKeyAndTimestamp used to .map() the whole dataset
+			// into two new timestamp/value arrays per marker before scanning — this exercises the
+			// array-of-arrays branch specifically (the columnar case above doesn't copy), now
+			// refactored to read `source[i]` directly through an accessor instead.
+			builder.setDataset(
+				[
+					[1000, 100],
+					[2000, null],
+					[3000, 103],
+					[4000, 104]
+				],
+				['_ts', 'price']
+			);
+
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2100, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint).toBeDefined();
+			expect(priceSeries.markPoint.data[0].coord).toEqual([2100, 103]);
+		});
+
+		it('finds the closest non-null sample without copying the dataset (array-of-records regression)', () => {
+			// Same regression as above, for the array-of-records branch.
+			builder.setDataset([
+				{ _ts: 1000, price: 100 },
+				{ _ts: 2000, price: null },
+				{ _ts: 3000, price: 103 },
+				{ _ts: 4000, price: 104 }
+			]);
+
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2100, name: 'Buy' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint).toBeDefined();
+			expect(priceSeries.markPoint.data[0].coord).toEqual([2100, 103]);
+		});
 	});
 
 	describe('toggleMarkers', () => {
@@ -523,6 +563,29 @@ describe('TimeSeriesChartBuilder', () => {
 			expect(priceSeriesFor().markPoint.data[0].symbol).toBe('none');
 
 			builder.toggleMarkers(0, 'price', 'pin');
+			expect(priceSeriesFor().markPoint.data[0].symbol).not.toBe('none');
+		});
+
+		it('restores a visible symbol when the marker shape is "none" (regression)', () => {
+			// Regression: addMarkerPoint normalizes 'none' to a visible icon when first placing
+			// a marker, but toggleMarkers restored visibility via `this.getIcon(shape)` directly
+			// — for shape === 'none' (the data-sourced shape that caused the original bug),
+			// getIcon('none') returns the literal 'none' again, re-hiding the marker the moment
+			// it's toggled back on.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' });
+			const priceSeriesFor = () => {
+				const opts = lastSetOptionCall(echarts)[0];
+				return opts.series.find((s: any) => s.id === 'price');
+			};
+
+			builder.toggleMarkers(0, 'price', 'none');
+			expect(priceSeriesFor().markPoint.data[0].symbol).toBe('none');
+
+			builder.toggleMarkers(0, 'price', 'none');
 			expect(priceSeriesFor().markPoint.data[0].symbol).not.toBe('none');
 		});
 

@@ -796,6 +796,20 @@ export class TimeSeriesChartBuilder {
 		return this.build();
 	}
 
+	/**
+	 * `'none'` means "no icon specified" at the shared `ChartMarkerPointOptions` level (the
+	 * Lightweight/Vela builders both fall back to a visible default shape for it) — but
+	 * ECharts' own `symbol: 'none'` means "draw nothing at all", so passing it straight to
+	 * `getIcon` renders an invisible marker with no error. Centralized here so every caller
+	 * that resolves a marker's SHOWN icon (an initial `addMarkerPoint`, or `toggleMarkers`
+	 * restoring one to visible) applies the same visible fallback — `toggleMarkers` restoring
+	 * a marker whose underlying shape is `'none'` hit this exact bug a second time before this
+	 * was centralized.
+	 */
+	private normalizeVisibleIcon(icon?: string): IconType {
+		return icon === 'none' || !icon ? 'circle' : (icon as IconType);
+	}
+
 	private getIcon(icon: IconType): string {
 		const arrowUpPath =
 			'path://M7.414 27.414l16.586-16.586v7.172c0 1.105 0.895 2 2 2s2-0.895 2-2v-12c0-0.809-0.487-1.538-1.235-1.848-0.248-0.103-0.508-0.151-0.765-0.151v-0.001h-12c-1.105 0-2 0.895-2 2s0.895 2 2 2h7.172l-16.586 16.586c-0.391 0.39-0.586 0.902-0.586 1.414s0.195 1.024 0.586 1.414c0.781 0.781 2.047 0.781 2.828 0z';
@@ -838,15 +852,7 @@ export class TimeSeriesChartBuilder {
 				color: 'black',
 				...(options as Partial<MarkerPointOption>)
 			};
-			// 'none' means "no icon specified" at the ChartMarkerPointOptions level (shared with
-			// the Lightweight/Vela builders, which both fall back to a visible default shape for
-			// it) — but ECharts' own `symbol: 'none'` means "draw nothing at all". Passing it
-			// straight through left a marker with no explicit icon (the default above, or a
-			// data-sourced shape of 'none') invisible with no error, unlike the other two
-			// engines. Falls back to a visible default here so all three engines agree.
-			if (opt.icon === 'none') {
-				opt.icon = 'circle';
-			}
+			opt.icon = this.normalizeVisibleIcon(opt.icon);
 
 			if (!Array.isArray(this.option.series)) {
 				throw new Error('Series must be an array');
@@ -965,27 +971,40 @@ export class TimeSeriesChartBuilder {
 
 		if (Array.isArray(dataset.source)) {
 			if (this.isNumberArray(dataset.source)) {
+				const source = dataset.source;
 				const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
-				const timestamps = dataset.source.map((row) => row[0]);
-				const values = dataset.source.map((row) => row[yDimensionKey]);
-				const index = this.findClosestIndex(timestamps, values, timestamp);
+				const index = this.findClosestIndex(
+					source.length,
+					(i) => source[i][0],
+					(i) => source[i][yDimensionKey],
+					timestamp
+				);
 				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
-				return dataset.source[index][yDimensionKey];
+				return source[index][yDimensionKey];
 			} else if (this.isRecordArray(dataset.source)) {
-				const timestamps = dataset.source.map((row) => row[this._tsColumn]);
-				const values = dataset.source.map((row) => row[yDimKey]);
-				const index = this.findClosestIndex(timestamps, values, timestamp);
+				const source = dataset.source;
+				const index = this.findClosestIndex(
+					source.length,
+					(i) => source[i][this._tsColumn],
+					(i) => source[i][yDimKey],
+					timestamp
+				);
 				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
-				return dataset.source[index][yDimKey];
+				return source[index][yDimKey];
 			}
 		} else {
 			const timestamps = dataset.source[this._tsColumn];
 			const values = dataset.source[yDimKey];
-			const index = this.findClosestIndex(timestamps, values, timestamp);
+			const index = this.findClosestIndex(
+				timestamps.length,
+				(i) => timestamps[i],
+				(i) => values[i],
+				timestamp
+			);
 			if (index === -1) {
 				throw new Error(`No data found in timestamp ${timestamp}`);
 			}
@@ -999,18 +1018,24 @@ export class TimeSeriesChartBuilder {
 	 * independently of the timestamp column, so the closest-timestamp row can land on exactly
 	 * such a gap — this must keep searching past it (and past null timestamps) rather than
 	 * anchoring the marker to a row with nothing to plot. Returns -1 if no row has both.
+	 *
+	 * Takes accessors rather than pre-built timestamp/value arrays: at 1.8M rows, copying both
+	 * columns into new arrays for every single marker placed (addMarkerPoint runs once per
+	 * marker) allocated tens of MB of throwaway arrays for a one-pass scan. Reading `source[i]`
+	 * directly through the accessor costs the same per-element work without the copy.
 	 */
 	private findClosestIndex(
-		timestamps: readonly (number | null)[],
-		values: readonly (number | null)[],
+		length: number,
+		getTime: (i: number) => number | null | undefined,
+		getValue: (i: number) => number | null | undefined,
 		target: number
 	): number {
 		let closest = -1;
 		let smallestDiff = Number.POSITIVE_INFINITY;
 
-		for (let i = 0; i < timestamps.length; i++) {
-			const time = timestamps[i];
-			if (time == null || values[i] == null) continue;
+		for (let i = 0; i < length; i++) {
+			const time = getTime(i);
+			if (time == null || getValue(i) == null) continue;
 			const diff = Math.abs(time - target);
 			if (diff < smallestDiff) {
 				smallestDiff = diff;
@@ -1224,7 +1249,8 @@ export class TimeSeriesChartBuilder {
 			return this;
 		}
 
-		point.symbol = point.symbol === 'none' ? this.getIcon(shape as IconType) : 'none';
+		point.symbol =
+			point.symbol === 'none' ? this.getIcon(this.normalizeVisibleIcon(shape)) : 'none';
 
 		this.build();
 		return this;

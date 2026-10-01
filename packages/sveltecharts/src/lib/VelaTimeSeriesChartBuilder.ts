@@ -335,6 +335,41 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		);
 	}
 
+	/**
+	 * Dataset indices that make it into the chart's actual OHLCV bars — the same
+	 * completeness filter `toOHLCV` applies (all four OHLC components non-null, plus a
+	 * non-null time). Vela's native renderer treats every indicator's line/marker `points`
+	 * array as INDEX-ALIGNED with the chart's own bar array: `points[i - offset]` is read
+	 * for chart bar `i` with no time lookup at all (see `emitPointMarkers`/`emitPolyline`
+	 * and `DrawingScene.offsetOf`'s doc comment — "chart bar index its index-aligned
+	 * payloads count from" — in the compiled source; our overlay never calls
+	 * `setAnchorOffset`, so its offset is always 0). An overlay payload that isn't built
+	 * over this exact same retained set — same length, same order — silently renders at
+	 * the wrong bar past the first gap, or at the wrong bar entirely for a sparse array.
+	 */
+	private retainedBarIndices(dims: OHLCDimensions): number[] {
+		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const opens = this.dataset[dims.open] ?? [];
+		const highs = this.dataset[dims.high] ?? [];
+		const lows = this.dataset[dims.low] ?? [];
+		const closes = this.dataset[dims.close] ?? [];
+
+		const indices: number[] = [];
+		for (let i = 0; i < timestamps.length; i++) {
+			if (
+				timestamps[i] == null ||
+				opens[i] == null ||
+				highs[i] == null ||
+				lows[i] == null ||
+				closes[i] == null
+			) {
+				continue;
+			}
+			indices.push(i);
+		}
+		return indices;
+	}
+
 	private toOHLCV(dims: OHLCDimensions): OHLCV[] {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const opens = this.dataset[dims.open] ?? [];
@@ -342,38 +377,34 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		const lows = this.dataset[dims.low] ?? [];
 		const closes = this.dataset[dims.close] ?? [];
 
-		const result: OHLCV[] = [];
-		for (let i = 0; i < timestamps.length; i++) {
-			const time = timestamps[i];
-			const open = opens[i];
-			const high = highs[i];
-			const low = lows[i];
-			const close = closes[i];
-			if (time == null || open == null || high == null || low == null || close == null) {
-				continue;
-			}
-			result.push({ time, open, high, low, close });
-		}
-
-		return result;
+		return this.retainedBarIndices(dims).map((i) => ({
+			time: timestamps[i] as number,
+			open: opens[i] as number,
+			high: highs[i] as number,
+			low: lows[i] as number,
+			close: closes[i] as number
+		}));
 	}
 
 	/**
-	 * Pushes every extra dimension (as a line series) and every visible marker (as a marker
-	 * series) through the overlay native indicator's emit channel.
+	 * Pushes every extra dimension and every visible marker (both as `LineLikeSeries` —
+	 * markers as `kind: 'circles'`, see below) through the overlay native indicator's emit
+	 * channel.
 	 *
 	 * Vela's native-indicator patch path (`modelToValuePatch`/`applyPatch` in its compiled
 	 * source) only ever UPDATES a series's `points` for an id already present in the model
 	 * from the indicator's LAST FULL MOUNT — it never re-reads that series's `visible` flag,
-	 * an `emit()` naming a NEW id is silently dropped, and `MarkerSeries` isn't patched at all
-	 * (only `line*`/`candle`/`bar` kinds are, so a marker add/remove never reaches the chart
-	 * through a plain emit). So whenever anything other than a line's `points` changes — series
-	 * ids added/removed, a line's visibility flipping, or the marker set changing at all — this
-	 * removes and re-adds the overlay indicator (`handle.remove()` + `addNativeIndicator` again)
-	 * instead of emitting in place: a freshly (re-)added indicator's first `applyModel` always
-	 * takes the full `mountIndicator` path (no `renderHandle` yet), never the patch path, so
-	 * this sidesteps the patch's id-matching/visible/markers gaps entirely rather than relying
-	 * on a same-instance remount signal.
+	 * and an `emit()` naming a series id that wasn't part of that mount is silently dropped
+	 * (patch has no add/remove path). It DOES correctly replace `points` wholesale for an
+	 * already-known id, content and length included — so once a series has been mounted once,
+	 * later point-content changes (new values, a line's values changing, which marker sits at
+	 * which bar) reach the chart through an ordinary emit with no remount needed. So whenever
+	 * the SET of series ids changes or a line's `visible` flips — not its points — this removes
+	 * and re-adds the overlay indicator (`handle.remove()` + `addNativeIndicator` again) instead
+	 * of emitting in place: a freshly (re-)added indicator's first `applyModel` always takes the
+	 * full `mountIndicator` path (no `renderHandle` yet), never the patch path, so this
+	 * sidesteps the patch's id-matching/visible gaps entirely rather than relying on a
+	 * same-instance remount signal.
 	 *
 	 * The remount is async (a fresh `addNativeIndicator` only calls `start(ctx)` after Vela's
 	 * own readiness wait — see `ensureOverlayRegistered`), so `overlayCtx`/`overlayHandle` are
@@ -386,13 +417,17 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		if (this.remounting) return;
 		if (!this.overlayCtx || !this.overlayHandle) return;
 
+		// The exact same retained-bar set `toOHLCV` just built the chart's bars from — see
+		// `retainedBarIndices`'s doc comment for why every payload below must share it.
+		const barIndices = this._ohlcDims ? this.retainedBarIndices(this._ohlcDims) : [];
+
 		const series: LineLikeSeries[] = this.extraDimensions.map((dimName, index) => ({
 			id: `overlay-line-${dimName}`,
 			title: dimName,
 			paneId: 'price',
 			kind: 'line',
 			visible: this.selected[dimName] ?? true,
-			points: this.toSeriesPoints(dimName),
+			points: this.toSeriesPoints(dimName, barIndices),
 			style: {
 				color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
 				width: 1,
@@ -406,7 +441,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		// `LineLikeSeries` with `kind: 'circles'`: `emitPointMarkers` paints one point per
 		// series entry at (time, value), which is exactly what markPoint/createSeriesMarkers do
 		// for the ECharts/Lightweight builders.
-		const markerPoints = this.toMarkerSeriesPoints();
+		const markerPoints = this.toMarkerSeriesPoints(barIndices);
 		const markerSeries: LineLikeSeries = {
 			id: MARKERS_LINE_ID,
 			title: 'Markers',
@@ -416,14 +451,20 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			style: { color: '#000000', width: 5, lineStyle: 'solid' }
 		};
 
-		const allSeries = markerPoints.length ? [...series, markerSeries] : series;
+		const hasMarkers = markerPoints.some((p) => p.value != null);
+		const allSeries = hasMarkers ? [...series, markerSeries] : series;
 
-		// Everything except each line's `points` (which the patch path DOES update correctly) —
-		// id + visible per line, plus a full marker snapshot since markers are never patched.
-		const fingerprint = JSON.stringify({
-			lines: series.map((s) => ({ id: s.id, visible: s.visible })),
-			markers: markerPoints
-		});
+		// The markers series is now a plain `circles` LineLikeSeries like any extra dimension —
+		// once its id is part of a mount, the patch path DOES correctly replace its `points` on
+		// every later emit (patch only fails to add/remove a series or re-read `visible`, not to
+		// update a known series's points — see emitOverlay's class-level doc comment). So the
+		// fingerprint only needs each series's id + visible (which series EXIST and whether each
+		// line is shown), not their point CONTENT: hashing the resolved points would be
+		// proportional to the dataset size (one entry per bar) on every single mutation, for data
+		// that already flows through the patch path correctly without a remount.
+		const fingerprint = JSON.stringify(
+			allSeries.map((s) => ({ id: s.id, visible: s.visible ?? true }))
+		);
 
 		const changed = fingerprint !== this.lastOverlayFingerprint;
 		this.lastOverlayFingerprint = fingerprint;
@@ -445,66 +486,87 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		this.overlayCtx.emit({ series: allSeries });
 	}
 
-	private toSeriesPoints(dimName: string): SeriesPoint[] {
+	/**
+	 * One point per retained OHLC bar (`barIndices`, same length and order as the chart's own
+	 * bars — see `retainedBarIndices`), `null`-valued wherever this dimension itself has no
+	 * value at that bar. A row whose OHLC was incomplete (so it has no bar to align to at all)
+	 * has no corresponding entry here, even if this dimension has a value there — there is no
+	 * valid index to place it at.
+	 */
+	private toSeriesPoints(dimName: string, barIndices: readonly number[]): SeriesPoint[] {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const values = this.dataset[dimName] ?? [];
 
-		const points: SeriesPoint[] = [];
-		for (let i = 0; i < timestamps.length; i++) {
-			const time = timestamps[i];
-			if (time == null) continue;
-			points.push({ time, value: values[i] ?? null });
-		}
-		return points;
+		return barIndices.map((i) => ({
+			time: timestamps[i] as number,
+			value: values[i] ?? null
+		}));
 	}
 
 	/**
-	 * Resolves each visible marker to the actual value of its dimension at its timestamp — the
-	 * same anchor point markPoint (ECharts) and createSeriesMarkers (Lightweight) place their
-	 * marker at, so it renders sitting on the line/candle it annotates instead of an arbitrary
-	 * position. A marker whose dimension has no non-null value anywhere is skipped (nothing to
-	 * anchor it to).
+	 * One point per retained OHLC bar (same contract as `toSeriesPoints`), `null`-valued except
+	 * at the bar closest to each visible marker's timestamp, which carries that marker's value
+	 * and color. Markers are sourced separately from the loaded series (e.g. a DuckDB `markers`
+	 * table), so a marker's timestamp has no guarantee of landing exactly on a retained bar —
+	 * `findClosestBar` resolves the nearest one that actually has a non-null value for the
+	 * marker's dimension, skipping both a null-valued bar at that row and a bar with no entry at
+	 * all (an incomplete-OHLC row, absent from `barIndices`). Two markers resolving to the same
+	 * bar overwrite each other — only one point can render at a given index.
 	 */
-	private toMarkerSeriesPoints(): SeriesPoint[] {
-		const points: SeriesPoint[] = [];
+	private toMarkerSeriesPoints(barIndices: readonly number[]): SeriesPoint[] {
+		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const points: SeriesPoint[] = barIndices.map((i) => ({
+			time: timestamps[i] as number,
+			value: null
+		}));
+
 		for (const [dimName, markers] of this.markers) {
 			for (const marker of markers) {
 				if (!marker.visible) continue;
-				const value = this.findClosestValue(dimName, marker.timestamp);
-				if (value == null) continue;
-				points.push({ time: marker.timestamp, value, color: marker.color });
+				const position = this.findClosestBar(dimName, marker.timestamp, barIndices);
+				if (position == null) continue;
+				const i = barIndices[position];
+				points[position] = {
+					time: timestamps[i] as number,
+					value: this.dataset[dimName]?.[i] as number,
+					color: marker.color
+				};
 			}
 		}
+
 		return points;
 	}
 
 	/**
-	 * The dimension's value at the timestamp CLOSEST to `timestamp`, among rows where that value
-	 * is non-null. Markers are sourced separately from the loaded series (e.g. a DuckDB `markers`
-	 * table), so a marker's timestamp has no guarantee of landing exactly on a loaded sample, and
-	 * a "partial data" dataset can independently have null gaps in the dimension's own values —
-	 * this must skip both an exact-match miss and a null-value hit at the closest timestamp
-	 * rather than giving up on either (see the equivalent fix in TimeSeriesChartBuilder for the
-	 * two real-world cases that made this necessary).
+	 * The position WITHIN `barIndices` (not a raw dataset index — directly usable as a
+	 * `toMarkerSeriesPoints` array index) of the bar closest to `timestamp`, among bars where
+	 * `dimName` has a non-null value. Restricted to `barIndices` rather than the raw dataset:
+	 * only a retained bar has a valid render position at all, so the closest RAW row is not
+	 * necessarily usable.
 	 */
-	private findClosestValue(dimName: string, timestamp: number): number | null {
+	private findClosestBar(
+		dimName: string,
+		timestamp: number,
+		barIndices: readonly number[]
+	): number | null {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const values = this.dataset[dimName] ?? [];
 
-		let closestValue: number | null = null;
+		let closestPosition: number | null = null;
 		let smallestDiff = Number.POSITIVE_INFINITY;
 
-		for (let i = 0; i < timestamps.length; i++) {
+		for (let position = 0; position < barIndices.length; position++) {
+			const i = barIndices[position];
 			const time = timestamps[i];
 			const value = values[i];
 			if (time == null || value == null) continue;
 			const diff = Math.abs(time - timestamp);
 			if (diff < smallestDiff) {
 				smallestDiff = diff;
-				closestValue = value;
+				closestPosition = position;
 			}
 		}
 
-		return closestValue;
+		return closestPosition;
 	}
 }
