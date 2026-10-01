@@ -429,6 +429,23 @@ describe('TimeSeriesChartBuilder', () => {
 			expect(priceSeries.markPoint.data[0].name).toBe('markerpoint-0');
 		});
 
+		it('maps the cross-engine "square" icon to its native rect symbol', () => {
+			// 'square' isn't a native ECharts symbol name (ECharts' own built-in set is circle/
+			// rect/roundRect/triangle/diamond/pin/arrow/none) — it's the fourth cross-engine-
+			// consistent shape (alongside circle/arrowUp/arrowDown), matching lightweight-charts'
+			// native SeriesMarkerShape set. Must map to a real ECharts symbol, not pass through.
+			builder.setDataset({
+				_ts: [1000, 2000, 3000],
+				price: [100, 101, 102]
+			});
+
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000 }, { icon: 'square' });
+
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			const priceSeries = opts.series.find((s: any) => s.id === 'price');
+			expect(priceSeries.markPoint.data[0].symbol).toBe('rect');
+		});
+
 		it('renders a visible symbol when no icon is given (regression)', () => {
 			// Regression: the default icon is 'none', which ChartMarkerPointOptions/the other
 			// builders treat as "no icon specified", but ECharts' own symbol:'none' means "draw

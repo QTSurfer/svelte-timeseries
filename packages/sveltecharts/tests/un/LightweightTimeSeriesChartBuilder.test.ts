@@ -164,6 +164,38 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		expect(emaSeries.applyOptions).toHaveBeenLastCalledWith({ visible: true });
 	});
 
+	it('passes the cross-engine "square" icon through as a native shape', () => {
+		// 'square' is one of lightweight-charts' own native SeriesMarkerShape values (circle/
+		// square/arrowUp/arrowDown) — the cross-engine-consistent set shared with ECharts (which
+		// maps it onto its own 'rect' symbol, having no native 'square').
+		builder.setDataset({
+			_ts: [1000, 2000],
+			price: [100, 101]
+		});
+		builder.addMarkerPoint(1, { dimName: 'price', timestamp: 2000 }, { icon: 'square' });
+
+		const markersPlugin = vi.mocked(createSeriesMarkers).mock.results[0].value;
+		expect(markersPlugin.setMarkers).toHaveBeenLastCalledWith([
+			expect.objectContaining({ shape: 'square' })
+		]);
+	});
+
+	it('collapses an ECharts-only shape to "square", the closest native equivalent', () => {
+		// 'pin' is one of ECharts' own extra symbol types (rect/roundRect/triangle/diamond/pin)
+		// — lightweight-charts has no native equivalent for any of them, so they all fall back
+		// to 'square' rather than rendering nothing or throwing.
+		builder.setDataset({
+			_ts: [1000, 2000],
+			price: [100, 101]
+		});
+		builder.addMarkerPoint(1, { dimName: 'price', timestamp: 2000 }, { icon: 'pin' });
+
+		const markersPlugin = vi.mocked(createSeriesMarkers).mock.results[0].value;
+		expect(markersPlugin.setMarkers).toHaveBeenLastCalledWith([
+			expect.objectContaining({ shape: 'square' })
+		]);
+	});
+
 	it('preserves visibility and markers when adding a dimension after a window update', () => {
 		builder.setDataset({
 			_ts: [1000, 2000],

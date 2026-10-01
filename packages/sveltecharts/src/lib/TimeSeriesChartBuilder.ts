@@ -17,15 +17,21 @@ import type { MarkPointDataItemOption } from 'echarts/types/src/component/marker
 import { formatPreciseValue } from './pricePrecision';
 
 type IconType =
+	// Cross-engine-consistent set (see ChartMarkerPointOptions.icon's doc comment) — 'square' is
+	// not a native ECharts symbol name, it's QTSurfer's cross-engine value mapped onto 'rect' in
+	// getIcon below.
 	| 'circle'
+	| 'square'
+	| 'arrowUp'
+	| 'arrowDown'
+	| 'none'
+	// ECharts-only extras: render distinctly here, but collapse to 'square' in Lightweight and
+	// are ignored entirely by Vela (always a circle) — not guaranteed consistent.
 	| 'rect'
 	| 'roundRect'
 	| 'triangle'
 	| 'diamond'
-	| 'pin'
-	| 'arrowUp'
-	| 'arrowDown'
-	| 'none';
+	| 'pin';
 
 type LabelPosition =
 	| 'top'
@@ -830,6 +836,16 @@ export class TimeSeriesChartBuilder {
 
 		if (icon === 'circle') {
 			return circlePath;
+		}
+
+		// 'square' is QTSurfer's cross-engine convenience value, not a native ECharts symbol
+		// name (ECharts' own built-in set is circle/rect/roundRect/triangle/diamond/pin/arrow/
+		// none). Mapped explicitly to its closest native equivalent, 'rect', rather than relying
+		// on ECharts' own internal "unrecognized symbolType → rect" fallback (see
+		// createSymbol/SymbolClz.buildPath in its source) — intentional and documented here
+		// beats depending on an undocumented library internal.
+		if (icon === 'square') {
+			return 'rect';
 		}
 
 		return icon;

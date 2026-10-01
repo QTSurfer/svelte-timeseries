@@ -693,8 +693,17 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		});
 	}
 
+	/**
+	 * lightweight-charts' own `SeriesMarkerShape` type is exactly `'circle' | 'square' |
+	 * 'arrowUp' | 'arrowDown'` (see its typings.d.ts) — the narrowest native shape set of the
+	 * three chart engines, so it's the cross-engine-consistent common denominator (see
+	 * ChartMarkerPointOptions.icon's doc comment). Those four, plus 'none' (falls back to a
+	 * visible default, same convention as the ECharts builder), are returned as-is; anything
+	 * else — ECharts' own rect/roundRect/triangle/diamond/pin extras — has no native equivalent
+	 * here and collapses to 'square', the closest visual approximation.
+	 */
 	private mapMarkerShape(shape?: string): SeriesMarkerShape {
-		if (shape === 'circle' || shape === 'arrowUp' || shape === 'arrowDown') {
+		if (shape === 'circle' || shape === 'square' || shape === 'arrowUp' || shape === 'arrowDown') {
 			return shape;
 		}
 
