@@ -84,7 +84,10 @@
 <div class="min-h-screen bg-base-200">
 	<div class="navbar shadow-sm bg-primary">
 		<div class="navbar-start text-primary-content">
-			<a href="{base}/" class="btn btn-sm btn-ghost text-primary-content gap-2">
+			<a
+				href="{base}/"
+				class="btn btn-sm btn-ghost text-primary-content gap-2 hover:bg-primary-content/15 hover:text-primary-content"
+			>
 				<Icon icon="mdi:arrow-left" width="1.1em" height="1.1em" />
 				Back to demo
 			</a>

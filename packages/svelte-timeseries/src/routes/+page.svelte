@@ -263,7 +263,10 @@
 		</div>
 
 		<div class="navbar-center">
-			<a href="{base}/markers-format" class="btn btn-sm btn-ghost text-primary-content gap-2">
+			<a
+				href="{base}/markers-format"
+				class="btn btn-sm btn-ghost text-primary-content gap-2 hover:bg-primary-content/15 hover:text-primary-content"
+			>
 				<Icon icon="mdi:map-marker-outline" width="1.1em" height="1.1em" />
 				Markers Format
 			</a>
