@@ -113,7 +113,7 @@
 
 		<h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
 			<span class="badge badge-success badge-sm"></span>
-			Cross-engine consistent
+			ECharts &amp; Lightweight: consistent
 		</h2>
 		<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-10">
 			{#each consistentIcons as entry (entry.value)}
