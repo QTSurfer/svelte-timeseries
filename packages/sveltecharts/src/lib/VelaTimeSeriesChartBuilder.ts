@@ -139,6 +139,15 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	// data is replaced (updateDimensions). A marker-only mutation touches neither, so it reuses
 	// every line's cached points instead of rebuilding all of them just to redraw markers.
 	private seriesPointsCache = new Map<string, SeriesPoint[]>();
+	// Persistent marker "slot" buffers (see toMarkerSeriesPoints), reused across emits instead of
+	// reallocating `slotCount * barIndices.length` fresh point objects on every marker mutation.
+	// Invalidated (emptied) alongside cachedBarIndices, since each buffer's length and each
+	// point's `time` depend on the retained bar set.
+	private markerSlotBuffers: SeriesPoint[][] = [];
+	// Exactly which (slot, position) cells currently carry a real marker value, so the next
+	// toMarkerSeriesPoints call knows precisely which cells to clear instead of scanning or
+	// resetting every cell in every buffer.
+	private occupiedMarkerCells: { slot: number; position: number }[] = [];
 	// A fingerprint of the LAST emit's series (ids + visibility + marker identities) — see
 	// emitOverlay's structural-change check.
 	private lastOverlayFingerprint = '';
@@ -209,6 +218,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 
 	addDimension(data: ChartDatasetFormatSimpleObject, dimName: string): this {
 		this.dataset[dimName] = data[dimName];
+		this.seriesPointsCache.delete(dimName);
 		if (!this.extraDimensions.includes(dimName)) {
 			this.extraDimensions.push(dimName);
 		}
@@ -399,14 +409,18 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	/**
-	 * Clears the cached bar-index set and every cached line's points, since both depend on which
-	 * bars are retained. Called whenever the OHLC data actually changes (setCandlestickSeries,
-	 * updateDimensions touching an OHLC dimension) — never for a pure marker mutation, which is
-	 * exactly the case that was re-scanning the whole dataset for no reason.
+	 * Clears the cached bar-index set, every cached line's points, and the persistent marker-slot
+	 * buffers, since all three depend on which bars are retained (a buffer's length and each of
+	 * its points' fixed `time` are only valid for the bar set they were built from). Called
+	 * whenever the OHLC data actually changes (setCandlestickSeries, updateDimensions touching an
+	 * OHLC dimension) — never for a pure marker mutation, which is exactly the case that was
+	 * re-scanning/reallocating everything for no reason.
 	 */
 	private invalidateBarIndices(): void {
 		this.cachedBarIndices = null;
 		this.seriesPointsCache.clear();
+		this.markerSlotBuffers = [];
+		this.occupiedMarkerCells = [];
 	}
 
 	/** Cached `toSeriesPoints` per dimension — see `invalidateBarIndices`/`updateDimensions`. */
@@ -501,7 +515,10 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			style: { color: '#000000', width: 5, lineStyle: 'solid' }
 		}));
 
-		const hasMarkers = markerSlots.some((points) => points.some((p) => p.value != null));
+		// occupiedMarkerCells is maintained by toMarkerSeriesPoints as it goes — checking its
+		// length is O(1), unlike re-scanning every point of every slot just to answer "are there
+		// any markers at all".
+		const hasMarkers = this.occupiedMarkerCells.length > 0;
 		const allSeries = hasMarkers ? [...series, ...markerSeriesList] : series;
 
 		// The markers series is now a plain `circles` LineLikeSeries like any extra dimension —
@@ -554,18 +571,27 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	/**
-	 * One or more "slots", each one point per retained OHLC bar (same contract as
-	 * `toSeriesPoints`), `null`-valued except where a visible marker was placed. Markers are
-	 * sourced separately from the loaded series (e.g. a DuckDB `markers` table), so a marker's
-	 * timestamp has no guarantee of landing exactly on a retained bar — `findClosestBar` resolves
-	 * the nearest one that actually has a non-null value for the marker's dimension, skipping
-	 * both a null-valued bar at that row and a bar with no entry at all (an incomplete-OHLC row,
-	 * absent from `barIndices`).
+	 * One or more persistent "slot" buffers (see `markerSlotBuffers`), each one point per
+	 * retained OHLC bar (same contract as `toSeriesPoints`), `null`-valued except where a visible
+	 * marker was placed. Markers are sourced separately from the loaded series (e.g. a DuckDB
+	 * `markers` table), so a marker's timestamp has no guarantee of landing exactly on a retained
+	 * bar — `findClosestBar` resolves the nearest one that actually has a non-null value for the
+	 * marker's dimension, skipping both a null-valued bar at that row and a bar with no entry at
+	 * all (an incomplete-OHLC row, absent from `barIndices`).
 	 *
-	 * A single slot array can only carry ONE value per bar, so when several markers (even from
-	 * different dimensions) resolve to the SAME bar, each one after the first goes into its own
-	 * additional slot instead of overwriting the one before it — every visible marker always gets
-	 * a point somewhere. The common case (no collisions) returns exactly one slot.
+	 * A single slot array can only carry ONE value per bar, so when several markers resolve to the
+	 * SAME bar, each one after the first goes into its own additional slot instead of overwriting
+	 * the one before it — every visible marker always gets a point somewhere. The common case (no
+	 * collisions) returns exactly one slot. Two markers in DIFFERENT slots but sharing the same
+	 * dimension AND bar would otherwise still land on the exact same (time, value) — Vela paints
+	 * circles in series order, so the later one would fully cover the earlier one despite being a
+	 * separate series. Every such duplicate past the first is nudged by `duplicateMarkerOffset`
+	 * so it's visually distinguishable instead of hidden.
+	 *
+	 * Buffers are reused across calls (grown when `slotCount` increases, otherwise left as-is) and
+	 * only the cells that actually changed are touched — `occupiedMarkerCells` records exactly
+	 * which ones to clear first — instead of allocating `slotCount * barIndices.length` fresh
+	 * point objects on every marker mutation.
 	 */
 	private toMarkerSeriesPoints(barIndices: readonly number[]): SeriesPoint[][] {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
@@ -592,22 +618,55 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			slotCount = Math.max(slotCount, group.length);
 		}
 
-		const slots: SeriesPoint[][] = Array.from({ length: slotCount }, () =>
-			barIndices.map((i) => ({ time: timestamps[i] as number, value: null }))
-		);
-
-		for (const group of byPosition.values()) {
-			group.forEach((entry, slot) => {
-				const i = barIndices[entry.position];
-				slots[slot][entry.position] = {
-					time: timestamps[i] as number,
-					value: this.dataset[entry.dimName]?.[i] as number,
-					color: entry.marker.color
-				};
-			});
+		while (this.markerSlotBuffers.length < slotCount) {
+			this.markerSlotBuffers.push(
+				barIndices.map((i) => ({ time: timestamps[i] as number, value: null }))
+			);
 		}
 
-		return slots;
+		for (const { slot, position } of this.occupiedMarkerCells) {
+			const point = this.markerSlotBuffers[slot][position];
+			point.value = null;
+			point.color = undefined;
+		}
+
+		const nextOccupied: { slot: number; position: number }[] = [];
+		for (const group of byPosition.values()) {
+			const sameDimCount = new Map<string, number>();
+			group.forEach((entry, slot) => {
+				const dupIndex = sameDimCount.get(entry.dimName) ?? 0;
+				sameDimCount.set(entry.dimName, dupIndex + 1);
+
+				const i = barIndices[entry.position];
+				const baseValue = this.dataset[entry.dimName]?.[i] as number;
+				const value =
+					dupIndex === 0 ? baseValue : baseValue + this.duplicateMarkerOffset(i, dupIndex);
+
+				const point = this.markerSlotBuffers[slot][entry.position];
+				point.value = value;
+				point.color = entry.marker.color;
+				nextOccupied.push({ slot, position: entry.position });
+			});
+		}
+		this.occupiedMarkerCells = nextOccupied;
+
+		return this.markerSlotBuffers.slice(0, slotCount);
+	}
+
+	/**
+	 * A small nudge applied to each marker sharing both a dimension AND a bar with an earlier one
+	 * at the same bar — without it they'd carry the identical (bar, value) and be visually
+	 * indistinguishable even though they're now separate series. Sized as a fraction of that bar's
+	 * own high-low range so it stays sensible regardless of the instrument's price scale, and
+	 * grows with `dupIndex` so a third/fourth duplicate stacks further rather than landing back on
+	 * the second. Falls back to 0 (no visual separation) only for a degenerate zero-range bar.
+	 */
+	private duplicateMarkerOffset(barIndex: number, dupIndex: number): number {
+		if (!this._ohlcDims) return 0;
+		const high = this.dataset[this._ohlcDims.high]?.[barIndex];
+		const low = this.dataset[this._ohlcDims.low]?.[barIndex];
+		if (high == null || low == null || high <= low) return 0;
+		return (high - low) * 0.08 * dupIndex;
 	}
 
 	/**

@@ -552,6 +552,58 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			});
 		});
 
+		it('nudges a marker sharing both dimension and bar with an earlier one so it stays visible (regression)', () => {
+			// Regression: two markers in different slots but sharing the SAME dimension AND bar
+			// still carried the identical (bar, value) — Vela paints circles in series order, so
+			// the later one rendered exactly on top of (hiding) the first despite being a separate
+			// series. The first marker at a bar+dimension stays exactly on its true value; every
+			// later one is nudged so it's visually distinguishable.
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 }, { color: '#ff0000' });
+			chart.resolveOverlayReady(createMockOverlayCtx());
+
+			builder.addMarkerPoint(2, { dimName: 'close', timestamp: 2000 }, { color: '#00ff00' });
+			const freshCtx = createMockOverlayCtx();
+			chart.resolveOverlayReady(freshCtx);
+
+			const emitted = freshCtx.emit.mock.calls.at(-1)?.[0].series;
+			const firstPoint = emitted.find((s: { id: string }) => s.id === 'overlay-markers').points[1];
+			const secondPoint = emitted.find((s: { id: string }) => s.id === 'overlay-markers-1')
+				.points[1];
+
+			expect(firstPoint.value).toBe(105); // close at bar 1, unmodified
+			expect(secondPoint.value).not.toBe(105); // nudged away from the first, not identical
+		});
+
+		it('clears only the marker cell that changed, leaving an unrelated marker in the same slot untouched (regression)', () => {
+			// Regression: marker slot buffers are now reused/mutated in place across emits instead
+			// of rebuilt from scratch on every mutation — toggling one marker off must clear only
+			// that marker's own cell, not leave stale state elsewhere or wipe a different marker
+			// sharing the same slot.
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 1000 });
+			builder.addMarkerPoint(2, { dimName: 'close', timestamp: 3000 });
+			// Both markers sit in slot 0 (different bars, no collision) — toggling one off doesn't
+			// change the series id set, so this never remounts: the same ctx stays live throughout.
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			builder.toggleMarkers(1, 'close', 'circle');
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						id: 'overlay-markers',
+						points: [
+							{ time: 1000, value: null },
+							{ time: 2000, value: null },
+							{ time: 3000, value: 106, color: '#000000' }
+						]
+					})
+				]
+			});
+		});
+
 		it('toggles a marker off and back on', () => {
 			builder.setCandlestickSeries(data, dims);
 			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 });
