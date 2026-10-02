@@ -320,6 +320,31 @@ describe('VelaTimeSeriesChartBuilder', () => {
 
 			expect(chart.setMarket).not.toHaveBeenCalled();
 		});
+
+		it('reflects updated values after updateDimensions instead of serving stale cached line points (regression)', () => {
+			// Regression: a line's points are now cached across emits to avoid rebuilding every
+			// line on every marker-only mutation (see emitOverlay). The cache must still be
+			// invalidated when that dimension's own data changes via updateDimensions.
+			builder.setCandlestickSeries(data, dims);
+			builder.addDimension({ ema: [100, 101, 102] }, 'ema');
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			builder.updateDimensions({ ema: [200, 201, 202] }, ['ema']);
+
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						title: 'ema',
+						points: [
+							{ time: 1000, value: 200 },
+							{ time: 2000, value: 201 },
+							{ time: 3000, value: 202 }
+						]
+					})
+				]
+			});
+		});
 	});
 
 	describe('zoom and scroll', () => {
@@ -481,6 +506,46 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 1000, value: 10 },
 							{ time: 3000, value: 30 },
 							{ time: 4000, value: 40 }
+						]
+					})
+				]
+			});
+		});
+
+		it('renders two markers landing on the same bar as separate slots instead of one overwriting the other (regression)', () => {
+			// Regression: a `circles` series carries one value per bar, so two markers resolving
+			// to the same bar (here: 'close' and 'high', both anchored at timestamp 2000) used to
+			// overwrite each other in a single shared points array — the second one silently
+			// disappeared. Each slot beyond the first is now its own `circles` series.
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 }, { color: '#ff0000' });
+			chart.resolveOverlayReady(createMockOverlayCtx());
+
+			// overlay-markers-1 is a new series id, so adding the second, colliding marker grows
+			// the id set and remounts like any other structural change — resolve the fresh
+			// indicator's context to observe the result.
+			builder.addMarkerPoint(2, { dimName: 'high', timestamp: 2000 }, { color: '#00ff00' });
+			const freshCtx = createMockOverlayCtx();
+			chart.resolveOverlayReady(freshCtx);
+
+			expect(freshCtx.emit).toHaveBeenLastCalledWith({
+				series: [
+					expect.objectContaining({
+						id: 'overlay-markers',
+						kind: 'circles',
+						points: [
+							{ time: 1000, value: null },
+							{ time: 2000, value: 105, color: '#ff0000' },
+							{ time: 3000, value: null }
+						]
+					}),
+					expect.objectContaining({
+						id: 'overlay-markers-1',
+						kind: 'circles',
+						points: [
+							{ time: 1000, value: null },
+							{ time: 2000, value: 106, color: '#00ff00' },
+							{ time: 3000, value: null }
 						]
 					})
 				]

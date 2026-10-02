@@ -33,7 +33,14 @@ type MarkerState = {
 
 const OVERLAY_INDICATOR_TYPE = 'qtsurfer-overlay';
 const OVERLAY_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#d97706', '#0891b2'];
-const MARKERS_LINE_ID = 'overlay-markers';
+
+/**
+ * Id of the `circles` series rendering marker "slot" `slot` — see `toMarkerSeriesPoints`'s doc
+ * comment for why there can be more than one.
+ */
+function markerSeriesId(slot: number): string {
+	return slot === 0 ? 'overlay-markers' : `overlay-markers-${slot}`;
+}
 
 let overlayRegistered = false;
 
@@ -122,6 +129,16 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	private markers = new Map<string, MarkerState[]>();
 	private overlayCtx: NativeIndicatorContext | null = null;
 	private overlayHandle: IndicatorHandle | null = null;
+	// Cached result of retainedBarIndices, invalidated by invalidateBarIndices() whenever the
+	// OHLC data actually changes. Recomputing it on every emitOverlay() — including pure marker
+	// mutations (addMarkerPoint/toggleMarkers/clearMarkers) that never touch OHLC data — was an
+	// O(dataset) scan on every single marker click.
+	private cachedBarIndices: number[] | null = null;
+	// Cached toSeriesPoints() result per extra dimension, invalidated alongside cachedBarIndices
+	// (a dimension's alignment depends on the retained bar set) and whenever that dimension's own
+	// data is replaced (updateDimensions). A marker-only mutation touches neither, so it reuses
+	// every line's cached points instead of rebuilding all of them just to redraw markers.
+	private seriesPointsCache = new Map<string, SeriesPoint[]>();
 	// A fingerprint of the LAST emit's series (ids + visibility + marker identities) — see
 	// emitOverlay's structural-change check.
 	private lastOverlayFingerprint = '';
@@ -182,6 +199,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		this.dataset = { ...data };
 		this._ohlcDims = dims;
 		this.selected['Candlestick'] = true;
+		this.invalidateBarIndices();
 
 		this.VelaChart.setMarket({ data: this.toOHLCV(dims) });
 		this.emitOverlay();
@@ -296,10 +314,12 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		for (const dimName of dimNames) {
 			if (data[dimName]) {
 				this.dataset[dimName] = data[dimName];
+				this.seriesPointsCache.delete(dimName);
 			}
 		}
 
 		if (this._ohlcDims && dimNames.some((d) => this.isOHLCDimension(d))) {
+			this.invalidateBarIndices();
 			this.VelaChart.setMarket({ data: this.toOHLCV(this._ohlcDims) });
 		}
 
@@ -370,6 +390,34 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		return indices;
 	}
 
+	/** Cached `retainedBarIndices` — see `invalidateBarIndices` for when it's recomputed. */
+	private getBarIndices(): number[] {
+		if (this.cachedBarIndices == null) {
+			this.cachedBarIndices = this._ohlcDims ? this.retainedBarIndices(this._ohlcDims) : [];
+		}
+		return this.cachedBarIndices;
+	}
+
+	/**
+	 * Clears the cached bar-index set and every cached line's points, since both depend on which
+	 * bars are retained. Called whenever the OHLC data actually changes (setCandlestickSeries,
+	 * updateDimensions touching an OHLC dimension) — never for a pure marker mutation, which is
+	 * exactly the case that was re-scanning the whole dataset for no reason.
+	 */
+	private invalidateBarIndices(): void {
+		this.cachedBarIndices = null;
+		this.seriesPointsCache.clear();
+	}
+
+	/** Cached `toSeriesPoints` per dimension — see `invalidateBarIndices`/`updateDimensions`. */
+	private getSeriesPoints(dimName: string, barIndices: readonly number[]): SeriesPoint[] {
+		const cached = this.seriesPointsCache.get(dimName);
+		if (cached) return cached;
+		const points = this.toSeriesPoints(dimName, barIndices);
+		this.seriesPointsCache.set(dimName, points);
+		return points;
+	}
+
 	private toOHLCV(dims: OHLCDimensions): OHLCV[] {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const opens = this.dataset[dims.open] ?? [];
@@ -419,7 +467,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 
 		// The exact same retained-bar set `toOHLCV` just built the chart's bars from — see
 		// `retainedBarIndices`'s doc comment for why every payload below must share it.
-		const barIndices = this._ohlcDims ? this.retainedBarIndices(this._ohlcDims) : [];
+		const barIndices = this.getBarIndices();
 
 		const series: LineLikeSeries[] = this.extraDimensions.map((dimName, index) => ({
 			id: `overlay-line-${dimName}`,
@@ -427,7 +475,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			paneId: 'price',
 			kind: 'line',
 			visible: this.selected[dimName] ?? true,
-			points: this.toSeriesPoints(dimName, barIndices),
+			points: this.getSeriesPoints(dimName, barIndices),
 			style: {
 				color: OVERLAY_COLORS[index % OVERLAY_COLORS.length],
 				width: 1,
@@ -440,19 +488,21 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		// MarkerSeries silently paints nothing. A price-anchored marker is instead a
 		// `LineLikeSeries` with `kind: 'circles'`: `emitPointMarkers` paints one point per
 		// series entry at (time, value), which is exactly what markPoint/createSeriesMarkers do
-		// for the ECharts/Lightweight builders.
-		const markerPoints = this.toMarkerSeriesPoints(barIndices);
-		const markerSeries: LineLikeSeries = {
-			id: MARKERS_LINE_ID,
-			title: 'Markers',
+		// for the ECharts/Lightweight builders. Each "slot" below is its own `circles` series so
+		// that markers landing on the same bar don't overwrite each other — see
+		// `toMarkerSeriesPoints`'s doc comment.
+		const markerSlots = this.toMarkerSeriesPoints(barIndices);
+		const markerSeriesList: LineLikeSeries[] = markerSlots.map((points, slot) => ({
+			id: markerSeriesId(slot),
+			title: slot === 0 ? 'Markers' : `Markers (overlap ${slot + 1})`,
 			paneId: 'price',
 			kind: 'circles',
-			points: markerPoints,
+			points,
 			style: { color: '#000000', width: 5, lineStyle: 'solid' }
-		};
+		}));
 
-		const hasMarkers = markerPoints.some((p) => p.value != null);
-		const allSeries = hasMarkers ? [...series, markerSeries] : series;
+		const hasMarkers = markerSlots.some((points) => points.some((p) => p.value != null));
+		const allSeries = hasMarkers ? [...series, ...markerSeriesList] : series;
 
 		// The markers series is now a plain `circles` LineLikeSeries like any extra dimension —
 		// once its id is part of a mount, the patch path DOES correctly replace its `points` on
@@ -504,37 +554,60 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	/**
-	 * One point per retained OHLC bar (same contract as `toSeriesPoints`), `null`-valued except
-	 * at the bar closest to each visible marker's timestamp, which carries that marker's value
-	 * and color. Markers are sourced separately from the loaded series (e.g. a DuckDB `markers`
-	 * table), so a marker's timestamp has no guarantee of landing exactly on a retained bar —
-	 * `findClosestBar` resolves the nearest one that actually has a non-null value for the
-	 * marker's dimension, skipping both a null-valued bar at that row and a bar with no entry at
-	 * all (an incomplete-OHLC row, absent from `barIndices`). Two markers resolving to the same
-	 * bar overwrite each other — only one point can render at a given index.
+	 * One or more "slots", each one point per retained OHLC bar (same contract as
+	 * `toSeriesPoints`), `null`-valued except where a visible marker was placed. Markers are
+	 * sourced separately from the loaded series (e.g. a DuckDB `markers` table), so a marker's
+	 * timestamp has no guarantee of landing exactly on a retained bar — `findClosestBar` resolves
+	 * the nearest one that actually has a non-null value for the marker's dimension, skipping
+	 * both a null-valued bar at that row and a bar with no entry at all (an incomplete-OHLC row,
+	 * absent from `barIndices`).
+	 *
+	 * A single slot array can only carry ONE value per bar, so when several markers (even from
+	 * different dimensions) resolve to the SAME bar, each one after the first goes into its own
+	 * additional slot instead of overwriting the one before it — every visible marker always gets
+	 * a point somewhere. The common case (no collisions) returns exactly one slot.
 	 */
-	private toMarkerSeriesPoints(barIndices: readonly number[]): SeriesPoint[] {
+	private toMarkerSeriesPoints(barIndices: readonly number[]): SeriesPoint[][] {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
-		const points: SeriesPoint[] = barIndices.map((i) => ({
-			time: timestamps[i] as number,
-			value: null
-		}));
 
+		const resolved: { dimName: string; marker: MarkerState; position: number }[] = [];
 		for (const [dimName, markers] of this.markers) {
 			for (const marker of markers) {
 				if (!marker.visible) continue;
 				const position = this.findClosestBar(dimName, marker.timestamp, barIndices);
 				if (position == null) continue;
-				const i = barIndices[position];
-				points[position] = {
-					time: timestamps[i] as number,
-					value: this.dataset[dimName]?.[i] as number,
-					color: marker.color
-				};
+				resolved.push({ dimName, marker, position });
 			}
 		}
 
-		return points;
+		const byPosition = new Map<number, typeof resolved>();
+		for (const entry of resolved) {
+			const group = byPosition.get(entry.position) ?? [];
+			group.push(entry);
+			byPosition.set(entry.position, group);
+		}
+
+		let slotCount = 1;
+		for (const group of byPosition.values()) {
+			slotCount = Math.max(slotCount, group.length);
+		}
+
+		const slots: SeriesPoint[][] = Array.from({ length: slotCount }, () =>
+			barIndices.map((i) => ({ time: timestamps[i] as number, value: null }))
+		);
+
+		for (const group of byPosition.values()) {
+			group.forEach((entry, slot) => {
+				const i = barIndices[entry.position];
+				slots[slot][entry.position] = {
+					time: timestamps[i] as number,
+					value: this.dataset[entry.dimName]?.[i] as number,
+					color: entry.marker.color
+				};
+			});
+		}
+
+		return slots;
 	}
 
 	/**
@@ -543,6 +616,13 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	 * `dimName` has a non-null value. Restricted to `barIndices` rather than the raw dataset:
 	 * only a retained bar has a valid render position at all, so the closest RAW row is not
 	 * necessarily usable.
+	 *
+	 * `barIndices` is in ascending time order (same order as the dataset), so this binary-searches
+	 * for the landing position and then expands outward only as far as needed: once a direction's
+	 * candidate is farther from `timestamp` than the best found so far, time's monotonicity
+	 * guarantees nothing further that way can be closer, so that side stops. This lands in
+	 * O(log n) and only pays for a linear scan proportional to the width of a null-value gap
+	 * around the landing position, instead of scanning every bar for every marker.
 	 */
 	private findClosestBar(
 		dimName: string,
@@ -551,22 +631,45 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	): number | null {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const values = this.dataset[dimName] ?? [];
+		if (barIndices.length === 0) return null;
 
-		let closestPosition: number | null = null;
-		let smallestDiff = Number.POSITIVE_INFINITY;
-
-		for (let position = 0; position < barIndices.length; position++) {
-			const i = barIndices[position];
-			const time = timestamps[i];
-			const value = values[i];
-			if (time == null || value == null) continue;
-			const diff = Math.abs(time - timestamp);
-			if (diff < smallestDiff) {
-				smallestDiff = diff;
-				closestPosition = position;
+		let lo = 0;
+		let hi = barIndices.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >>> 1;
+			if ((timestamps[barIndices[mid]] as number) < timestamp) {
+				lo = mid + 1;
+			} else {
+				hi = mid;
 			}
 		}
 
-		return closestPosition;
+		let bestPosition: number | null = null;
+		let bestDiff = Number.POSITIVE_INFINITY;
+
+		const consider = (position: number): number => {
+			const i = barIndices[position];
+			const diff = Math.abs((timestamps[i] as number) - timestamp);
+			if (values[i] != null && diff < bestDiff) {
+				bestDiff = diff;
+				bestPosition = position;
+			}
+			return diff;
+		};
+
+		let left = lo - 1;
+		let right = lo;
+		while (left >= 0 || right < barIndices.length) {
+			if (left >= 0) {
+				const diff = consider(left);
+				left = bestPosition != null && diff > bestDiff ? -1 : left - 1;
+			}
+			if (right < barIndices.length) {
+				const diff = consider(right);
+				right = bestPosition != null && diff > bestDiff ? barIndices.length : right + 1;
+			}
+		}
+
+		return bestPosition;
 	}
 }

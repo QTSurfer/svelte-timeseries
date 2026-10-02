@@ -24,9 +24,9 @@ export type ChartMarkerPoint = {
 export type ChartMarkerPointOptions = {
 	/**
 	 * The marker's shape. Only `'circle' | 'square' | 'arrowUp' | 'arrowDown'` are guaranteed to
-	 * render the SAME shape across all three chart engines — this is lightweight-charts' own
-	 * native marker-shape set (`SeriesMarkerShape`), the narrowest of the three engines, so it's
-	 * the common denominator the others map onto. `'none'` (or omitting `icon`) falls back to a
+	 * render the SAME shape across ECharts and Lightweight Charts — this is lightweight-charts'
+	 * own native marker-shape set (`SeriesMarkerShape`), the narrower of the two, so it's the
+	 * common denominator ECharts maps onto. `'none'` (or omitting `icon`) falls back to a
 	 * visible default per engine (ECharts/Lightweight: circle) rather than ECharts' own
 	 * `symbol: 'none'`, which means "draw nothing at all".
 	 *
