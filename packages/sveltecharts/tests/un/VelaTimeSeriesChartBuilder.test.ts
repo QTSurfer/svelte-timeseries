@@ -26,7 +26,7 @@ function createMockChart() {
 	let currentHandle: { remove: ReturnType<typeof vi.fn> } | null = null;
 
 	return {
-		setMarket: vi.fn(),
+		setMarket: vi.fn(() => Promise.resolve()),
 		getVisibleRange: vi.fn(() => visibleRange),
 		setVisibleRange: vi.fn((range: { from: number; to: number }) => {
 			visibleRange = range;
@@ -164,7 +164,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: 102 }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -183,7 +184,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 
 			expect(freshCtx.emit).toHaveBeenCalledTimes(1);
 			expect(freshCtx.emit).toHaveBeenCalledWith({
-				series: [expect.objectContaining({ title: 'ema' })]
+				series: [expect.objectContaining({ title: 'ema' })],
+				polylines: []
 			});
 		});
 
@@ -197,7 +199,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			chart.resolveOverlayReady(ctx);
 
 			expect(ctx.emit).toHaveBeenLastCalledWith({
-				series: [expect.objectContaining({ title: 'ema', visible: false })]
+				series: [expect.objectContaining({ title: 'ema', visible: false })],
+				polylines: []
 			});
 		});
 
@@ -219,7 +222,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 				series: [
 					expect.objectContaining({ title: 'ema' }),
 					expect.objectContaining({ title: 'sma' })
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -342,7 +346,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: 202 }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 	});
@@ -402,7 +407,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: null }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -430,7 +436,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: 106, color: '#000000' }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -468,7 +475,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: 106, color: '#000000' }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -508,7 +516,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 4000, value: 40 }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -548,7 +557,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: null }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -600,7 +610,8 @@ describe('VelaTimeSeriesChartBuilder', () => {
 							{ time: 3000, value: 106, color: '#000000' }
 						]
 					})
-				]
+				],
+				polylines: []
 			});
 		});
 
@@ -612,13 +623,14 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			builder.toggleMarkers(1, 'close', 'circle');
 			const offCtx = createMockOverlayCtx();
 			chart.resolveOverlayReady(offCtx);
-			expect(offCtx.emit).toHaveBeenLastCalledWith({ series: [] });
+			expect(offCtx.emit).toHaveBeenLastCalledWith({ series: [], polylines: [] });
 
 			builder.toggleMarkers(1, 'close', 'circle');
 			const onCtx = createMockOverlayCtx();
 			chart.resolveOverlayReady(onCtx);
 			expect(onCtx.emit).toHaveBeenLastCalledWith({
-				series: [expect.objectContaining({ kind: 'circles' })]
+				series: [expect.objectContaining({ kind: 'circles' })],
+				polylines: []
 			});
 		});
 
@@ -631,7 +643,162 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			const ctx = createMockOverlayCtx();
 			chart.resolveOverlayReady(ctx);
 
-			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [] });
+			expect(ctx.emit).toHaveBeenLastCalledWith({ series: [], polylines: [] });
+		});
+	});
+
+	describe('arrow and square markers (hand-built polyline shapes)', () => {
+		// Vela's native point-marker kinds are only 'circles'/'cross' — see customMarkerShape's
+		// doc comment. 'arrowUp'/'arrowDown'/'square' are instead emitted as closed, filled
+		// DrawingPolyline shapes, so all four cross-engine-consistent icons
+		// (circle/square/arrowUp/arrowDown) render distinctly here too.
+		it('emits an arrowUp marker as an upward-pointing filled triangle, not a circles point', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(
+				1,
+				{ dimName: 'close', timestamp: 2000, name: 'Buy' },
+				{ color: '#16a34a', icon: 'arrowUp' }
+			);
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			// polygonHeight is a fraction of the price range of the bars inside getVisibleRange()
+			// (mocked to {from:1000,to:3000} — all 3 bars) — max high 107, min low 99, so height =
+			// (107-99)*0.045 = 0.36. An up arrow is centered AT the marker's own value (bar 1's
+			// close, 105 — same anchor a circle/square marker uses): apex = 105 + 0.18 = 105.18,
+			// base = apex - height = 104.82. polygonHalfWidth is a fraction of the visible TIME
+			// range (not the bar interval directly), so it stays a constant fraction of the
+			// chart's own width regardless of zoom: (3000-1000)*0.019 = 38.
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [],
+				polylines: [
+					{
+						id: 'overlay-triangle-close-1',
+						paneId: 'price',
+						overlay: true,
+						points: [
+							{ xloc: 'bar_time', x: 2000, price: 105.18 },
+							{ xloc: 'bar_time', x: 1962, price: 104.82 },
+							{ xloc: 'bar_time', x: 2038, price: 104.82 }
+						],
+						curved: false,
+						closed: true,
+						fillColor: '#16a34a',
+						lineColor: '#16a34a',
+						lineWidth: 1,
+						lineStyle: 'solid',
+						arrowLeft: false,
+						arrowRight: false
+					}
+				]
+			});
+		});
+
+		it('emits an arrowDown marker pointing the opposite way, anchored above the bar high', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(
+				1,
+				{ dimName: 'close', timestamp: 2000, name: 'Sell' },
+				{ color: '#dc2626', icon: 'arrowDown' }
+			);
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			// A down arrow is centered at the same value (105) but points the other way: apex =
+			// 105 - 0.18 = 104.82, base = apex + height(0.36) = 105.18 (see the arrowUp test above
+			// for how height is computed).
+			const polyline = ctx.emit.mock.calls.at(-1)?.[0].polylines[0];
+			expect(polyline.points).toEqual([
+				{ xloc: 'bar_time', x: 2000, price: 104.82 },
+				{ xloc: 'bar_time', x: 1962, price: 105.18 },
+				{ xloc: 'bar_time', x: 2038, price: 105.18 }
+			]);
+		});
+
+		it('emits a square marker as a filled quad anchored at its actual value, not bar-relative', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(
+				1,
+				{ dimName: 'close', timestamp: 2000, name: 'Neutral' },
+				{ color: '#000000', icon: 'square' }
+			);
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			// Bar 1 (time 2000): close 105 — a square anchors AT the dimension's own value (like a
+			// circle), unlike the bar-relative triangle. polygonHeight = 0.36 (see the arrowUp
+			// test above), halfHeight = 0.18; halfWidth matches the triangle's own
+			// polygonHalfWidth exactly (38), unlike before — see buildSquarePolyline's comment.
+			expect(ctx.emit).toHaveBeenLastCalledWith({
+				series: [],
+				polylines: [
+					{
+						id: 'overlay-square-close-1',
+						paneId: 'price',
+						overlay: true,
+						points: [
+							{ xloc: 'bar_time', x: 1962, price: 105.18 },
+							{ xloc: 'bar_time', x: 2038, price: 105.18 },
+							{ xloc: 'bar_time', x: 2038, price: 104.82 },
+							{ xloc: 'bar_time', x: 1962, price: 104.82 }
+						],
+						curved: false,
+						closed: true,
+						fillColor: '#000000',
+						lineColor: '#000000',
+						lineWidth: 1,
+						lineStyle: 'solid',
+						arrowLeft: false,
+						arrowRight: false
+					}
+				]
+			});
+		});
+
+		it('does not spend a circles slot on an arrow marker colliding with a circle one on the same bar', () => {
+			// Regression risk: slotCount used to be computed from every marker landing on a bar,
+			// regardless of shape — an arrow marker sharing a bar with a circle one would have
+			// forced a pointless extra (all-null) circles series.
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(
+				1,
+				{ dimName: 'close', timestamp: 2000 },
+				{ color: '#000000', icon: 'circle' }
+			);
+			builder.addMarkerPoint(
+				2,
+				{ dimName: 'high', timestamp: 2000 },
+				{ color: '#16a34a', icon: 'arrowUp' }
+			);
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			const emitted = ctx.emit.mock.calls.at(-1)?.[0];
+			expect(emitted.series).toHaveLength(1);
+			expect(emitted.series[0].id).toBe('overlay-markers');
+			expect(emitted.polylines).toHaveLength(1);
+		});
+
+		it('drops a toggled-off arrow marker from polylines without needing a remount', () => {
+			// Unlike circles, applyPatch replaces model.polylines wholesale on every patch, so an
+			// arrow marker's visibility never needs the remove+re-add dance — same ctx stays live.
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(
+				1,
+				{ dimName: 'close', timestamp: 2000 },
+				{ color: '#16a34a', icon: 'arrowUp' }
+			);
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			expect(ctx.emit.mock.calls.at(-1)?.[0].polylines).toHaveLength(1);
+
+			builder.toggleMarkers(1, 'close', 'arrowUp');
+
+			expect(ctx.emit.mock.calls.at(-1)?.[0].polylines).toEqual([]);
 		});
 	});
 

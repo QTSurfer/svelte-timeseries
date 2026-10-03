@@ -151,7 +151,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			position: this.mapMarkerPosition(options?.position),
 			text: data.name,
 			visible: true,
-			size: options?.symbolSize ?? 4
+			// lightweight-charts' own SeriesMarkerBase.size defaults to 1 — matching that here
+			// (not an arbitrary pixel guess) keeps an unset symbolSize looking the same as a
+			// marker placed directly through lightweight-charts' own API would.
+			size: options?.symbolSize ?? 1
 		};
 
 		const markers = this.markers.get(data.dimName) ?? [];
