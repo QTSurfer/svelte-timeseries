@@ -50,15 +50,20 @@ export type TableData = TableDataFromUrl | TableDataFromParquet | TableDataFromL
 export type Tables = Record<string, TableData>;
 
 export type IconType =
+	// Cross-engine-consistent set — renders the SAME shape in ECharts and Lightweight (see
+	// @qtsurfer/sveltecharts' ChartMarkerPointOptions.icon doc comment). Prefer these for marker
+	// data meant to look the same regardless of which chart engine is selected.
 	| 'circle'
+	| 'square'
+	| 'arrowUp'
+	| 'arrowDown'
+	| 'none'
+	// ECharts-only extras: render distinctly there, but collapse to 'square' in Lightweight.
 	| 'rect'
 	| 'roundRect'
 	| 'triangle'
 	| 'diamond'
-	| 'pin'
-	| 'arrowUp'
-	| 'arrowDown'
-	| 'none';
+	| 'pin';
 
 export type MarkersTable = {
 	[TIMESTAMP_COLUMN]: number;

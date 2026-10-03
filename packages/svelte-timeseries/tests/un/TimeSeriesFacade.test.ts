@@ -1,5 +1,42 @@
 import { describe, expect, it, vi } from 'vitest';
 import TimeSeriesFacade from '../../src/lib/TimeSeriesFacade';
+import { VelaTimeSeriesChartBuilder } from '@qtsurfer/sveltecharts';
+
+// VelaTimeSeriesChartBuilder registers a native-indicator type with @luxalgo/vela on
+// construction (see its module-level ensureOverlayRegistered) — mocked here the same way
+// tests/un/VelaTimeSeriesChartBuilder.test.ts does, so a mock Vela chart instance can be
+// constructed without pulling in the real (heavy) Vela renderer.
+let registeredDescriptor: { create: () => { start: (ctx: unknown) => void } } | null = null;
+
+vi.mock('@luxalgo/vela', () => ({
+	registerNativeIndicator: vi.fn((descriptor) => {
+		registeredDescriptor = descriptor;
+	})
+}));
+
+function createMockVelaChart() {
+	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
+	// Only the LATEST addNativeIndicator's instance is live — a remove() on an older handle
+	// doesn't matter here since the builder never touches a handle it removed.
+	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
+
+	return {
+		setMarket: vi.fn(),
+		getVisibleRange: vi.fn(() => visibleRange),
+		setVisibleRange: vi.fn((range: { from: number; to: number }) => {
+			visibleRange = range;
+		}),
+		addNativeIndicator: vi.fn(() => {
+			pendingInstance = registeredDescriptor?.create() ?? null;
+			return { remove: vi.fn() };
+		}),
+		/** Fires the LATEST instance's start(ctx) — call again after a structural change, which
+		 *  removes + re-adds the overlay indicator and mints a fresh instance. */
+		resolveOverlayReady(ctx: unknown) {
+			pendingInstance?.start(ctx);
+		}
+	};
+}
 
 type ViewportData = { _ts: number[]; price: number[] };
 type ChartData = Record<string, (number | null)[]>;
@@ -463,5 +500,103 @@ describe('TimeSeriesFacade viewport loading', () => {
 			{ start: 2000, end: 3000 },
 			500000
 		);
+	});
+
+	it('rejects a non-OHLC table when the chart builder is Vela', async () => {
+		const duckDb = createDuckDB();
+		duckDb.resolveOHLC.mockReturnValue(undefined);
+		const velaChart = createMockVelaChart();
+		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
+		const facade = new TimeSeriesFacade(duckDb as never, builder);
+
+		await expect(facade.initialize('prices', 'price')).rejects.toThrow(
+			/Vela chart engine only supports candlestick data/
+		);
+		expect(velaChart.setMarket).not.toHaveBeenCalled();
+	});
+
+	it('lets Vela initialize normally against an OHLC table', async () => {
+		const duckDb = createDuckDB();
+		const ohlc = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		duckDb.resolveOHLC.mockReturnValue(ohlc);
+		const velaChart = createMockVelaChart();
+		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
+		const facade = new TimeSeriesFacade(duckDb as never, builder);
+
+		await expect(facade.initialize('candles', 'close')).resolves.toBeUndefined();
+		expect(velaChart.setMarket).toHaveBeenCalledTimes(1);
+	});
+
+	it('adds an extra column onto a Vela candlestick chart', async () => {
+		// Vela's overlay native indicator (see VelaTimeSeriesChartBuilder) lets addDimension
+		// add extra line series (e.g. an EMA overlay) on top of an already-loaded candlestick
+		// chart — toggleColumn must resolve normally instead of throwing.
+		const duckDb = createDuckDB();
+		const ohlc = { open: 'open', high: 'high', low: 'low', close: 'close' };
+		duckDb.resolveOHLC.mockReturnValue(ohlc);
+		const velaChart = createMockVelaChart();
+		const builder = new VelaTimeSeriesChartBuilder(velaChart as never);
+		const facade = new TimeSeriesFacade(duckDb as never, builder);
+		await facade.initialize('candles', 'close');
+
+		await facade.addDimension('candles', 'ema');
+
+		expect(builder.getLoadedDimensions()).toContain('ema');
+		expect(builder.getLegendStatus()).toHaveProperty('ema', true);
+	});
+
+	// A regression test for two concurrent addDimension calls racing (each one's own async
+	// DuckDB query resolving in either order) lives in
+	// packages/sveltecharts/tests/un/VelaTimeSeriesChartBuilder.test.ts instead of here: the
+	// behavior under test — the overlay ending up with both series regardless of call order —
+	// is entirely inside VelaTimeSeriesChartBuilder (TimeSeriesFacade.addDimension just awaits
+	// one query and forwards its result), and @luxalgo/vela isn't a direct dependency of this
+	// package, so vi.mock('@luxalgo/vela', ...) here doesn't reliably intercept the import
+	// @qtsurfer/sveltecharts's compiled output resolves.
+
+	describe('isOHLCMode', () => {
+		it('is false before initialize has run', () => {
+			const facade = new TimeSeriesFacade(createDuckDB() as never, createChartAdapter() as never);
+			expect(facade.isOHLCMode()).toBe(false);
+		});
+
+		it('is true after initializing a table that resolves to OHLC', async () => {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC.mockReturnValue({
+				open: 'open',
+				high: 'high',
+				low: 'low',
+				close: 'close'
+			});
+			const facade = new TimeSeriesFacade(duckDb as never, createChartAdapter() as never);
+
+			await facade.initialize('candles', 'close');
+
+			expect(facade.isOHLCMode()).toBe(true);
+		});
+
+		it('is false after initializing a non-OHLC table', async () => {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC.mockReturnValue(undefined);
+			const facade = new TimeSeriesFacade(duckDb as never, createChartAdapter() as never);
+
+			await facade.initialize('prices', 'price');
+
+			expect(facade.isOHLCMode()).toBe(false);
+		});
+
+		it('flips back to false when a later table is not OHLC', async () => {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC
+				.mockReturnValueOnce({ open: 'open', high: 'high', low: 'low', close: 'close' })
+				.mockReturnValueOnce(undefined);
+			const facade = new TimeSeriesFacade(duckDb as never, createChartAdapter() as never);
+
+			await facade.initialize('candles', 'close');
+			expect(facade.isOHLCMode()).toBe(true);
+
+			await facade.initialize('prices', 'price');
+			expect(facade.isOHLCMode()).toBe(false);
+		});
 	});
 });
