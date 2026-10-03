@@ -7,6 +7,7 @@
 		type OHLCResolution,
 		type Tables
 	} from '$lib/duckdb/DuckDB';
+	import { generateSyntheticCandles } from '$lib/syntheticData';
 	import { onMount } from 'svelte';
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
@@ -24,6 +25,7 @@
 	type ChartLibrary = 'echarts' | 'lightweight' | 'vela';
 
 	const CUSTOM_CONFIGURATION_ID = 'custom';
+	const SYNTHETIC_CONFIGURATION_ID = 'synthetic';
 
 	let selected = $state('preset:2');
 	let baseUrl = $state<string>(typeof window !== 'undefined' ? window.location.href : '');
@@ -39,6 +41,17 @@
 	let inspectingCustomFile = $state(false);
 	let loadedCustomConfiguration = $state<DemoConfiguration | null>(null);
 	let customRenderNonce = $state(0);
+
+	// Raw bytes only — NOT wrapped in a DemoConfiguration/`parquet:` field directly, because
+	// DuckDB.create()'s registerFileBuffer TRANSFERS (detaches) the ArrayBuffer via postMessage
+	// to the DuckDB worker. Reusing the exact same Uint8Array across more than one load — e.g.
+	// switching chart engine or legend mode, which remounts SvelteTimeSeries and re-registers it
+	// — throws "ArrayBuffer is detached and could not be cloned" on the second load. See
+	// activeConfiguration's synthetic branch, which slices a fresh copy on every such remount.
+	let syntheticBytes = $state<Uint8Array | null>(null);
+	let syntheticError = $state('');
+	let generatingSynthetic = $state(false);
+	let syntheticRenderNonce = $state(0);
 
 	let configurations = $derived<DemoConfiguration[]>([
 		{
@@ -99,16 +112,34 @@
 		}
 	]);
 
-	const activeConfiguration = $derived<DemoConfiguration | null>(
-		selected === CUSTOM_CONFIGURATION_ID
-			? loadedCustomConfiguration
-			: (configurations[Number(selected.replace('preset:', ''))] ?? null)
-	);
+	const activeConfiguration = $derived.by<DemoConfiguration | null>(() => {
+		if (selected === CUSTOM_CONFIGURATION_ID) return loadedCustomConfiguration;
+
+		if (selected === SYNTHETIC_CONFIGURATION_ID) {
+			if (!syntheticBytes) return null;
+			// Read (not used otherwise) purely to make this recompute — with a fresh `.slice()`
+			// of syntheticBytes below — on every chart-engine/legend-mode switch, each of which
+			// remounts SvelteTimeSeries and triggers a brand new DuckDB.create() call. See
+			// syntheticBytes' own comment for why reusing the same buffer across loads breaks.
+			void renderKey;
+			return {
+				name: 'Synthetic candlesticks (with markers)',
+				markers: { table: 'synthetic', targetColumn: '_m', targetDimension: 'sma' },
+				tables: {
+					synthetic: { parquet: syntheticBytes.slice(), mainColumn: 'close' }
+				}
+			};
+		}
+
+		return configurations[Number(selected.replace('preset:', ''))] ?? null;
+	});
 
 	const renderKey = $derived(
 		selected === CUSTOM_CONFIGURATION_ID
 			? `${CUSTOM_CONFIGURATION_ID}-${customRenderNonce}-${legendMode}-${chartLibrary}`
-			: `${selected}-${legendMode}-${chartLibrary}`
+			: selected === SYNTHETIC_CONFIGURATION_ID
+				? `${SYNTHETIC_CONFIGURATION_ID}-${syntheticRenderNonce}-${legendMode}-${chartLibrary}`
+				: `${selected}-${legendMode}-${chartLibrary}`
 	);
 	const showCustomSidebar = $derived(legendMode === 'external');
 
@@ -249,6 +280,32 @@
 		selected = CUSTOM_CONFIGURATION_ID;
 	}
 
+	async function generateSynthetic() {
+		syntheticError = '';
+		generatingSynthetic = true;
+
+		try {
+			syntheticBytes = await generateSyntheticCandles();
+			syntheticRenderNonce += 1;
+		} catch (error) {
+			syntheticError =
+				error instanceof Error ? error.message : 'Failed to generate synthetic data.';
+			syntheticBytes = null;
+		} finally {
+			generatingSynthetic = false;
+		}
+	}
+
+	// Regenerating needs an explicit re-selection of the option to feel intentional (picking it
+	// from the dropdown already re-fires this), so a plain reactive $effect keyed on `selected`
+	// is enough — no separate "Load" button needed, unlike Custom source, which has actual
+	// user input (a URL/file) to wait for before there's anything to load.
+	$effect(() => {
+		if (selected === SYNTHETIC_CONFIGURATION_ID && !syntheticBytes) {
+			void generateSynthetic();
+		}
+	});
+
 	onMount(() => {
 		baseUrl = window.location.href;
 	});
@@ -309,6 +366,7 @@
 							{config.name}
 						</option>
 					{/each}
+					<option value={SYNTHETIC_CONFIGURATION_ID}>Synthetic candlesticks (with markers)</option>
 					<option value={CUSTOM_CONFIGURATION_ID}>Custom source</option>
 				</select>
 			</label>
@@ -435,6 +493,19 @@
 					{inspectingCustomFile ? 'Reading file...' : 'Load'}
 				</button>
 			{/if}
+
+			{#if selected === SYNTHETIC_CONFIGURATION_ID}
+				<button
+					class="btn btn-outline"
+					onclick={() => {
+						syntheticBytes = null;
+						void generateSynthetic();
+					}}
+					disabled={generatingSynthetic}
+				>
+					{generatingSynthetic ? 'Generating...' : 'Regenerate'}
+				</button>
+			{/if}
 		</div>
 
 		{#if selected === CUSTOM_CONFIGURATION_ID}
@@ -443,6 +514,16 @@
 				<code>_t</code>, or <code>t</code>. Supported formats: Parquet (<code>.parquet</code>,
 				<code>.pqt</code>) and Lastra (<code>.lastra</code>). In file mode: 1. select the file, 2.
 				choose the <code>mainColumn</code>, 3. press <code>Load</code>.
+			</div>
+		{/if}
+
+		{#if selected === SYNTHETIC_CONFIGURATION_ID}
+			<div class="mt-3 text-sm text-base-content/70">
+				A fresh random-walk OHLC candlestick series (80 bars) generated entirely in the browser via
+				DuckDB-wasm, with 4 markers — one per cross-engine-consistent icon (<code>circle</code>,
+				<code>square</code>, <code>arrowUp</code>,
+				<code>arrowDown</code>) — toggleable from the Markers panel. Works with all three chart
+				engines, including Vela (candlestick-only). Press Regenerate for a new run.
 			</div>
 		{/if}
 
@@ -462,6 +543,12 @@
 		{#if selected === CUSTOM_CONFIGURATION_ID && customError}
 			<div class="mt-3 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
 				{customError}
+			</div>
+		{/if}
+
+		{#if selected === SYNTHETIC_CONFIGURATION_ID && syntheticError}
+			<div class="mt-3 rounded-lg border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
+				{syntheticError}
 			</div>
 		{/if}
 	</div>
