@@ -112,6 +112,19 @@
 
 			let newMarkers: MarkersTable[] | undefined;
 			if (markers) {
+				// An OHLC/candlestick table's open/high/low/close are encoded directly into the
+				// candlestick series, not exposed as their own line series — addMarkerPoint needs
+				// the target dimension to BE a line series to resolve against (ECharts/Lightweight
+				// look it up via that series' encode.y; see TimeSeriesChartBuilder.addMarkerPoint),
+				// so load it first if OHLC mode left it unloaded. A no-op for non-OHLC tables,
+				// whose mainColumn is already its own series from setDataset. Uses
+				// ensureDimensionLoaded, not addDimension — see its doc comment for the race this
+				// avoids (the chart's own initial dataZoom event can otherwise mark addDimension's
+				// in-flight query stale before it resolves).
+				if (facade.isOHLCMode() && !facade.isLoadedColumns(markers.targetDimension)) {
+					await facade.ensureDimensionLoaded(currentTable, markers.targetDimension);
+					if (discardIfStale()) return;
+				}
 				newMarkers = await facade.loadMarkers(markers.targetDimension);
 				if (discardIfStale()) return;
 			}

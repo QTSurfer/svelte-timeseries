@@ -187,6 +187,23 @@ export default class TimeSeriesFacade {
 		return markersRows;
 	}
 
+	/**
+	 * Loads a single dimension as its own series, unconditionally — unlike `addDimension`, this
+	 * doesn't bump or check `_dataRequestId`. It exists specifically for `loadChart`'s
+	 * OHLC-mode-markers bootstrap step (loading `markers.targetDimension` before `loadMarkers`
+	 * resolves against it), which runs immediately after `initialize()`, before any viewport-
+	 * driven request has a `_dataRange` to race against. Using `addDimension` there was a real,
+	 * intermittent bug: the chart can fire its own initial `onViewportChange` (e.g. ECharts'
+	 * dataZoom component reporting its starting state right after mount) while that call's
+	 * `getSingleDimension` query is still in flight, bumping `_dataRequestId` first — making
+	 * `addDimension`'s own staleness check silently drop the dimension it just fetched, so
+	 * `loadMarkers` then failed with "Dimension not found".
+	 */
+	async ensureDimensionLoaded(table: string, columnsSelect: string) {
+		const result = await this.duckDb.getSingleDimension(table, columnsSelect, true);
+		this.timeSeriesChartBuilder.addDimension(result, columnsSelect);
+	}
+
 	async addDimension(table: string, columnsSelect: string) {
 		this._requestedDimensions.add(columnsSelect);
 		const requestId = ++this._dataRequestId;
