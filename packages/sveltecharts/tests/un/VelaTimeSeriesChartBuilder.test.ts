@@ -8,8 +8,14 @@ import { VelaTimeSeriesChartBuilder } from '../../src/lib/VelaTimeSeriesChartBui
 // mirroring the real API's async readiness wait before start() fires. Each addNativeIndicator
 // call (the constructor's first one, and one per remount after a remove()) mints a fresh
 // instance/handle, exactly like Vela's real addNativeIndicator does.
+type MockNativeInstance = {
+	start: (ctx: unknown) => void;
+	onViewport: (range: { from: number; to: number }) => void;
+};
+
 let registeredDescriptor: {
-	create: () => { start: (ctx: unknown) => void };
+	reactsToViewport?: boolean;
+	create: () => MockNativeInstance;
 } | null = null;
 
 vi.mock('@luxalgo/vela', () => ({
@@ -22,7 +28,7 @@ function createMockChart() {
 	let visibleRange: { from: number; to: number } | null = { from: 1000, to: 3000 };
 	// Only the LATEST addNativeIndicator's instance/handle is live — a remove() on an older
 	// handle doesn't matter here since the builder never touches a handle it removed.
-	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
+	let pendingInstance: MockNativeInstance | null = null;
 	let currentHandle: { remove: ReturnType<typeof vi.fn> } | null = null;
 
 	return {
@@ -40,6 +46,14 @@ function createMockChart() {
 		/** Test-only helper: fires the LATEST instance's start(ctx), like Vela's async readiness wait resolving. */
 		resolveOverlayReady(ctx: unknown) {
 			pendingInstance?.start(ctx);
+		},
+		/**
+		 * Test-only helper: the orchestrator's debounced viewport poke, which Vela only sends to a
+		 * native whose descriptor sets `reactsToViewport`.
+		 */
+		settleViewport() {
+			if (!registeredDescriptor?.reactsToViewport || !visibleRange) return;
+			pendingInstance?.onViewport(visibleRange);
 		},
 		/** Test-only helper: the handle from the most recent addNativeIndicator call. */
 		currentOverlayHandle() {
@@ -585,6 +599,32 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			expect(secondPoint.value).not.toBe(105); // nudged away from the first, not identical
 		});
 
+		it('still separates same-dimension duplicates on a flat (high === low) bar (regression)', () => {
+			// Regression: the nudge used to be a fraction of the bar's own high-low range, which is
+			// 0 for a flat candle — both circles landed on the exact same pixels. It's now sized
+			// from the visible price range: high 107 / low 99 across the 3 visible bars → polygon
+			// height 0.36 → the second duplicate sits 0.36 * 1.5 = 0.54 above the first.
+			const flat = {
+				...data,
+				open: [100, 105, 102],
+				high: [105, 105, 107],
+				low: [99, 105, 101],
+				close: [104, 105, 106]
+			};
+			builder.setCandlestickSeries(flat, dims);
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 }, { color: '#ff0000' });
+			builder.addMarkerPoint(2, { dimName: 'close', timestamp: 2000 }, { color: '#00ff00' });
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			const emitted = ctx.emit.mock.calls.at(-1)?.[0].series;
+			const first = emitted.find((s: { id: string }) => s.id === 'overlay-markers').points[1];
+			const second = emitted.find((s: { id: string }) => s.id === 'overlay-markers-1').points[1];
+
+			expect(first.value).toBe(105);
+			expect(second.value).toBeCloseTo(105.54);
+		});
+
 		it('clears only the marker cell that changed, leaving an unrelated marker in the same slot untouched (regression)', () => {
 			// Regression: marker slot buffers are now reused/mutated in place across emits instead
 			// of rebuilt from scratch on every mutation — toggling one marker off must clear only
@@ -799,6 +839,44 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			builder.toggleMarkers(1, 'close', 'arrowUp');
 
 			expect(ctx.emit.mock.calls.at(-1)?.[0].polylines).toEqual([]);
+		});
+
+		it('re-sizes polygon markers against the new visible range once a zoom/pan settles (regression)', () => {
+			// Regression: polygons were sized from the visible range only at emit time and
+			// onViewport was a no-op, so zooming kept their stale data-space size and they grew or
+			// shrank on screen.
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(
+				1,
+				{ dimName: 'close', timestamp: 2000 },
+				{ color: '#16a34a', icon: 'arrowUp' }
+			);
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+
+			// Zoom into bars 0-1 only: span 1000ms → halfWidth 19; visible high 106, low 99 →
+			// height 0.315, so the apex sits at 105 + 0.1575.
+			chart.setVisibleRange({ from: 1000, to: 2000 });
+			chart.settleViewport();
+
+			const [apex, baseLeft, baseRight] = ctx.emit.mock.calls.at(-1)?.[0].polylines[0].points;
+			expect(apex.price).toBeCloseTo(105.1575);
+			expect(baseLeft.price).toBeCloseTo(104.8425);
+			expect(baseLeft.x).toBe(1981);
+			expect(baseRight.x).toBe(2019);
+		});
+
+		it('does not re-emit on viewport changes when no polygon markers are shown', () => {
+			builder.setCandlestickSeries(data, dims);
+			builder.addMarkerPoint(1, { dimName: 'close', timestamp: 2000 }, { color: '#000000' });
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			const emitsBefore = ctx.emit.mock.calls.length;
+
+			chart.setVisibleRange({ from: 1000, to: 2000 });
+			chart.settleViewport();
+
+			expect(ctx.emit.mock.calls.length).toBe(emitsBefore);
 		});
 	});
 

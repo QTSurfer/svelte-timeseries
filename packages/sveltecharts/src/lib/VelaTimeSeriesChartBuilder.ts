@@ -68,6 +68,42 @@ function customMarkerShape(shape: string | undefined): 'square' | 'arrowUp' | 'a
 	return null;
 }
 
+/** See `VelaTimeSeriesChartBuilder.polygonGeometry`. */
+type PolygonGeometry = { height: number; halfWidth: number };
+
+/**
+ * First position in `barIndices` (ascending by time) whose timestamp is `>= t`, or `> t` when
+ * `strict` — i.e. a lower or upper bound. Returns `barIndices.length` if none qualifies.
+ */
+function timeBound(
+	barIndices: readonly number[],
+	timestamps: readonly (number | null)[],
+	t: number,
+	strict = false
+): number {
+	let lo = 0;
+	let hi = barIndices.length;
+	while (lo < hi) {
+		const mid = (lo + hi) >>> 1;
+		const value = timestamps[barIndices[mid]] as number;
+		if (strict ? value <= t : value < t) lo = mid + 1;
+		else hi = mid;
+	}
+	return lo;
+}
+
+/**
+ * How far each marker sharing both a dimension AND a bar with an earlier one is stacked away from
+ * it — without it they'd carry the identical (bar, value) and the later one would hide the first.
+ * Sized from the polygon height (a fraction of the visible price range, so roughly a fixed number
+ * of screen pixels) rather than the bar's own high-low, which was 0 for a flat candle and subpixel
+ * on narrow ones. 1.5x the polygon height clears both a polygon and a 16px-radius circle at
+ * typical chart heights, and grows with `dupIndex` so further duplicates keep stacking.
+ */
+function duplicateMarkerOffset(geometry: PolygonGeometry, dupIndex: number): number {
+	return geometry.height * 1.5 * dupIndex;
+}
+
 let overlayRegistered = false;
 
 /**
@@ -79,14 +115,23 @@ let overlayRegistered = false;
  * between setting this and `create()` reading it, despite `registerNativeIndicator`'s type
  * registration being module-global rather than per-chart.
  */
-let pendingOnReady: ((ctx: NativeIndicatorContext) => void) | null = null;
+let pendingHooks: OverlayHooks | null = null;
+
+type OverlayHooks = {
+	onReady: (ctx: NativeIndicatorContext) => void;
+	onViewport: () => void;
+};
 
 /**
  * Registers the (single, module-level) native-indicator TYPE every VelaTimeSeriesChartBuilder
  * instance adds to its own chart. `registerNativeIndicator` registers a TYPE globally, not a
  * per-chart instance — but `chart.addNativeIndicator` still mints one NativeIndicator instance
  * per chart (single-instance type, no `multiInstance`), each wired to that particular builder's
- * `onReady` via `pendingOnReady`. This is safe with multiple Vela charts on one page.
+ * hooks via `pendingHooks`. This is safe with multiple Vela charts on one page.
+ *
+ * `reactsToViewport: true` makes the orchestrator call `onViewport` on this instance once a
+ * zoom/pan settles (it's debounced in `onViewportChange`, not per frame) — the builder uses that
+ * to re-size its hand-built marker polygons, see `onViewportSettled`.
  *
  * `legend: false` keeps this out of Vela's own indicator legend/settings/remove UI — it exists
  * purely to give this builder an `emit` channel for the extra line/marker series the
@@ -104,9 +149,10 @@ function ensureOverlayRegistered() {
 		overlay: true,
 		legend: false,
 		multiInstance: false,
+		reactsToViewport: true,
 		inputsSchema: () => [],
 		defaultInputs: () => ({}),
-		create: (): NativeIndicator => new OverlayNativeIndicator(pendingOnReady ?? undefined)
+		create: (): NativeIndicator => new OverlayNativeIndicator(pendingHooks ?? undefined)
 	});
 }
 
@@ -120,14 +166,16 @@ function ensureOverlayRegistered() {
  * re-sent on the next mutation.
  */
 class OverlayNativeIndicator implements NativeIndicator {
-	constructor(private readonly onReady?: (ctx: NativeIndicatorContext) => void) {}
+	constructor(private readonly hooks?: OverlayHooks) {}
 
 	start(ctx: NativeIndicatorContext): void {
-		this.onReady?.(ctx);
+		this.hooks?.onReady(ctx);
 	}
 
 	onBars(): void {}
-	onViewport(): void {}
+	onViewport(): void {
+		this.hooks?.onViewport();
+	}
 	setInputs(): void {}
 	suspend(): void {}
 	resume(): void {}
@@ -185,6 +233,8 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	// Vela's full mountIndicator path on its own (no renderHandle exists yet) — skip the
 	// remove+re-add cycle for it, it would just be a redundant extra round trip.
 	private overlayEverEmitted = false;
+	// Whether the last emit carried any square/triangle polylines — see onViewportSettled.
+	private hasPolygonMarkers = false;
 
 	constructor(instance: Vela, builderConfig?: ConfigBuilder) {
 		this.VelaChart = instance;
@@ -199,16 +249,30 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	 * its NativeIndicatorContext to this builder once Vela's async readiness resolves.
 	 */
 	private mountOverlayIndicator(): void {
-		pendingOnReady = (ctx) => {
-			this.overlayCtx = ctx;
-			this.remounting = false;
-			this.emitOverlay();
+		pendingHooks = {
+			onReady: (ctx) => {
+				this.overlayCtx = ctx;
+				this.remounting = false;
+				this.emitOverlay();
+			},
+			onViewport: () => this.onViewportSettled()
 		};
 		try {
 			this.overlayHandle = this.VelaChart.addNativeIndicator(OVERLAY_INDICATOR_TYPE);
 		} finally {
-			pendingOnReady = null;
+			pendingHooks = null;
 		}
+	}
+
+	/**
+	 * Square/triangle markers are data-space polylines sized from the visible range at emit
+	 * time (`polygonGeometry`), so after a zoom/pan they'd keep their old
+	 * data-space size and grow or shrink on screen. Re-emitting once the viewport settles
+	 * recomputes them against the new range. Skipped when the last emit had no polygons — circles
+	 * are already sized in screen pixels by Vela itself and need nothing here.
+	 */
+	private onViewportSettled(): void {
+		if (this.hasPolygonMarkers) this.emitOverlay();
 	}
 
 	setLegendIcon(_icon: string): this {
@@ -509,7 +573,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	 * own readiness wait — see `ensureOverlayRegistered`), so `overlayCtx`/`overlayHandle` are
 	 * unavailable for the duration: further mutations during that window are captured by
 	 * `dataset`/`extraDimensions`/`markers` as usual and simply re-run `emitOverlay()` once the
-	 * new context arrives (via `mountOverlayIndicator`'s `pendingOnReady` callback), so nothing
+	 * new context arrives (via `mountOverlayIndicator`'s `onReady` hook), so nothing
 	 * is lost — only the LAST state before the callback fires is what gets emitted.
 	 */
 	private emitOverlay(): void {
@@ -555,6 +619,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		// `buildSquarePolyline`/`buildTrianglePolyline`) — Vela's point-marker kinds have neither
 		// shape to ask for natively.
 		const { circleSlots, polygons } = this.toMarkerSeriesPoints(barIndices);
+		this.hasPolygonMarkers = polygons.length > 0;
 		const markerSeriesList: LineLikeSeries[] = circleSlots.map((points, slot) => ({
 			id: markerSeriesId(slot),
 			title: slot === 0 ? 'Markers' : `Markers (overlap ${slot + 1})`,
@@ -568,7 +633,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			// RADIUS in literal screen pixels (`Math.max(1.5, s.style.width)`, passed straight to
 			// its canvas circle draw call) — unlike the hand-built square/triangle polylines
 			// (`buildSquarePolyline`/`buildTrianglePolyline`), which are sized in DATA space and
-			// so need `polygonHeight`/`polygonHalfWidth`'s fraction-of-visible-range math to stay
+			// so need `polygonGeometry`'s fraction-of-visible-range math to stay
 			// a consistent pixel size across zoom levels. A circle marker gets that same
 			// consistency for free since its size is already a direct, zoom-independent pixel
 			// value — it just needs to roughly match the other shapes' rendered size. The old
@@ -707,6 +772,11 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 			point.color = undefined;
 		}
 
+		// Computed at most once per emit, and only if a polygon or a stacked duplicate needs it —
+		// it scans the visible bars' high/low, which shouldn't repeat per marker.
+		let geometry: PolygonGeometry | null = null;
+		const getGeometry = () => (geometry ??= this.polygonGeometry(barIndices));
+
 		const polygons: DrawingPolyline[] = [];
 		const nextOccupied: { slot: number; position: number }[] = [];
 		for (const group of byPosition.values()) {
@@ -719,18 +789,18 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 				const i = barIndices[entry.position];
 				const baseValue = this.dataset[entry.dimName]?.[i] as number;
 				const value =
-					dupIndex === 0 ? baseValue : baseValue + this.duplicateMarkerOffset(i, dupIndex);
+					dupIndex === 0 ? baseValue : baseValue + duplicateMarkerOffset(getGeometry(), dupIndex);
 
 				const shape = customMarkerShape(entry.marker.shape);
 				if (shape === 'arrowUp' || shape === 'arrowDown') {
 					polygons.push(
-						this.buildTrianglePolyline(entry.dimName, entry.marker, i, value, barIndices)
+						this.buildTrianglePolyline(entry.dimName, entry.marker, i, value, getGeometry())
 					);
 					return;
 				}
 				if (shape === 'square') {
 					polygons.push(
-						this.buildSquarePolyline(entry.dimName, entry.marker, i, value, barIndices)
+						this.buildSquarePolyline(entry.dimName, entry.marker, i, value, getGeometry())
 					);
 					return;
 				}
@@ -745,22 +815,6 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		this.occupiedMarkerCells = nextOccupied;
 
 		return { circleSlots: this.markerSlotBuffers.slice(0, slotCount), polygons };
-	}
-
-	/**
-	 * A small nudge applied to each marker sharing both a dimension AND a bar with an earlier one
-	 * at the same bar — without it they'd carry the identical (bar, value) and be visually
-	 * indistinguishable even though they're now separate series. Sized as a fraction of that bar's
-	 * own high-low range so it stays sensible regardless of the instrument's price scale, and
-	 * grows with `dupIndex` so a third/fourth duplicate stacks further rather than landing back on
-	 * the second. Falls back to 0 (no visual separation) only for a degenerate zero-range bar.
-	 */
-	private duplicateMarkerOffset(barIndex: number, dupIndex: number): number {
-		if (!this._ohlcDims) return 0;
-		const high = this.dataset[this._ohlcDims.high]?.[barIndex];
-		const low = this.dataset[this._ohlcDims.low]?.[barIndex];
-		if (high == null || low == null || high <= low) return 0;
-		return (high - low) * 0.08 * dupIndex;
 	}
 
 	/**
@@ -786,12 +840,11 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		marker: MarkerState,
 		barIndex: number,
 		value: number,
-		barIndices: readonly number[]
+		{ height, halfWidth }: PolygonGeometry
 	): DrawingPolyline {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const time = timestamps[barIndex] as number;
-		const halfHeight = this.polygonHeight(barIndices) / 2;
-		const halfWidth = this.polygonHalfWidth(barIndices);
+		const halfHeight = height / 2;
 		const up = marker.shape === 'arrowUp';
 		// Computed as `value ± halfHeight` (not `tipPrice ∓ height`) so this lands on the exact
 		// same float as the square's own `value ± halfHeight` — the two shapes share a value and
@@ -834,14 +887,11 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		marker: MarkerState,
 		barIndex: number,
 		value: number,
-		barIndices: readonly number[]
+		{ height, halfWidth }: PolygonGeometry
 	): DrawingPolyline {
 		const timestamps = this.dataset[this._tsColumn] ?? [];
 		const time = timestamps[barIndex] as number;
-		const halfHeight = this.polygonHeight(barIndices) / 2;
-		// Matches the triangle's own width exactly (no extra reduction) — empirically, shrinking
-		// it further (previously *0.7) made the square visibly taller than it is wide.
-		const halfWidth = this.polygonHalfWidth(barIndices);
+		const halfHeight = height / 2;
 
 		return {
 			id: `overlay-square-${dimName}-${marker.id}`,
@@ -865,73 +915,67 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	}
 
 	/**
-	 * A hand-built marker polygon's height in price units — a fraction of the CURRENTLY VISIBLE
-	 * price range (highest high to lowest low across only the bars inside `getVisibleRange()`),
-	 * not the full dataset's. Vela's Y axis autoscales to what's actually on screen, so its
-	 * price-per-pixel ratio shrinks/grows as the user zooms — pegging this to the FULL dataset's
-	 * range (an earlier version of this method) stayed fixed in price units regardless of zoom,
-	 * so the same shape rendered correctly at the default (near-full-range) zoom but ballooned or
-	 * flattened at any other zoom level, confirmed by instrumenting actual emitted polygon
-	 * coordinates against screenshotted price-axis gridlines at two different zooms (default vs.
-	 * ~3x zoomed in): price-per-pixel had moved by a very different factor than time-per-pixel
-	 * had, despite both shape dimensions being zoom-naive. Rebasing both this and
-	 * `polygonHalfWidth` on the CURRENT visible extent (time range from `getVisibleRange()`,
-	 * price range from the bars inside it) makes each dimension cancel out its own
-	 * axis's zoom factor the same way, keeping the shape's rendered PIXEL size — and so its
-	 * aspect ratio — roughly constant across zoom levels, matching how the other two engines'
-	 * markers already behave (`symbolSize` there is a literal, zoom-independent pixel value).
-	 * Falls back to the full-dataset range (then the dataset's own closing range, never 0 — that
-	 * would draw nothing) when no visible range is available yet (pre-first-render). Shared by
-	 * `buildTrianglePolyline` and `buildSquarePolyline`.
+	 * Size of a hand-built marker polygon in data space: `height` in price units, `halfWidth` in
+	 * ms. Both are fractions of the CURRENTLY VISIBLE extent — `halfWidth` of the visible time
+	 * range, `height` of the high-low range of only the bars inside it — because Vela autoscales
+	 * each axis to what's on screen, and the two axes' px-per-unit drift at different rates when
+	 * zooming. Sizing off the full dataset (an earlier version) only looked right at the default
+	 * zoom and stretched or flattened elsewhere; rebasing both on the visible extent cancels each
+	 * axis's zoom factor, keeping the rendered pixel size (and aspect ratio) roughly constant —
+	 * like `symbolSize` on the other engines. Kept current across zoom/pan by
+	 * `onViewportSettled`.
+	 *
+	 * Visible bars are found by binary search on `barIndices` (ascending by time), so the cost is
+	 * proportional to what's on screen, not the dataset. Falls back to the full retained range,
+	 * then to a fraction of the first close (never 0, which would draw nothing), and to an
+	 * average-bar-interval width, when no visible range exists yet (pre-first-render).
 	 */
-	private polygonHeight(barIndices: readonly number[]): number {
+	private polygonGeometry(barIndices: readonly number[]): PolygonGeometry {
+		const timestamps = this.dataset[this._tsColumn] ?? [];
+		const visible = this.VelaChart.getVisibleRange();
+		const hasVisible = visible != null && visible.to > visible.from;
+
+		let start = 0;
+		let end = barIndices.length;
+		if (hasVisible) {
+			start = timeBound(barIndices, timestamps, visible.from);
+			end = timeBound(barIndices, timestamps, visible.to, true);
+		}
+
+		let height = 0;
 		if (this._ohlcDims) {
 			const highs = this.dataset[this._ohlcDims.high] ?? [];
 			const lows = this.dataset[this._ohlcDims.low] ?? [];
-			const timestamps = this.dataset[this._tsColumn] ?? [];
-			const visible = this.VelaChart.getVisibleRange();
 			let max = -Infinity;
 			let min = Infinity;
-			for (const i of barIndices) {
-				if (visible) {
-					const t = timestamps[i] as number;
-					if (t < visible.from || t > visible.to) continue;
-				}
+			for (let p = start; p < end; p++) {
+				const i = barIndices[p];
 				const h = highs[i];
 				const l = lows[i];
 				if (h != null && h > max) max = h;
 				if (l != null && l < min) min = l;
 			}
-			if (max > min) return (max - min) * 0.045;
+			if (max > min) height = (max - min) * 0.045;
 		}
-		const close = this._ohlcDims
-			? (this.dataset[this._ohlcDims.close]?.[barIndices[0]] ?? null)
-			: null;
-		return Math.abs(close ?? 1) * 0.01 || 1;
-	}
+		if (height === 0) {
+			const close = this._ohlcDims
+				? (this.dataset[this._ohlcDims.close]?.[barIndices[0]] ?? null)
+				: null;
+			height = Math.abs(close ?? 1) * 0.01 || 1;
+		}
 
-	/**
-	 * Half a hand-built marker polygon's width, in milliseconds — a fraction of the CURRENTLY
-	 * VISIBLE time range (`getVisibleRange()`), not a fixed multiple of the bar interval. See
-	 * `polygonHeight`'s doc comment for why: a fixed-bar-count width converts to a steadily
-	 * growing pixel width as the user zooms in (the same way candles themselves grow), which on
-	 * its own would be fine, but `polygonHeight`'s pixel size needs to track the SAME zoom to
-	 * keep the shape's aspect ratio sane — and price-per-pixel does not grow at the same rate as
-	 * time-per-pixel when zooming (confirmed empirically), so the two must be rebased on the same
-	 * "fraction of the current visible extent" basis to cancel out consistently. Falls back to
-	 * the old average-bar-interval estimate when no visible range is available yet.
-	 */
-	private polygonHalfWidth(barIndices: readonly number[]): number {
-		const visible = this.VelaChart.getVisibleRange();
-		if (visible && visible.to > visible.from) {
-			return (visible.to - visible.from) * 0.019;
+		let halfWidth: number;
+		if (hasVisible) {
+			halfWidth = (visible.to - visible.from) * 0.019;
+		} else if (barIndices.length < 2) {
+			halfWidth = 30_000;
+		} else {
+			const first = timestamps[barIndices[0]] as number;
+			const last = timestamps[barIndices[barIndices.length - 1]] as number;
+			halfWidth = ((last - first) / (barIndices.length - 1)) * 1.5;
 		}
-		const timestamps = this.dataset[this._tsColumn] ?? [];
-		if (barIndices.length < 2) return 30_000;
-		const first = timestamps[barIndices[0]] as number;
-		const last = timestamps[barIndices[barIndices.length - 1]] as number;
-		const avgInterval = (last - first) / (barIndices.length - 1);
-		return avgInterval * 1.5;
+
+		return { height, halfWidth };
 	}
 
 	/**
