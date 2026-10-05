@@ -288,18 +288,18 @@
 			syntheticBytes = await generateSyntheticCandles();
 			syntheticRenderNonce += 1;
 		} catch (error) {
+			// Keeps the previous run's bytes (if any) on screen rather than nulling them, which
+			// would re-fire the $effect below and retry in a loop.
 			syntheticError =
 				error instanceof Error ? error.message : 'Failed to generate synthetic data.';
-			syntheticBytes = null;
 		} finally {
 			generatingSynthetic = false;
 		}
 	}
 
-	// Regenerating needs an explicit re-selection of the option to feel intentional (picking it
-	// from the dropdown already re-fires this), so a plain reactive $effect keyed on `selected`
-	// is enough — no separate "Load" button needed, unlike Custom source, which has actual
-	// user input (a URL/file) to wait for before there's anything to load.
+	// Only the FIRST generation goes through here (selecting the scenario with nothing loaded
+	// yet); Regenerate calls generateSynthetic() directly without clearing syntheticBytes, so the
+	// two paths can never start concurrent DuckDB generations that race to overwrite each other.
 	$effect(() => {
 		if (selected === SYNTHETIC_CONFIGURATION_ID && !syntheticBytes) {
 			void generateSynthetic();
@@ -497,10 +497,7 @@
 			{#if selected === SYNTHETIC_CONFIGURATION_ID}
 				<button
 					class="btn btn-outline"
-					onclick={() => {
-						syntheticBytes = null;
-						void generateSynthetic();
-					}}
+					onclick={() => void generateSynthetic()}
 					disabled={generatingSynthetic}
 				>
 					{generatingSynthetic ? 'Generating...' : 'Regenerate'}
