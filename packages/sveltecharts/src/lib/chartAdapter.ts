@@ -40,7 +40,7 @@ export type ChartMarkerPointOptions = {
 	 * parity doesn't matter.
 	 *
 	 * Vela draws `'circle'` natively and builds `'square'`, `'arrowUp'` and `'arrowDown'` as
-	 * filled polygons.
+	 * filled polygons. Markers from `setInjectedMarkers` (not Vela) use the same four shapes.
 	 */
 	icon?: string;
 	color?: string;
