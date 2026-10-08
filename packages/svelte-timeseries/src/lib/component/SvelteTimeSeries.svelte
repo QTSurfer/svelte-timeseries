@@ -6,17 +6,23 @@
 	import TimeSeriesFacade from '$lib/TimeSeriesFacade';
 	import type { Columns } from '$lib/TimeSeriesFacade';
 	import type { Snippet } from 'svelte';
-	import { DuckDB } from '../duckdb/DuckDB';
+	// DuckDB is imported on demand (see `loadChart`): arrays-only charts never load it.
 	import type { MarkersTable, MarkersTableOptions, Tables } from '../duckdb/DuckDB';
+	import { selectDataSource } from '../dataSource';
 	import {
 		LightweightTimeSeriesChartBuilder,
 		SVECharts,
 		SVELightweightCharts,
+		TimeSeriesChart,
 		TimeSeriesChartBuilder
 	} from '@qtsurfer/sveltecharts';
 	import type {
+		CandlesInput,
 		ECharts,
+		InjectedMarker,
+		InjectedSeries,
 		LightweightChartApi,
+		PriceLineInput,
 		TimeSeriesChartAdapter
 	} from '@qtsurfer/sveltecharts';
 
@@ -37,6 +43,12 @@
 	};
 	let {
 		table,
+		price,
+		candles,
+		injectedSeries,
+		injectedMarkers,
+		paneHeights,
+		onChartReady,
 		markers,
 		debug = true,
 		externalManagerLegend = true,
@@ -51,9 +63,25 @@
 		onFacadeReady,
 		loadingSnippet
 	}: {
-		table: Tables;
+		/**
+		 * Parquet / Lastra sources. Optional: without it the chart is fed from `price` / `candles`
+		 * and DuckDB is never loaded.
+		 */
+		table?: Tables;
+		/** Price line from arrays (no DuckDB). Used when `table` is not given. */
+		price?: PriceLineInput;
+		/** Candles from OHLC arrays (no DuckDB). Used when `table` is not given. */
+		candles?: CandlesInput;
+		/** Named line series computed by your app (indicators). Works with `table` too. */
+		injectedSeries?: readonly InjectedSeries[];
+		/** Buy / sell / info events drawn on the chart. Works with `table` too. */
+		injectedMarkers?: readonly InjectedMarker[];
+		/** Relative pane heights keyed by pane number, e.g. `{ 0: 3, 1: 1 }`. */
+		paneHeights?: Readonly<Record<number, number>>;
+		/** Called when the chart exists and its data is drawn, with the adapter for advanced use. */
+		onChartReady?: (adapter: TimeSeriesChartAdapter) => void;
 		markers?: MarkersTableOptions;
-		debug: boolean;
+		debug?: boolean;
 		externalManagerLegend?: boolean;
 		columnsSnippet?: Snippet<[DataColumnsProps]>;
 		markersSnippet?: Snippet<[MarkersProps]>;
@@ -71,7 +99,10 @@
 	let timer = $state({ start: performance.now(), end: 0 });
 
 	let timeSeriesFacade = $state<TimeSeriesFacade>();
-	const tableName = $derived(Object.keys(table)[0]);
+	const tableName = $derived(Object.keys(table ?? {})[0]);
+	const dataSource = $derived(selectDataSource(table, Boolean(price || candles)));
+	// Adapter of the table-driven chart, once loaded; injected input is applied through it.
+	let tableAdapter = $state.raw<{ adapter: TimeSeriesChartAdapter; library: string }>();
 
 	let columns = $state<Columns>([]);
 	let matrix = $state([0, 0]);
@@ -80,13 +111,15 @@
 	let loadToken = 0;
 
 	const loadChart = async (chartBuilder: TimeSeriesChartAdapter) => {
-		const currentTable = Object.keys(table)[0];
-		const entry = currentTable ? table[currentTable] : undefined;
-		if (!entry) return;
+		const currentTable = Object.keys(table ?? {})[0];
+		const entry = table && currentTable ? table[currentTable] : undefined;
+		if (!table || !entry) return;
 		const columnsSelect = entry.mainColumn;
 		const myToken = ++loadToken;
 
+		tableAdapter = undefined;
 		loading = true;
+		const { DuckDB } = await import('../duckdb/DuckDB');
 		const duckDb = await DuckDB.create(table, markers, debug);
 		const discardIfStale = (): boolean => {
 			if (myToken === loadToken) return false;
@@ -117,8 +150,38 @@
 		visibleRows = matrix[1];
 		timer.end = performance.now();
 		loading = false;
+		tableAdapter = { adapter: chartBuilder, library: chartLibrary };
 		onFacadeReady?.(facade);
+		onChartReady?.(chartBuilder);
 	};
+
+	const onArraysChartReady = (adapter: TimeSeriesChartAdapter) => {
+		matrix = [Object.keys(adapter.getLegendStatus()).length, adapter.getTotalRows()];
+		visibleRows = matrix[1];
+		timer.end = performance.now();
+		onChartReady?.(adapter);
+	};
+
+	// Injected input for the table-driven chart. (The arrays chart applies it inside
+	// `TimeSeriesChart`.) Replace the arrays to update; the chart is not rebuilt.
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary) return;
+		target.adapter.setInjectedSeries?.(injectedSeries ?? []);
+	});
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary) return;
+		target.adapter.setInjectedMarkers?.(injectedMarkers ?? []);
+	});
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary || !paneHeights) return;
+		target.adapter.setPaneHeights?.(paneHeights);
+	});
+	$effect(() => {
+		if (dataSource.warning) console.warn(`[svelte-timeseries] ${dataSource.warning}`);
+	});
 
 	const onLoadECharts = async (EChartInstance: ECharts) => {
 		const timeSeriesBuilder = new TimeSeriesChartBuilder(EChartInstance, {
@@ -190,7 +253,19 @@
 	</div>
 
 	<div class={chartClass}>
-		{#if chartLibrary === 'lightweight'}
+		{#if dataSource.source === 'arrays'}
+			<TimeSeriesChart
+				{chartLibrary}
+				{price}
+				{candles}
+				{injectedSeries}
+				{injectedMarkers}
+				{paneHeights}
+				{externalManagerLegend}
+				{isDark}
+				onChartReady={onArraysChartReady}
+			/>
+		{:else if chartLibrary === 'lightweight'}
 			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
 		{:else}
 			<SVECharts onLoad={onLoadECharts} {onDataZoom} {loading} {isDark} />

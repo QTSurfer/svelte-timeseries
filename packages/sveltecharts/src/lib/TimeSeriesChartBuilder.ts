@@ -6,10 +6,41 @@ import {
 } from 'echarts';
 import { type EChartsOption, type ECharts } from '$lib';
 import type {
+	ChartCapabilities,
 	ChartDatasetFormatSimpleObject,
 	ChartMarkerPointOptions,
 	OHLCDimensions
 } from './chartAdapter';
+import {
+	INJECTED_SERIES_PREFIX,
+	MARKER_OVERLAY_STYLE,
+	MARKER_SERIES_PREFIX,
+	buildInjectedLineSeries,
+	buildMarkPointItem,
+	buildPaneLayout,
+	lastIndexAtOrBefore
+} from './echartsInjected';
+import {
+	groupMarkers,
+	normalizeInjectedMarkers,
+	type InjectedMarker,
+	type MarkerGroup,
+	type NormalizedMarker
+} from './injectedMarkers';
+import {
+	defaultInjectedColor,
+	diffInjectedSeries,
+	hasGaps,
+	normalizePane,
+	resolvePaneIndexes,
+	resolvePaneRatios,
+	snapshotInjectedSeries,
+	toEChartsLineData,
+	toSortedColumns,
+	type ColumnarSeries,
+	type InjectedSeries,
+	type InjectedSeriesSnapshot
+} from './seriesInput';
 
 import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
@@ -88,6 +119,32 @@ export class TimeSeriesChartBuilder {
 	private _tsColumn: string = '_ts';
 	private _ohlcDims: OHLCDimensions | null = null;
 	private overviewPaletteAdjusted = false;
+	private injectedApplied = new Map<string, InjectedSeriesSnapshot>();
+	private injectedState = new Map<
+		string,
+		{ request: InjectedSeries; columns: ColumnarSeries; autoColor: string }
+	>();
+	private injectedColorCount = 0;
+	private injectedMarkers: NormalizedMarker[] = [];
+	private paneHeights: Readonly<Record<number, number>> | undefined;
+	/** The single-pane axes, saved while the stacked layout is active. */
+	private paneBase: { grid: unknown; xAxis: unknown; yAxis: unknown } | null = null;
+	private paneCount = 1;
+	/** Components the next `build()` must replace instead of merge (removed series, pane changes). */
+	private replaceComponents = new Set<string>();
+	private reportedIssues = new Set<string>();
+	private markerHoverAttached = false;
+	private markerOverlay: HTMLElement | null = null;
+	/** Tooltip HTML of the marker the pointer is on, while the overlay is shown. */
+	private hoveredMarkerHtml: string | null = null;
+
+	readonly capabilities: ChartCapabilities = {
+		injectedSeries: true,
+		panes: true,
+		paneHeights: true,
+		injectedMarkers: true,
+		markerTooltip: true
+	};
 
 	constructor(instance: ECharts, builderConfig?: ConfigBuilder) {
 		this.ECharts = instance;
@@ -208,6 +265,7 @@ export class TimeSeriesChartBuilder {
 			}
 		}
 
+		this.refreshInjected();
 		return this.build();
 	}
 
@@ -258,6 +316,7 @@ export class TimeSeriesChartBuilder {
 			}
 		} as SeriesOption);
 
+		this.refreshInjected();
 		return this.build();
 	}
 
@@ -670,10 +729,12 @@ export class TimeSeriesChartBuilder {
 	}
 
 	setGrid(gridOption: GridOption): this {
-		this.option.grid = {
-			...this.option.grid,
+		const target = this.paneBase ?? this.option;
+		target.grid = {
+			...(target.grid as object),
 			...gridOption
-		};
+		} as GridOption;
+		if (this.paneBase) this.refreshInjected();
 		return this;
 	}
 
@@ -847,12 +908,8 @@ export class TimeSeriesChartBuilder {
 				throw new Error('Series must be an array');
 			}
 
-			// Search for the dimension
-			const seriesDimension = this.option.series
-				.filter((s: any) => s.encode && s.encode.y)
-				.find((s: any) => {
-					return s.encode.y === data.dimName;
-				});
+			// Search for the dimension (OHLC column names resolve to the candlestick series)
+			const seriesDimension = this.findDimensionSeries(data.dimName);
 
 			if (!seriesDimension) throw new Error(`Dimension ${data.dimName} not found`);
 
@@ -904,6 +961,391 @@ export class TimeSeriesChartBuilder {
 			console.error(error.message);
 		}
 		return this;
+	}
+
+	/**
+	 * Declares the named line series supplied by the host app (indicators, for instance).
+	 *
+	 * Declarative and incremental: series are matched by name, so new names are added, missing
+	 * names are removed and changed ones are updated through `setOption` merging. The chart is
+	 * not rebuilt and the zoom window is kept. `InjectedSeries.pane` above 0 stacks the series
+	 * in its own grid under the price pane, sharing the time axis and crosshair.
+	 */
+	setInjectedSeries(input: readonly InjectedSeries[]): this {
+		const diff = diffInjectedSeries(this.injectedApplied, input);
+		this.reportIssues(diff.issues);
+		if (!diff.removed.length && !diff.added.length && !diff.changed.length) {
+			return this;
+		}
+
+		for (const name of diff.removed) {
+			this.injectedState.delete(name);
+			this.injectedApplied.delete(name);
+		}
+		if (diff.removed.length > 0) {
+			this.replaceComponents.add('series');
+		}
+		for (const series of diff.added) {
+			this.injectedState.set(series.name, {
+				request: series,
+				columns: toSortedColumns(series.times, series.values),
+				autoColor: defaultInjectedColor(this.injectedColorCount++)
+			});
+		}
+		for (const change of diff.changed) {
+			const state = this.injectedState.get(change.series.name);
+			if (!state) continue;
+			state.request = change.series;
+			if (change.data) state.columns = toSortedColumns(change.series.times, change.series.values);
+		}
+		for (const series of diff.valid) {
+			this.injectedApplied.set(series.name, snapshotInjectedSeries(series));
+		}
+		// Injected series keep the order of the input.
+		const order = new Map(diff.valid.map((series, index) => [series.name, index]));
+		this.injectedState = new Map(
+			[...this.injectedState].sort((a, b) => (order.get(a[0]) ?? 0) - (order.get(b[0]) ?? 0))
+		);
+
+		this.refreshInjected();
+		return this.build();
+	}
+
+	/**
+	 * Declares the markers supplied by the host app, drawn as mark points. They attach to the price
+	 * series, or to the injected series named in `InjectedMarker.series`. Markers in the same UTC
+	 * second that look alike are merged into one symbol with a count; the tooltip lists them all.
+	 */
+	setInjectedMarkers(input: readonly InjectedMarker[]): this {
+		const { markers, issues } = normalizeInjectedMarkers(input);
+		this.reportIssues(issues);
+		this.injectedMarkers = markers;
+		this.syncInjectedMarkPoints();
+		return this.build();
+	}
+
+	/** Relative pane heights keyed by pane number (see `InjectedSeries.pane`). */
+	setPaneHeights(heights: Readonly<Record<number, number>>): this {
+		this.paneHeights = heights;
+		if (this.injectedState.size > 0) {
+			this.refreshInjected();
+			this.build();
+		}
+		return this;
+	}
+
+	private hasPricePane(): boolean {
+		return Boolean(this.yDimensions?.length) || this._ohlcDims !== null;
+	}
+
+	/**
+	 * Rebuilds everything derived from the injected input: the pane layout, the series options and
+	 * the mark points. Cheap (no data is copied) and idempotent, so it also runs when the primary
+	 * dataset changes.
+	 */
+	private refreshInjected() {
+		if (this.injectedState.size === 0 && this.injectedMarkers.length === 0 && !this.paneBase) {
+			return;
+		}
+
+		const hasPrice = this.hasPricePane();
+		const requested = new Map(
+			[...this.injectedState].map(
+				([name, state]) => [name, normalizePane(state.request.pane)] as const
+			)
+		);
+		const targets = resolvePaneIndexes(requested, hasPrice);
+		this.layoutPanes(resolvePaneRatios(this.paneHeights, requested.values(), hasPrice));
+
+		const selected = this.getColumnsSelected();
+		const kept = (this.option.series as SeriesOption[]).filter(
+			(item) => !String((item as { id?: unknown }).id ?? '').startsWith(INJECTED_SERIES_PREFIX)
+		);
+		const injected: SeriesOption[] = [];
+		for (const [name, state] of this.injectedState) {
+			const pane = targets.get(name) ?? 0;
+			const { request } = state;
+			selected[name] = request.visible ?? true;
+			injected.push(
+				buildInjectedLineSeries({
+					name,
+					data: toEChartsLineData(state.columns),
+					color: request.color ?? state.autoColor,
+					lineWidth:
+						typeof request.lineWidth === 'number' && request.lineWidth > 0 ? request.lineWidth : 1,
+					lineStyle: request.lineStyle ?? 'solid',
+					hasGaps: hasGaps(state.columns),
+					xAxisIndex: pane,
+					yAxisIndex: pane === 0 ? 0 : 1 + pane
+				}) as SeriesOption
+			);
+		}
+		this.option.series = [...kept, ...injected];
+		this.syncInjectedMarkPoints();
+	}
+
+	/**
+	 * Stacks `ratios.length` panes as separate grids that share the time range, or restores the
+	 * single-pane layout. The pane count changes which components exist, so those are replaced on
+	 * the next build instead of merged.
+	 */
+	private layoutPanes(ratios: readonly number[]) {
+		const count = ratios.length;
+		const zoomAxes = Array.from({ length: Math.max(count, 1) }, (_, index) => index);
+		const dataZoom = Array.isArray(this.option.dataZoom) ? this.option.dataZoom : [];
+
+		if (count <= 1) {
+			const base = this.paneBase;
+			if (!base) return;
+			this.option.grid = base.grid as typeof this.option.grid;
+			this.option.xAxis = base.xAxis as typeof this.option.xAxis;
+			this.option.yAxis = base.yAxis as typeof this.option.yAxis;
+			for (const zoom of dataZoom) (zoom as { xAxisIndex?: number[] }).xAxisIndex = [0];
+			this.option.axisPointer = { link: [] };
+			this.paneBase = null;
+			this.paneCount = 1;
+			this.replaceComponents.add('grid').add('xAxis').add('yAxis');
+			return;
+		}
+
+		this.paneBase ??= {
+			grid: this.option.grid,
+			xAxis: this.option.xAxis,
+			yAxis: this.option.yAxis
+		};
+		const base = this.paneBase;
+		const baseXAxis = (Array.isArray(base.xAxis) ? base.xAxis[0] : base.xAxis) as Record<
+			string,
+			unknown
+		>;
+		const layout = buildPaneLayout(
+			ratios,
+			base.grid as Record<string, unknown>,
+			baseXAxis,
+			base.yAxis as Record<string, unknown>[]
+		);
+		this.option.grid = layout.grid as typeof this.option.grid;
+		this.option.xAxis = layout.xAxis as typeof this.option.xAxis;
+		this.option.yAxis = layout.yAxis as typeof this.option.yAxis;
+		for (const zoom of dataZoom) (zoom as { xAxisIndex?: number[] }).xAxisIndex = zoomAxes;
+		this.option.axisPointer = { link: [{ xAxisIndex: 'all' }] };
+
+		if (this.paneCount !== count) {
+			this.paneCount = count;
+			this.replaceComponents.add('grid').add('xAxis').add('yAxis');
+		}
+	}
+
+	/** Series drawn for a column. The OHLC columns all resolve to the candlestick series. */
+	private findDimensionSeries(dimName: string): Record<string, any> | undefined {
+		const all = this.option.series as Record<string, any>[];
+		const direct = all.find((item) => item.encode && item.encode.y === dimName);
+		if (direct) {
+			return direct;
+		}
+		const isCandleColumn =
+			this._ohlcDims !== null &&
+			(dimName === 'Candlestick' || Object.values(this._ohlcDims).includes(dimName));
+		return isCandleColumn ? all.find((item) => item.id === CANDLESTICK_SERIES_ID) : undefined;
+	}
+
+	private findMarkerHost(series: string | undefined): Record<string, any> | undefined {
+		const all = this.option.series as Record<string, any>[];
+		if (series !== undefined) {
+			return (
+				all.find((item) => item.id === `${INJECTED_SERIES_PREFIX}${series}`) ??
+				all.find((item) => item.encode?.y === series)
+			);
+		}
+		if (this._ohlcDims) {
+			const candles = all.find((item) => item.id === CANDLESTICK_SERIES_ID);
+			if (candles) return candles;
+		}
+		const primary = this.yDimensions?.[0];
+		return (
+			(primary === undefined ? undefined : all.find((item) => item.encode?.y === primary)) ??
+			all.find((item) => String(item.id ?? '').startsWith(INJECTED_SERIES_PREFIX))
+		);
+	}
+
+	/** Series value a marker without a price is anchored to (the bar at or before its time). */
+	private hostValueAt(host: Record<string, any>, group: MarkerGroup): number | undefined {
+		const id = String(host.id ?? '');
+		let times: ArrayLike<number | null>;
+		let values: ArrayLike<number | null | undefined>;
+
+		if (id.startsWith(INJECTED_SERIES_PREFIX)) {
+			const columns = this.injectedState.get(id.slice(INJECTED_SERIES_PREFIX.length))?.columns;
+			if (!columns) return undefined;
+			times = columns.times;
+			values = columns.values;
+		} else {
+			const dataset = this.option.dataset;
+			if (!dataset || Array.isArray(dataset) || !this.isSimpleObject(dataset.source)) {
+				return undefined;
+			}
+			const source = dataset.source;
+			times = source[this._tsColumn] ?? [];
+			let column: string | undefined = host.encode?.y;
+			if (id === CANDLESTICK_SERIES_ID && this._ohlcDims) {
+				const dims = this._ohlcDims;
+				column =
+					group.position === 'belowBar'
+						? dims.low
+						: group.position === 'aboveBar'
+							? dims.high
+							: dims.close;
+			}
+			if (typeof column !== 'string') return undefined;
+			values = source[column] ?? [];
+		}
+
+		// A marker before the first bar sits on the first bar, as on Lightweight Charts.
+		let index = Math.max(lastIndexAtOrBefore(times, group.timeMs), 0);
+		while (index > 0 && !Number.isFinite(values[index] as number)) index--;
+		const value = values[index];
+		return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+	}
+
+	/**
+	 * Draws the injected markers as mark points of one helper series per host series (same axes and
+	 * legend name, no data). A separate series keeps the host `silent` (cheap) and lets the mark
+	 * points receive the pointer for the hover text.
+	 */
+	private syncInjectedMarkPoints() {
+		const all = this.option.series as Record<string, any>[];
+		const previous = all.filter((item) => String(item.id ?? '').startsWith(MARKER_SERIES_PREFIX));
+		const rest = all.filter((item) => !String(item.id ?? '').startsWith(MARKER_SERIES_PREFIX));
+
+		const byHost = new Map<Record<string, any>, NormalizedMarker[]>();
+		for (const marker of this.injectedMarkers) {
+			const host = this.findMarkerHost(marker.series);
+			if (!host) continue; // waits for its series
+			const list = byHost.get(host) ?? [];
+			list.push(marker);
+			byHost.set(host, list);
+		}
+
+		const helpers: Record<string, any>[] = [];
+		let index = 0;
+		for (const [host, markers] of byHost) {
+			const points: unknown[] = [];
+			// Glyphs already drawn above / below each bar (per second), to stack the next one.
+			const stacked = new Map<string, number>();
+			for (const group of groupMarkers(markers)) {
+				const y = group.price ?? this.hostValueAt(host, group);
+				if (y === undefined) {
+					this.reportIssues([
+						'An injected marker could not be placed because its series has no value at that time; give it a "price".'
+					]);
+					continue;
+				}
+				const side = `${group.second}|${group.position}`;
+				const stack = stacked.get(side) ?? 0;
+				stacked.set(side, stack + 1);
+				points.push(buildMarkPointItem(group, index++, y, stack));
+			}
+			if (points.length === 0) continue;
+			helpers.push({
+				type: 'line',
+				id: `${MARKER_SERIES_PREFIX}${host.id ?? helpers.length}`,
+				// Same name as the host: the legend toggles the markers together with their series.
+				name: host.name,
+				data: [],
+				xAxisIndex: host.xAxisIndex ?? 0,
+				yAxisIndex: host.yAxisIndex ?? 0,
+				silent: false,
+				animation: false,
+				tooltip: { show: false },
+				markPoint: { silent: false, animation: false, data: points }
+			});
+		}
+
+		if (previous.some((item) => !helpers.some((helper) => helper.id === item.id))) {
+			this.replaceComponents.add('series');
+		}
+		this.option.series = [...rest, ...helpers] as SeriesOption[];
+
+		// A marker that is replaced or removed under the pointer never reports `mouseout`.
+		if (
+			this.hoveredMarkerHtml !== null &&
+			!helpers.some((helper) =>
+				helper.markPoint.data.some(
+					(point: { tooltipHtml?: string }) => point.tooltipHtml === this.hoveredMarkerHtml
+				)
+			)
+		) {
+			this.endMarkerHover();
+		}
+		this.attachMarkerHover();
+	}
+
+	/**
+	 * Hover text for injected markers. The chart's axis-triggered tooltip takes precedence over any
+	 * item tooltip, so the text is shown in a small overlay and the axis tooltip is paused while
+	 * the pointer is on a marker.
+	 */
+	private attachMarkerHover() {
+		if (
+			this.markerHoverAttached ||
+			typeof document === 'undefined' ||
+			typeof this.ECharts.on !== 'function'
+		) {
+			return;
+		}
+		this.markerHoverAttached = true;
+
+		const container = this.ECharts.getDom();
+		const overlay = document.createElement('div');
+		overlay.setAttribute('role', 'tooltip');
+		overlay.style.cssText = MARKER_OVERLAY_STYLE;
+		container.appendChild(overlay);
+		this.markerOverlay = overlay;
+
+		this.ECharts.on('mouseover', (params: unknown) => {
+			const event = params as {
+				componentType?: string;
+				data?: { tooltipHtml?: string };
+				event?: { offsetX: number; offsetY: number };
+			};
+			const html = event.componentType === 'markPoint' ? event.data?.tooltipHtml : undefined;
+			if (!html || !event.event) return;
+
+			overlay.innerHTML = html;
+			overlay.style.display = 'block';
+			const x = event.event.offsetX + 12;
+			const overflow = x + overlay.offsetWidth > container.clientWidth;
+			overlay.style.left = `${overflow ? Math.max(0, event.event.offsetX - overlay.offsetWidth - 12) : x}px`;
+			overlay.style.top = `${Math.max(0, event.event.offsetY - 10)}px`;
+
+			this.hoveredMarkerHtml = html;
+			this.ECharts.setOption({ tooltip: { show: false } });
+		});
+		this.ECharts.on('mouseout', (params: unknown) => {
+			if ((params as { componentType?: string }).componentType === 'markPoint') {
+				this.endMarkerHover();
+			}
+		});
+		this.ECharts.on('globalout', () => this.endMarkerHover());
+	}
+
+	/** Hides the marker overlay and gives the axis tooltip back. Safe to call at any time. */
+	private endMarkerHover() {
+		if (this.markerOverlay) {
+			this.markerOverlay.style.display = 'none';
+		}
+		if (this.hoveredMarkerHtml !== null) {
+			this.hoveredMarkerHtml = null;
+			this.ECharts.setOption({ tooltip: { show: true } });
+		}
+	}
+
+	private reportIssues(issues: readonly string[]) {
+		for (const issue of issues) {
+			if (this.reportedIssues.has(issue)) continue;
+			this.reportedIssues.add(issue);
+			console.warn(`[sveltecharts] ${issue}`);
+		}
 	}
 
 	private isNumberArray(arr: any[]): arr is DatasetFormatArray {
@@ -1001,10 +1443,12 @@ export class TimeSeriesChartBuilder {
 			this.option.dataZoom[0].end = option.dataZoom[0].end;
 		}
 
+		const replaceMerge = ['dataset', ...this.replaceComponents];
+		this.replaceComponents.clear();
 		this.ECharts.setOption(this.option, {
 			lazyUpdate: true,
 			notMerge: false,
-			replaceMerge: ['dataset']
+			replaceMerge
 		});
 		if (
 			!this.overviewPaletteAdjusted &&
@@ -1029,8 +1473,15 @@ export class TimeSeriesChartBuilder {
 		};
 	}
 
+	/** Visibility of the primary dataset's columns (injected series are controlled by their input). */
 	getLegendStatus() {
-		return this.getColumnsSelected();
+		const selected = this.getColumnsSelected();
+		if (this.injectedApplied.size === 0) {
+			return selected;
+		}
+		return Object.fromEntries(
+			Object.entries(selected).filter(([name]) => !this.injectedApplied.has(name))
+		);
 	}
 
 	getTotalRows() {
@@ -1081,11 +1532,15 @@ export class TimeSeriesChartBuilder {
 	setDataRange(start: number, end: number) {
 		const xAxis = this.option.xAxis;
 		if (Array.isArray(xAxis)) {
+			// Stacked panes share one time range; otherwise only the first axis is bounded.
 			this.option.xAxis = xAxis.map((axis, index) =>
-				index === 0 ? { ...axis, min: start, max: end } : axis
+				index === 0 || this.paneBase ? { ...axis, min: start, max: end } : axis
 			);
 		} else {
 			this.option.xAxis = { ...xAxis, min: start, max: end };
+		}
+		if (this.paneBase) {
+			this.paneBase.xAxis = { ...(this.paneBase.xAxis as object), min: start, max: end };
 		}
 		return this.build();
 	}
@@ -1165,11 +1620,9 @@ export class TimeSeriesChartBuilder {
 		}
 
 		// Search for the dimension
-		const seriesDimension = this.option.series.find((s: any) => {
-			return s.encode && s.encode.y && s.encode.y === dimName;
-		});
+		const seriesDimension = this.findDimensionSeries(dimName);
 
-		const markerPoints = seriesDimension?.markPoint.data as MarkPointDataItemOption[];
+		const markerPoints = (seriesDimension?.markPoint?.data ?? []) as MarkPointDataItemOption[];
 		const point = markerPoints.find((mp) => mp.name === `markerpoint-${id}`);
 
 		if (!point) {

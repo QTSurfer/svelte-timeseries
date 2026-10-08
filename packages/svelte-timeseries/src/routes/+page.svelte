@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../css/main.css';
+	import { resolve } from '$app/paths';
 	import { SvelteTimeSeries } from '$lib';
 	import {
 		DuckDB,
@@ -261,7 +262,15 @@
 			</div>
 		</div>
 
-		<div class="navbar-center"></div>
+		<div class="navbar-center">
+			<a
+				class="link text-primary-content"
+				href={resolve('/injected')}
+				data-testid="injected-demo-link"
+			>
+				Your own arrays, series and markers
+			</a>
+		</div>
 		<div class="navbar-end">
 			<div class="flex gap-8 text-primary-content px-4">
 				<a href="https://github.com/QTSurfer/svelte-timeseries" target="_blank">

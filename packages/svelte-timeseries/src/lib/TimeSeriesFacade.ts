@@ -3,7 +3,7 @@ import {
 	type ChartDatasetFormatSimpleObject,
 	type TimeSeriesChartAdapter
 } from '@qtsurfer/sveltecharts';
-import { DuckDB, Tables } from './duckdb/DuckDB';
+import type { DuckDB, Tables } from './duckdb/DuckDB';
 import type { OHLCColumns, OHLCResolution } from './duckdb/ohlc';
 import type { DataRange } from './duckdb/types';
 

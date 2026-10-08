@@ -13,6 +13,7 @@ Vlong
 # Charting / timeseries
 backtesting
 datazoom
+globalout
 horz
 klines
 lttb
