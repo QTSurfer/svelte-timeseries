@@ -24,20 +24,20 @@ export type ChartMarkerPoint = {
 export type ChartMarkerPointOptions = {
 	/**
 	 * The marker's shape. Only `'circle' | 'square' | 'arrowUp' | 'arrowDown'` are guaranteed to
-	 * render the SAME shape across ECharts and Lightweight Charts — this is lightweight-charts'
-	 * own native marker-shape set (`SeriesMarkerShape`), the narrower of the two, so it's the
-	 * common denominator ECharts maps onto. `'none'` (or omitting `icon`) falls back to a
-	 * visible default per engine (ECharts/Lightweight: circle) rather than ECharts' own
-	 * `symbol: 'none'`, which means "draw nothing at all".
+	 * render the SAME shape across ECharts, Lightweight Charts and Vela — this is lightweight-charts'
+	 * own native marker-shape set (`SeriesMarkerShape`), the narrowest of the three, so it's the
+	 * common denominator the others map onto. `'none'` (or omitting `icon`) falls back to a visible
+	 * circle on every engine rather than ECharts' own `symbol: 'none'`, which means "draw nothing at
+	 * all".
 	 *
 	 * ECharts additionally accepts its own richer native symbol set (`'rect' | 'roundRect' |
 	 * 'triangle' | 'diamond' | 'pin'`) and renders each distinctly — but Lightweight has no
-	 * equivalent for any of them and collapses all of them to `'square'`, so these extras are
-	 * NOT guaranteed consistent and should only be used where cross-engine parity doesn't matter.
+	 * equivalent for any of them and collapses all of them to `'square'`, and Vela to `'circle'`,
+	 * so these extras are NOT guaranteed consistent and should only be used where cross-engine
+	 * parity doesn't matter.
 	 *
-	 * Vela's native renderer has no per-marker shape support at all (only a chart-wide
-	 * circle-vs-cross distinction at the series level, not exposed here): every marker renders
-	 * as a circle regardless of `icon`.
+	 * Vela draws `'circle'` natively and builds `'square'`, `'arrowUp'` and `'arrowDown'` as
+	 * filled polygons.
 	 */
 	icon?: string;
 	color?: string;

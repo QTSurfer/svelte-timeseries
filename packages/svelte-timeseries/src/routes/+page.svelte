@@ -12,7 +12,7 @@
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
 	import Icon from '@iconify/svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 
 	type DemoConfiguration = {
 		name: string;
@@ -321,7 +321,7 @@
 
 		<div class="navbar-center">
 			<a
-				href="{base}/markers-format"
+				href={resolve('/markers-format')}
 				class="btn btn-sm btn-ghost text-primary-content gap-2 hover:bg-primary-content/15 hover:text-primary-content"
 			>
 				<Icon icon="mdi:map-marker-outline" width="1.1em" height="1.1em" />

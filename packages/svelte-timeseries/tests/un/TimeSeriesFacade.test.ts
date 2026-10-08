@@ -21,7 +21,8 @@ function createMockVelaChart() {
 	let pendingInstance: { start: (ctx: unknown) => void } | null = null;
 
 	return {
-		setMarket: vi.fn(),
+		// The real API returns a Promise, and the builder chains on it (initial zoom fit).
+		setMarket: vi.fn(() => Promise.resolve()),
 		getVisibleRange: vi.fn(() => visibleRange),
 		setVisibleRange: vi.fn((range: { from: number; to: number }) => {
 			visibleRange = range;

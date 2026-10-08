@@ -180,6 +180,23 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		]);
 	});
 
+	it('draws a circle when the icon is unset, "none" or empty, like the other engines', () => {
+		builder.setDataset({
+			_ts: [1000, 2000, 3000],
+			price: [100, 101, 102]
+		});
+		builder.addMarkerPoint(1, { dimName: 'price', timestamp: 1000 });
+		builder.addMarkerPoint(2, { dimName: 'price', timestamp: 2000 }, { icon: 'none' });
+		builder.addMarkerPoint(3, { dimName: 'price', timestamp: 3000 }, { icon: '' });
+
+		const markersPlugin = vi.mocked(createSeriesMarkers).mock.results[0].value;
+		expect(markersPlugin.setMarkers).toHaveBeenLastCalledWith([
+			expect.objectContaining({ shape: 'circle' }),
+			expect.objectContaining({ shape: 'circle' }),
+			expect.objectContaining({ shape: 'circle' })
+		]);
+	});
+
 	it('collapses an ECharts-only shape to "square", the closest native equivalent', () => {
 		// 'pin' is one of ECharts' own extra symbol types (rect/roundRect/triangle/diamond/pin)
 		// — lightweight-charts has no native equivalent for any of them, so they all fall back

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../../css/main.css';
 	import Icon from '@iconify/svelte';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 
 	type IconEntry = {
 		value: string;
@@ -85,7 +85,7 @@
 	<div class="navbar shadow-sm bg-primary">
 		<div class="navbar-start text-primary-content">
 			<a
-				href="{base}/"
+				href={resolve('/')}
 				class="btn btn-sm btn-ghost text-primary-content gap-2 hover:bg-primary-content/15 hover:text-primary-content"
 			>
 				<Icon icon="mdi:arrow-left" width="1.1em" height="1.1em" />
@@ -101,16 +101,17 @@
 		<p class="text-base-content/70 mb-6">
 			<code class="bg-base-300 rounded px-1">addMarkerPoint</code>'s
 			<code class="bg-base-300 rounded px-1">icon</code> option accepts any of these values. Only
-			the five below are <strong>guaranteed to render the same shape</strong> in both ECharts and Lightweight
-			Charts — lightweight-charts' own native marker-shape set is the narrowest of the engines, so it's
-			the common denominator the others map onto.
+			the five below are <strong>guaranteed to render the same shape</strong> in ECharts, Lightweight
+			Charts and Vela — lightweight-charts' own native marker-shape set is the narrowest of the engines,
+			so it's the common denominator the others map onto.
 		</p>
 		<p class="text-base-content/70 mb-8">
-			<strong>Vela</strong> has no per-marker shape support at all — every marker renders as a plain
-			circle there, regardless of <code class="bg-base-300 rounded px-1">icon</code>, so it's left
-			out of the per-icon notes below.
+			<strong>Vela</strong> draws <code class="bg-base-300 rounded px-1">circle</code> natively and
+			builds <code class="bg-base-300 rounded px-1">square</code>,
+			<code class="bg-base-300 rounded px-1">arrowUp</code> and
+			<code class="bg-base-300 rounded px-1">arrowDown</code> as filled polygons. Any other value, or
+			none, is a plain circle there, so the ECharts-only extras below are not distinct on Vela.
 		</p>
-
 		<h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
 			<span class="badge badge-success badge-sm"></span>
 			ECharts &amp; Lightweight: consistent
