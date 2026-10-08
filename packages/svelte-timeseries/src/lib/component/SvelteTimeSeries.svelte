@@ -13,8 +13,10 @@
 		LightweightTimeSeriesChartBuilder,
 		SVECharts,
 		SVELightweightCharts,
+		SVEVelaCharts,
 		TimeSeriesChart,
-		TimeSeriesChartBuilder
+		TimeSeriesChartBuilder,
+		VelaTimeSeriesChartBuilder
 	} from '@qtsurfer/sveltecharts';
 	import type {
 		CandlesInput,
@@ -23,7 +25,8 @@
 		InjectedSeries,
 		LightweightChartApi,
 		PriceLineInput,
-		TimeSeriesChartAdapter
+		TimeSeriesChartAdapter,
+		VelaChartApi
 	} from '@qtsurfer/sveltecharts';
 
 	type DataColumnsProps = {
@@ -89,13 +92,14 @@
 		containerClass?: string;
 		snippetClass?: string;
 		chartClass?: string;
-		chartLibrary?: 'echarts' | 'lightweight';
+		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
 		isDark?: boolean;
 		onFacadeReady?: (facade: TimeSeriesFacade) => void;
 		loadingSnippet?: Snippet;
 	} = $props();
 
 	let loading = $state(false);
+	let loadError = $state('');
 	let timer = $state({ start: performance.now(), end: 0 });
 
 	let timeSeriesFacade = $state<TimeSeriesFacade>();
@@ -119,6 +123,7 @@
 
 		tableAdapter = undefined;
 		loading = true;
+		loadError = '';
 		const { DuckDB } = await import('../duckdb/DuckDB');
 		const duckDb = await DuckDB.create(table, markers, debug);
 		const discardIfStale = (): boolean => {
@@ -128,31 +133,51 @@
 		};
 		if (discardIfStale()) return;
 
-		const facade = new TimeSeriesFacade(duckDb, chartBuilder);
-		await facade.initialize(currentTable, columnsSelect);
-		if (discardIfStale()) return;
-
-		if (!externalManagerLegend) {
-			await facade.loadAllColumns(currentTable, [columnsSelect]);
+		try {
+			const facade = new TimeSeriesFacade(duckDb, chartBuilder);
+			await facade.initialize(currentTable, columnsSelect);
 			if (discardIfStale()) return;
-		}
 
-		let newMarkers: MarkersTable[] | undefined;
-		if (markers) {
-			newMarkers = await facade.loadMarkers(markers.targetDimension);
+			if (!externalManagerLegend) {
+				await facade.loadAllColumns(currentTable, [columnsSelect]);
+				if (discardIfStale()) return;
+			}
+
+			let newMarkers: MarkersTable[] | undefined;
+			if (markers) {
+				// An OHLC/candlestick table's open/high/low/close are encoded directly into the
+				// candlestick series, not exposed as their own line series — addMarkerPoint needs
+				// the target dimension to BE a line series to resolve against (ECharts/Lightweight
+				// look it up via that series' encode.y; see TimeSeriesChartBuilder.addMarkerPoint),
+				// so load it first if OHLC mode left it unloaded. A no-op for non-OHLC tables,
+				// whose mainColumn is already its own series from setDataset. Uses
+				// ensureDimensionLoaded, not addDimension — see its doc comment for the race this
+				// avoids (the chart's own initial dataZoom event can otherwise mark addDimension's
+				// in-flight query stale before it resolves).
+				if (facade.isOHLCMode() && !facade.isLoadedColumns(markers.targetDimension)) {
+					await facade.ensureDimensionLoaded(currentTable, markers.targetDimension);
+					if (discardIfStale()) return;
+				}
+				newMarkers = await facade.loadMarkers(markers.targetDimension);
+				if (discardIfStale()) return;
+			}
+
+			timeSeriesFacade = facade;
+			if (newMarkers) markersData = newMarkers;
+			columns = facade.getColumns(currentTable);
+			matrix = facade.describe();
+			visibleRows = matrix[1];
+			timer.end = performance.now();
+			tableAdapter = { adapter: chartBuilder, library: chartLibrary };
+			onFacadeReady?.(facade);
+			onChartReady?.(chartBuilder);
+		} catch (error) {
 			if (discardIfStale()) return;
+			loadError = error instanceof Error ? error.message : 'Failed to load the chart.';
+			if (debug) console.error(error);
+		} finally {
+			if (myToken === loadToken) loading = false;
 		}
-
-		timeSeriesFacade = facade;
-		if (newMarkers) markersData = newMarkers;
-		columns = facade.getColumns(currentTable);
-		matrix = facade.describe();
-		visibleRows = matrix[1];
-		timer.end = performance.now();
-		loading = false;
-		tableAdapter = { adapter: chartBuilder, library: chartLibrary };
-		onFacadeReady?.(facade);
-		onChartReady?.(chartBuilder);
 	};
 
 	const onArraysChartReady = (adapter: TimeSeriesChartAdapter) => {
@@ -209,12 +234,24 @@
 		await loadChart(timeSeriesBuilder);
 	};
 
+	const onLoadVela = async (chartInstance: VelaChartApi) => {
+		const timeSeriesBuilder = new VelaTimeSeriesChartBuilder(chartInstance);
+		await loadChart(timeSeriesBuilder);
+	};
+
 	async function toggleColumn(name: string) {
 		if (!timeSeriesFacade) return;
 		loading = true;
-		columns = await timeSeriesFacade.toggleColumn(tableName, name);
-		matrix = timeSeriesFacade.describe();
-		loading = false;
+		loadError = '';
+		try {
+			columns = await timeSeriesFacade.toggleColumn(tableName, name);
+			matrix = timeSeriesFacade.describe();
+		} catch (error) {
+			loadError = error instanceof Error ? error.message : 'Failed to toggle the column.';
+			if (debug) console.error(error);
+		} finally {
+			loading = false;
+		}
 	}
 
 	function toggleMarker(id: number, shape: string) {
@@ -267,6 +304,8 @@
 			/>
 		{:else if chartLibrary === 'lightweight'}
 			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
+		{:else if chartLibrary === 'vela'}
+			<SVEVelaCharts onLoad={onLoadVela} {loading} {isDark} />
 		{:else}
 			<SVECharts onLoad={onLoadECharts} {onDataZoom} {loading} {isDark} />
 		{/if}
@@ -279,6 +318,9 @@
 				<div class="spinner"></div>
 			</div>
 		{/if}
+	{/if}
+	{#if loadError}
+		<div class="wrapper-error">{loadError}</div>
 	{/if}
 </div>
 
@@ -364,5 +406,19 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	.wrapper-error {
+		position: absolute;
+		left: 1rem;
+		right: 1rem;
+		top: 1rem;
+		z-index: 3;
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+		background-color: rgba(220, 38, 38, 0.1);
+		border: 1px solid rgba(220, 38, 38, 0.4);
+		color: #dc2626;
+		font-size: 0.875rem;
 	}
 </style>

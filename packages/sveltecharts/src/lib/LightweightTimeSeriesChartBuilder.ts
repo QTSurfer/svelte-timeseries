@@ -231,7 +231,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			position: this.mapMarkerPosition(options?.position),
 			text: data.name,
 			visible: true,
-			size: options?.symbolSize ?? 4
+			// lightweight-charts' own SeriesMarkerBase.size defaults to 1 — matching that here
+			// (not an arbitrary pixel guess) keeps an unset symbolSize looking the same as a
+			// marker placed directly through lightweight-charts' own API would.
+			size: options?.symbolSize ?? 1
 		};
 
 		const markers = this.markers.get(data.dimName) ?? [];
@@ -1187,12 +1190,22 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		});
 	}
 
+	/**
+	 * lightweight-charts' own `SeriesMarkerShape` type is exactly `'circle' | 'square' |
+	 * 'arrowUp' | 'arrowDown'` (see its typings.d.ts) — the narrowest native shape set of the
+	 * three chart engines, so it's the cross-engine-consistent common denominator (see
+	 * ChartMarkerPointOptions.icon's doc comment). Those four are returned as-is; an unset icon
+	 * and 'none' fall back to a visible circle, same convention as the ECharts builder; anything
+	 * else — ECharts' own rect/roundRect/triangle/diamond/pin extras — has no native equivalent
+	 * here and collapses to 'square', the closest visual approximation.
+	 */
 	private mapMarkerShape(shape?: string): SeriesMarkerShape {
-		if (shape === 'circle' || shape === 'arrowUp' || shape === 'arrowDown') {
+		if (shape === 'circle' || shape === 'square' || shape === 'arrowUp' || shape === 'arrowDown') {
 			return shape;
 		}
 
-		if (shape === 'none') {
+		// Unset and 'none' both mean "no icon specified": a visible circle, as on the other engines.
+		if (!shape || shape === 'none') {
 			return 'circle';
 		}
 

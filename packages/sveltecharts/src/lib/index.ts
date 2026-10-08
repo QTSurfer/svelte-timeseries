@@ -1,5 +1,6 @@
 export { default as SVECharts } from './SVECharts.svelte';
 export { default as SVELightweightCharts } from './SVELightweightCharts.svelte';
+export { default as SVEVelaCharts } from './SVEVelaCharts.svelte';
 export { default as TimeSeriesChart } from './TimeSeriesChart.svelte';
 export type {
 	ChartCapabilities,
@@ -9,6 +10,7 @@ export type {
 } from './chartAdapter';
 export { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';
 export { TimeSeriesChartBuilder } from './TimeSeriesChartBuilder';
+export { VelaTimeSeriesChartBuilder } from './VelaTimeSeriesChartBuilder';
 export type { InjectedLineStyle, InjectedSeries, NumericArray } from './seriesInput';
 export type {
 	InjectedMarker,

@@ -11,6 +11,7 @@ TINYINT
 Vlong
 
 # Charting / timeseries
+autoscales
 backtesting
 datazoom
 globalout
@@ -19,11 +20,15 @@ klines
 lttb
 markerpoint
 ohlc
+ohlcv
 plottable
 
 # Libraries
 iconify
+luxalgo
 
 # Runtime / misc
 endt
 pthread
+toggleable
+xloc
