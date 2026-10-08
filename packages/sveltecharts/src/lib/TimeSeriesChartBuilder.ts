@@ -1641,7 +1641,8 @@ export class TimeSeriesChartBuilder {
 		}
 
 		for (const s of this.option.series as any[]) {
-			if (s.markPoint) {
+			// The helper series of injected markers follow `setInjectedMarkers`, not this call.
+			if (s.markPoint && !String(s.id ?? '').startsWith(MARKER_SERIES_PREFIX)) {
 				s.markPoint.data = [];
 			}
 		}

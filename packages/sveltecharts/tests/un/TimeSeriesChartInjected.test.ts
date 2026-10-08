@@ -294,6 +294,16 @@ describe('TimeSeriesChartBuilder injected markers', () => {
 		expect(lastCall(mock.instance)[1].replaceMerge).toContain('series');
 	});
 
+	it('clearMarkers removes the markers of the data source only, not the injected ones', () => {
+		builder.setInjectedMarkers([{ time: 2000, kind: 'buy' }]);
+
+		builder.clearMarkers();
+
+		const helpers = markerSeries(mock.instance);
+		expect(helpers).toHaveLength(1);
+		expect((helpers[0].markPoint as Option).data).toHaveLength(1);
+	});
+
 	it('draws markers on the candlestick series and anchors buys to the low, sells to the high', () => {
 		builder.setCandlestickSeries(
 			{
