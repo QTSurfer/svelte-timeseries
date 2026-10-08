@@ -183,3 +183,59 @@ test("keeps the parquet path working with injected series", async ({
     )
     .toEqual(["temp", "Moving average (5)"]);
 });
+
+// Vela draws candles only and has no injected series, markers or panes. These check that the two
+// entries (the arrays chart and the table chart) say so instead of ignoring the input silently.
+function collectWarnings(page: Page) {
+  const warnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning") warnings.push(message.text());
+  });
+  return warnings;
+}
+
+async function openVela(page: Page, scenario: "line" | "candles" | "parquet") {
+  await page.goto("/injected");
+  await expect.poll(() => chartsCreated(page)).toBe(1);
+  await page.getByTestId("scenario").selectOption(scenario);
+  await page.getByTestId("engine").selectOption("vela");
+}
+
+test("draws candles from arrays on Vela and warns once about the injected input it cannot draw", async ({
+  page,
+}) => {
+  const warnings = collectWarnings(page);
+  await openVela(page, "candles");
+
+  await expect(page.locator(".vela-charts canvas").first()).toBeVisible();
+  await expect.poll(() => chartsCreated(page)).toBeGreaterThanOrEqual(2);
+  await expect
+    .poll(() => warnings.filter((text) => text.includes("injectedSeries")))
+    .toHaveLength(1);
+
+  // New arrays are an update, not a new complaint.
+  for (const id of ["append", "toggle-ema", "toggle-ema", "toggle-markers"]) {
+    await page.getByTestId(id).click();
+  }
+  const ours = warnings.filter((text) => text.includes('chartLibrary="vela"'));
+  expect(ours.filter((text) => text.includes('"injectedSeries"'))).toHaveLength(1);
+  expect(ours.filter((text) => text.includes('"injectedMarkers"'))).toHaveLength(1);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("rejects a price line on Vela with a visible message", async ({ page }) => {
+  const warnings = collectWarnings(page);
+  await openVela(page, "line");
+
+  await expect(page.getByRole("alert")).toContainText("draws candles only");
+  expect(warnings.some((text) => text.includes("draws candles only"))).toBe(true);
+});
+
+test("tells the table chart that Vela needs candles", async ({ page }) => {
+  await openVela(page, "parquet");
+
+  await expect(page.locator(".wrapper-error")).toContainText(
+    "Vela chart engine only supports candlestick data",
+    { timeout: 60_000 },
+  );
+});

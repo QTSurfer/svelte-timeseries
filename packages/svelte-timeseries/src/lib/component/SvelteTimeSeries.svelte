@@ -16,7 +16,8 @@
 		SVEVelaCharts,
 		TimeSeriesChart,
 		TimeSeriesChartBuilder,
-		VelaTimeSeriesChartBuilder
+		VelaTimeSeriesChartBuilder,
+		describeUnsupportedInput
 	} from '@qtsurfer/sveltecharts';
 	import type {
 		CandlesInput,
@@ -145,19 +146,11 @@
 
 			let newMarkers: MarkersTable[] | undefined;
 			if (markers) {
-				// An OHLC/candlestick table's open/high/low/close are encoded directly into the
-				// candlestick series, not exposed as their own line series — addMarkerPoint needs
-				// the target dimension to BE a line series to resolve against (ECharts/Lightweight
-				// look it up via that series' encode.y; see TimeSeriesChartBuilder.addMarkerPoint),
-				// so load it first if OHLC mode left it unloaded. A no-op for non-OHLC tables,
-				// whose mainColumn is already its own series from setDataset. Uses
-				// ensureDimensionLoaded, not addDimension — see its doc comment for the race this
-				// avoids (the chart's own initial dataZoom event can otherwise mark addDimension's
-				// in-flight query stale before it resolves).
-				if (facade.isOHLCMode() && !facade.isLoadedColumns(markers.targetDimension)) {
-					await facade.ensureDimensionLoaded(currentTable, markers.targetDimension);
-					if (discardIfStale()) return;
-				}
+				// In OHLC mode a target column that is not open/high/low/close is loaded as a series
+				// first (see ensureMarkerTargetLoaded; it avoids a race with the chart's own initial
+				// dataZoom event by not using addDimension).
+				await facade.ensureMarkerTargetLoaded(currentTable, markers.targetDimension);
+				if (discardIfStale()) return;
 				newMarkers = await facade.loadMarkers(markers.targetDimension);
 				if (discardIfStale()) return;
 			}
@@ -186,6 +179,24 @@
 		timer.end = performance.now();
 		onChartReady?.(adapter);
 	};
+
+	// An engine that cannot draw the injected input (Vela) says so once instead of ignoring it.
+	// (The arrays chart does the same inside `TimeSeriesChart`.)
+	const warnedUnsupported: Record<string, true> = {};
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary) return;
+		const issues = describeUnsupportedInput(target.adapter, chartLibrary, {
+			injectedSeries,
+			injectedMarkers,
+			paneHeights
+		});
+		for (const issue of issues) {
+			if (warnedUnsupported[issue]) continue;
+			warnedUnsupported[issue] = true;
+			console.warn(`[svelte-timeseries] ${issue}`);
+		}
+	});
 
 	// Injected input for the table-driven chart. (The arrays chart applies it inside
 	// `TimeSeriesChart`.) Replace the arrays to update; the chart is not rebuilt.

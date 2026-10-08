@@ -4,13 +4,19 @@
 	 * Combine it with injected series (indicators) and injected markers (trades, events).
 	 *
 	 * Time values are epoch milliseconds. Pass new arrays to update; the chart is not rebuilt.
+	 *
+	 * `chartLibrary="vela"` draws `candles` only (Vela renders one OHLCV market) and does not draw
+	 * injected series, markers or panes: a `price` line is rejected with a message and the injected
+	 * input is ignored with a one-time warning. Vela is loaded on demand, so the other engines never
+	 * download it.
 	 */
 	import SVECharts from './SVECharts.svelte';
 	import SVELightweightCharts from './SVELightweightCharts.svelte';
 	import { TimeSeriesChartBuilder } from './TimeSeriesChartBuilder';
 	import { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';
 	import type { TimeSeriesChartAdapter } from './chartAdapter';
-	import type { ECharts, LightweightChartApi } from './types';
+	import { describeUnsupportedInput } from './inputSupport';
+	import type { ECharts, LightweightChartApi, VelaChartApi } from './types';
 	import type { InjectedMarker } from './injectedMarkers';
 	import type { InjectedSeries } from './seriesInput';
 	import {
@@ -33,8 +39,8 @@
 		isDark = false,
 		onChartReady
 	}: {
-		/** Chart backend. Default `'echarts'`. */
-		chartLibrary?: 'echarts' | 'lightweight';
+		/** Chart backend. Default `'echarts'`. `'vela'` draws candles only. */
+		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
 		/** A price line from arrays. Ignored when `candles` is given. */
 		price?: PriceLineInput;
 		/** Candles from OHLC arrays. */
@@ -57,6 +63,8 @@
 	const chartKey = $derived(`${chartLibrary}:${priceSignature(price, candles)}`);
 
 	let ready = $state.raw<{ adapter: TimeSeriesChartAdapter; key: string }>();
+	/** Why the price input cannot be drawn by this engine, shown instead of an empty chart. */
+	let rejection = $state('');
 	let applied: ResolvedPriceData | undefined;
 	let announced = false;
 	const reported: Record<string, true> = {};
@@ -85,10 +93,10 @@
 		});
 	}
 
-	function attach(adapter: TimeSeriesChartAdapter) {
+	function attach(adapter: TimeSeriesChartAdapter, key = chartKey) {
 		applied = undefined;
 		announced = false;
-		ready = { adapter, key: chartKey };
+		ready = { adapter, key };
 	}
 
 	async function onLoadECharts(instance: ECharts) {
@@ -99,13 +107,30 @@
 		attach(new LightweightTimeSeriesChartBuilder(instance, { externalManagerLegend }));
 	}
 
+	async function onLoadVela(instance: VelaChartApi) {
+		// Loaded on demand: the other engines never download Vela.
+		const key = chartKey;
+		const { VelaTimeSeriesChartBuilder } = await import('./VelaTimeSeriesChartBuilder');
+		// The chart may have been replaced or destroyed while the module loaded.
+		if (destroyed || key !== chartKey) return;
+		attach(new VelaTimeSeriesChartBuilder(instance), key);
+	}
+
 	$effect(() => {
 		const target = ready;
 		if (!target || target.key !== chartKey) return;
 		const { data, issues } = resolvePriceData(price, candles);
 		report(issues);
+		if (chartLibrary === 'vela' && data.mode === 'line') {
+			rejection =
+				'chartLibrary="vela" draws candles only: pass "candles", or use "echarts" or "lightweight" for a price line.';
+			report([rejection]);
+			return;
+		}
+		rejection = '';
 		const outcome = applyPriceData(target.adapter, data, applied);
-		if (outcome === 'created') showAll(target);
+		// Vela fits itself to its data; moving it before its data has landed leaves the chart blank.
+		if (outcome === 'created' && chartLibrary !== 'vela') showAll(target);
 		applied = data;
 		if (!announced) {
 			announced = true;
@@ -116,18 +141,21 @@
 	$effect(() => {
 		const target = ready;
 		if (!target || target.key !== chartKey) return;
+		report(describeUnsupportedInput(target.adapter, chartLibrary, { injectedSeries }));
 		target.adapter.setInjectedSeries?.(injectedSeries ?? []);
 	});
 
 	$effect(() => {
 		const target = ready;
 		if (!target || target.key !== chartKey) return;
+		report(describeUnsupportedInput(target.adapter, chartLibrary, { injectedMarkers }));
 		target.adapter.setInjectedMarkers?.(injectedMarkers ?? []);
 	});
 
 	$effect(() => {
 		const target = ready;
 		if (!target || target.key !== chartKey || !paneHeights) return;
+		report(describeUnsupportedInput(target.adapter, chartLibrary, { paneHeights }));
 		target.adapter.setPaneHeights?.(paneHeights);
 	});
 </script>
@@ -135,7 +163,30 @@
 {#key chartKey}
 	{#if chartLibrary === 'lightweight'}
 		<SVELightweightCharts onLoad={onLoadLightweight} {isDark} />
+	{:else if chartLibrary === 'vela'}
+		{#await import('./SVEVelaCharts.svelte') then { default: SVEVelaCharts }}
+			<SVEVelaCharts onLoad={onLoadVela} {isDark} />
+		{/await}
 	{:else}
 		<SVECharts onLoad={onLoadECharts} {isDark} />
 	{/if}
 {/key}
+{#if rejection}
+	<div class="sts-chart-rejection" role="alert">{rejection}</div>
+{/if}
+
+<style>
+	.sts-chart-rejection {
+		position: absolute;
+		left: 1rem;
+		right: 1rem;
+		top: 1rem;
+		z-index: 3;
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+		background-color: rgba(220, 38, 38, 0.1);
+		border: 1px solid rgba(220, 38, 38, 0.4);
+		color: #dc2626;
+		font-size: 0.875rem;
+	}
+</style>

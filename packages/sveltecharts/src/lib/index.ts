@@ -8,6 +8,8 @@ export type {
 	ChartDatasetFormatSimpleObject,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
+export { describeUnsupportedInput } from './inputSupport';
+export type { InjectedInput } from './inputSupport';
 export { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';
 export { TimeSeriesChartBuilder } from './TimeSeriesChartBuilder';
 export { VelaTimeSeriesChartBuilder } from './VelaTimeSeriesChartBuilder';

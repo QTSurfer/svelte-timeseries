@@ -13,7 +13,7 @@
 	import { createDemoData } from './demoData';
 
 	type Scenario = 'line' | 'candles' | 'parquet';
-	type ChartLibrary = 'echarts' | 'lightweight';
+	type ChartLibrary = 'echarts' | 'lightweight' | 'vela';
 
 	// Arrays you already hold: nothing is read from a file and DuckDB is never loaded.
 	const demo = createDemoData(900);
@@ -129,6 +129,7 @@
 			>
 				<option value="lightweight">Lightweight Charts</option>
 				<option value="echarts">ECharts</option>
+				<option value="vela">Vela (candles only)</option>
 			</select>
 		</label>
 		{#if scenario !== 'parquet'}

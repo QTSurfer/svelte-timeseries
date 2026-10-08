@@ -10,6 +10,7 @@ import {
 	type DrawingPolyline
 } from '@luxalgo/vela';
 import type {
+	ChartCapabilities,
 	ChartDataset,
 	ChartDatasetFormatSimpleObject,
 	ChartMarkerPoint,
@@ -192,6 +193,19 @@ class OverlayNativeIndicator implements NativeIndicator {
  */
 export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	public VelaChart: Vela;
+	/**
+	 * Vela draws candles, extra lines (`addDimension`) and markers (`addMarkerPoint`) that are aligned
+	 * to its bars. Series with their own timestamps, panes, markers with an explicit price or kind
+	 * and hover text have no equivalent in its overlay, so the injected-input API is not offered
+	 * (components warn once instead of ignoring it silently).
+	 */
+	readonly capabilities: ChartCapabilities = {
+		injectedSeries: false,
+		panes: false,
+		paneHeights: false,
+		injectedMarkers: false,
+		markerTooltip: false
+	};
 	private builderConfig: ConfigBuilder = {
 		externalManagerLegend: false
 	};
