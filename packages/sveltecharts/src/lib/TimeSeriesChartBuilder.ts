@@ -17,15 +17,21 @@ import type { MarkPointDataItemOption } from 'echarts/types/src/component/marker
 import { formatPreciseValue } from './pricePrecision';
 
 type IconType =
+	// Cross-engine-consistent set (see ChartMarkerPointOptions.icon's doc comment) — 'square' is
+	// not a native ECharts symbol name, it's QTSurfer's cross-engine value mapped onto 'rect' in
+	// getIcon below.
 	| 'circle'
+	| 'square'
+	| 'arrowUp'
+	| 'arrowDown'
+	| 'none'
+	// ECharts-only extras: render distinctly here, but collapse to 'square' in Lightweight and
+	// are ignored entirely by Vela (always a circle) — not guaranteed consistent.
 	| 'rect'
 	| 'roundRect'
 	| 'triangle'
 	| 'diamond'
-	| 'pin'
-	| 'arrowUp'
-	| 'arrowDown'
-	| 'none';
+	| 'pin';
 
 type LabelPosition =
 	| 'top'
@@ -796,6 +802,20 @@ export class TimeSeriesChartBuilder {
 		return this.build();
 	}
 
+	/**
+	 * `'none'` means "no icon specified" at the shared `ChartMarkerPointOptions` level (the
+	 * Lightweight/Vela builders both fall back to a visible default shape for it) — but
+	 * ECharts' own `symbol: 'none'` means "draw nothing at all", so passing it straight to
+	 * `getIcon` renders an invisible marker with no error. Centralized here so every caller
+	 * that resolves a marker's SHOWN icon (an initial `addMarkerPoint`, or `toggleMarkers`
+	 * restoring one to visible) applies the same visible fallback — `toggleMarkers` restoring
+	 * a marker whose underlying shape is `'none'` hit this exact bug a second time before this
+	 * was centralized.
+	 */
+	private normalizeVisibleIcon(icon?: string): IconType {
+		return icon === 'none' || !icon ? 'circle' : (icon as IconType);
+	}
+
 	private getIcon(icon: IconType): string {
 		const arrowUpPath =
 			'path://M7.414 27.414l16.586-16.586v7.172c0 1.105 0.895 2 2 2s2-0.895 2-2v-12c0-0.809-0.487-1.538-1.235-1.848-0.248-0.103-0.508-0.151-0.765-0.151v-0.001h-12c-1.105 0-2 0.895-2 2s0.895 2 2 2h7.172l-16.586 16.586c-0.391 0.39-0.586 0.902-0.586 1.414s0.195 1.024 0.586 1.414c0.781 0.781 2.047 0.781 2.828 0z';
@@ -818,6 +838,16 @@ export class TimeSeriesChartBuilder {
 			return circlePath;
 		}
 
+		// 'square' is QTSurfer's cross-engine convenience value, not a native ECharts symbol
+		// name (ECharts' own built-in set is circle/rect/roundRect/triangle/diamond/pin/arrow/
+		// none). Mapped explicitly to its closest native equivalent, 'rect', rather than relying
+		// on ECharts' own internal "unrecognized symbolType → rect" fallback (see
+		// createSymbol/SymbolClz.buildPath in its source) — intentional and documented here
+		// beats depending on an undocumented library internal.
+		if (icon === 'square') {
+			return 'rect';
+		}
+
 		return icon;
 	}
 
@@ -838,6 +868,7 @@ export class TimeSeriesChartBuilder {
 				color: 'black',
 				...(options as Partial<MarkerPointOption>)
 			};
+			opt.icon = this.normalizeVisibleIcon(opt.icon);
 
 			if (!Array.isArray(this.option.series)) {
 				throw new Error('Series must be an array');
@@ -935,6 +966,14 @@ export class TimeSeriesChartBuilder {
 
 	/**
 	 * Search for the dimension key and timestamp
+	 *
+	 * Markers are sourced from a separate table/query than the price series (e.g. DuckDB's
+	 * `markers` table), so a marker's timestamp is not guaranteed to land on an exact sample of
+	 * the series it annotates — Lightweight Charts' createSeriesMarkers already tolerates this
+	 * (it anchors purely by time, with no explicit value lookup at all). Exact-match lookups
+	 * here silently dropped any marker whose timestamp didn't hit a sample exactly (caught by
+	 * addMarkerPoint's try/catch, no error in the chart), so this finds the CLOSEST sample
+	 * instead of requiring an exact hit.
 	 */
 	private searchValueByDimensionKeyAndTimestamp(yDimKey: string, timestamp: number): any {
 		const dataset = this.option.dataset as {
@@ -948,31 +987,79 @@ export class TimeSeriesChartBuilder {
 
 		if (Array.isArray(dataset.source)) {
 			if (this.isNumberArray(dataset.source)) {
-				const dataFind = dataset.source.find((row) => {
-					return row[0] === timestamp;
-				});
-
-				if (!dataFind) {
-					throw new Error(`No data found in timestamp ${timestamp}`);
-				}
+				const source = dataset.source;
 				const yDimensionKey = dataset.dimensions.findIndex((d) => d === yDimKey);
-				return dataFind[yDimensionKey];
-			} else if (this.isRecordArray(dataset.source)) {
-				const dataFind = dataset.source.find((row) => {
-					return row[this._tsColumn] === timestamp;
-				});
-				if (!dataFind) {
+				const index = this.findClosestIndex(
+					source.length,
+					(i) => source[i][0],
+					(i) => source[i][yDimensionKey],
+					timestamp
+				);
+				if (index === -1) {
 					throw new Error(`No data found in timestamp ${timestamp}`);
 				}
-				return dataFind[yDimKey];
+				return source[index][yDimensionKey];
+			} else if (this.isRecordArray(dataset.source)) {
+				const source = dataset.source;
+				const index = this.findClosestIndex(
+					source.length,
+					(i) => source[i][this._tsColumn],
+					(i) => source[i][yDimKey],
+					timestamp
+				);
+				if (index === -1) {
+					throw new Error(`No data found in timestamp ${timestamp}`);
+				}
+				return source[index][yDimKey];
 			}
 		} else {
-			const dataFind = dataset.source[this._tsColumn].indexOf(timestamp);
-			if (dataFind === -1) {
+			const timestamps = dataset.source[this._tsColumn];
+			const values = dataset.source[yDimKey];
+			const index = this.findClosestIndex(
+				timestamps.length,
+				(i) => timestamps[i],
+				(i) => values[i],
+				timestamp
+			);
+			if (index === -1) {
 				throw new Error(`No data found in timestamp ${timestamp}`);
 			}
-			return dataset.source[yDimKey][dataFind];
+			return values[index];
 		}
+	}
+
+	/**
+	 * Index of the timestamp closest to `target`, among positions where the DIMENSION VALUE is
+	 * also non-null. A "Partial data" dataset can have gaps (null) in the value column
+	 * independently of the timestamp column, so the closest-timestamp row can land on exactly
+	 * such a gap — this must keep searching past it (and past null timestamps) rather than
+	 * anchoring the marker to a row with nothing to plot. Returns -1 if no row has both.
+	 *
+	 * Takes accessors rather than pre-built timestamp/value arrays: at 1.8M rows, copying both
+	 * columns into new arrays for every single marker placed (addMarkerPoint runs once per
+	 * marker) allocated tens of MB of throwaway arrays for a one-pass scan. Reading `source[i]`
+	 * directly through the accessor costs the same per-element work without the copy.
+	 */
+	private findClosestIndex(
+		length: number,
+		getTime: (i: number) => number | null | undefined,
+		getValue: (i: number) => number | null | undefined,
+		target: number
+	): number {
+		let closest = -1;
+		let smallestDiff = Number.POSITIVE_INFINITY;
+
+		for (let i = 0; i < length; i++) {
+			const time = getTime(i);
+			if (time == null || getValue(i) == null) continue;
+			const diff = Math.abs(time - target);
+			if (diff < smallestDiff) {
+				smallestDiff = diff;
+				closest = i;
+			}
+		}
+
+		return closest;
 	}
 
 	/**
@@ -1169,14 +1256,17 @@ export class TimeSeriesChartBuilder {
 			return s.encode && s.encode.y && s.encode.y === dimName;
 		});
 
-		const markerPoints = seriesDimension?.markPoint.data as MarkPointDataItemOption[];
-		const point = markerPoints.find((mp) => mp.name === `markerpoint-${id}`);
+		const markerPoints = seriesDimension?.markPoint?.data as MarkPointDataItemOption[] | undefined;
+		// No markPoint at all means addMarkerPoint never actually placed this marker (e.g. its
+		// value at that timestamp was null) — nothing to toggle.
+		const point = markerPoints?.find((mp) => mp.name === `markerpoint-${id}`);
 
 		if (!point) {
 			return this;
 		}
 
-		point.symbol = point.symbol === 'none' ? this.getIcon(shape as IconType) : 'none';
+		point.symbol =
+			point.symbol === 'none' ? this.getIcon(this.normalizeVisibleIcon(shape)) : 'none';
 
 		this.build();
 		return this;

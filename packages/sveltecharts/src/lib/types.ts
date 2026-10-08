@@ -5,3 +5,4 @@ export type {
 	IChartApi as LightweightChartApi,
 	Time as LightweightChartTime
 } from 'lightweight-charts';
+export type { Vela as VelaChartApi, ThemeName as VelaThemeName } from '@luxalgo/vela';
