@@ -340,17 +340,19 @@ type InjectedMarker = {
 
 ### What each backend supports
 
-| Capability                                 | Lightweight Charts                                            | ECharts                                           |
-| ------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------- |
-| Injected lines (color, width, style, gaps) | Yes                                                           | Yes                                               |
-| Panes and `paneHeights`                    | Native panes; resizable by dragging the separators            | Stacked grids with a shared zoom and crosshair    |
-| Markers, including on candlesticks         | Yes                                                           | Yes (mark points)                                 |
-| Same-second merge and stacking             | Yes                                                           | Yes                                               |
-| Marker hover text                          | In the crosshair tooltip, for the whole bar                   | Overlay while the pointer is on the marker symbol |
-| Line width                                 | Integers from 1 to 4                                          | Any positive number                               |
-| Times inside the same second               | Collapse to the first point (the chart time is whole seconds) | Kept (millisecond axis)                           |
+| Capability                                 | Lightweight Charts                                            | ECharts                                           | Vela                                           |
+| ------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Injected lines (color, width, style, gaps) | Yes                                                           | Yes                                               | No                                             |
+| Panes and `paneHeights`                    | Native panes; resizable by dragging the separators            | Stacked grids with a shared zoom and crosshair    | No                                             |
+| Markers, including on candlesticks         | Yes                                                           | Yes (mark points)                                 | JSON column markers only, no `injectedMarkers` |
+| Same-second merge and stacking             | Yes                                                           | Yes                                               | Overlapping markers are offset                 |
+| Marker hover text                          | In the crosshair tooltip, for the whole bar                   | Overlay while the pointer is on the marker symbol | No                                             |
+| Line width                                 | Integers from 1 to 4                                          | Any positive number                               | -                                              |
+| Times inside the same second               | Collapse to the first point (the chart time is whole seconds) | Kept (millisecond axis)                           | -                                              |
 
-Both builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`). `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create.
+All builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`); the Vela builder reports every flag as `false`. `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create.
+
+`chartLibrary="vela"` draws candlesticks only: a `table` with OHLC columns or `candles` arrays (a table without OHLC data shows an error, a `price` line is rejected with a message). It ignores `injectedSeries`, `injectedMarkers` and `paneHeights` and logs a warning once for each. Vela is Apache-2.0 with an attribution requirement for the charts it draws (see the `NOTICE` of `@luxalgo/vela`).
 
 ### Injected series on top of a file
 

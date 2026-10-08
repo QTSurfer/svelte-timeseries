@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dt/%40qtsurfer%2Fsvelte-timeseries?label=downloads&style=flat-square)](https://www.npmjs.com/package/@qtsurfer/svelte-timeseries)
 [![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsvelte-timeseries?style=flat-square)](https://www.npmjs.com/package/@qtsurfer/svelte-timeseries)
 
-> Professional Svelte component to explore **huge time-series datasets** directly in the browser using DuckDB-WASM, Apache Arrow, ECharts, and TradingView Lightweight Charts.
+> Professional Svelte component to explore **huge time-series datasets** directly in the browser using DuckDB-WASM, Apache Arrow, ECharts, TradingView Lightweight Charts, and Vela.
 >
 > **[Live Demo](https://qtsurfer.github.io/svelte-timeseries)** | **[npm](https://www.npmjs.com/package/@qtsurfer/svelte-timeseries)**
 
@@ -34,7 +34,7 @@
 - Columnar → chart transformations powered by Apache Arrow.
 - Marker/event overlays synchronized with any dimension.
 - Customizable side panels through Svelte snippets.
-- Switchable chart backends: **ECharts** or **TradingView Lightweight Charts** via a single prop.
+- Switchable chart backends: **ECharts**, **TradingView Lightweight Charts** or **Vela** (candlesticks) via a single prop.
 
 ## Architecture
 
@@ -42,7 +42,7 @@
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | DuckDB-WASM              | Runs SQL against Parquet without any backend and keeps data in columnar memory.                                                            |
 | `TimeSeriesFacade`       | Coordinates DuckDB + chart builder, handles incremental column loads, and exposes UI state.                                                |
-| `@qtsurfer/sveltecharts` | Provides `SVECharts` (ECharts) and `SVELightweightCharts` (TradingView) components plus their respective builders behind a unified adapter. |
+| `@qtsurfer/sveltecharts` | Provides `SVECharts` (ECharts), `SVELightweightCharts` (TradingView) and `SVEVelaCharts` (Vela) components plus their respective builders behind a unified adapter. |
 | SvelteKit                | Hosts the component, snippets, and demo routes.                                                                                            |
 
 ## Key features
@@ -50,7 +50,7 @@
 - **Browser-scale**: battle-tested with datasets above 10M values without page reloads.
 - **Lazy dimensions**: additional columns download only when the user toggles them on.
 - **Native markers**: trading signals, alerts, or annotations rendered with custom icons and colors.
-- **Dual chart backends**: switch between ECharts and TradingView Lightweight Charts with `chartLibrary="lightweight"`.
+- **Three chart backends**: switch between ECharts, TradingView Lightweight Charts (`chartLibrary="lightweight"`) and Vela (`chartLibrary="vela"`, candlesticks only).
 - **Bring your own data**: draw arrays you already hold, plus your own indicator lines (with separate panes) and buy / sell / info markers with hover text, without loading DuckDB.
 - **Adaptive decimal precision**: show micro-priced values without rounding them to zero, up to 30 decimal places.
 - **Replaceable panels**: default column/performance panels can be swapped with your own snippets.
@@ -242,17 +242,17 @@ type InjectedMarker = {
 
 ### What each backend supports
 
-| Capability                                       | Lightweight Charts                                  | ECharts                                           |
-| ------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------- |
-| Injected lines (color, width, style, gaps)       | Yes                                                 | Yes                                               |
-| Panes and `paneHeights`                          | Native panes; resizable by dragging the separators  | Stacked grids with a shared zoom and crosshair    |
-| Markers, including on candlesticks               | Yes                                                 | Yes (mark points)                                 |
-| Same-second merge and stacking                   | Yes                                                 | Yes                                               |
-| Marker hover text                                | In the crosshair tooltip, for the whole bar         | Overlay while the pointer is on the marker symbol |
-| Line width                                       | Integers from 1 to 4                                | Any positive number                               |
-| Times inside the same second                     | Collapse to the first point (the chart time is whole seconds) | Kept (millisecond axis)                 |
+| Capability                                       | Lightweight Charts                                  | ECharts                                           | Vela                                      |
+| ------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------- | ----------------------------------------- |
+| Injected lines (color, width, style, gaps)       | Yes                                                 | Yes                                               | No                                        |
+| Panes and `paneHeights`                          | Native panes; resizable by dragging the separators  | Stacked grids with a shared zoom and crosshair    | No                                        |
+| Markers, including on candlesticks               | Yes                                                 | Yes (mark points)                                 | JSON column markers only, no `injectedMarkers` |
+| Same-second merge and stacking                   | Yes                                                 | Yes                                               | Overlapping markers are offset            |
+| Marker hover text                                | In the crosshair tooltip, for the whole bar         | Overlay while the pointer is on the marker symbol | No                                        |
+| Line width                                       | Integers from 1 to 4                                | Any positive number                               | -                                         |
+| Times inside the same second                     | Collapse to the first point (the chart time is whole seconds) | Kept (millisecond axis)                 | -                                         |
 
-Both builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`). `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create.
+All builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`); the Vela builder reports every flag as `false`. `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create. With `chartLibrary="vela"` the components do the check for you: `injectedSeries`, `injectedMarkers` and `paneHeights` are ignored and a warning is logged once for each.
 
 ### Injected series on top of a file
 
@@ -278,7 +278,7 @@ The URL (Parquet or Lastra) path works exactly as before. Use `onFacadeReady` to
 | `onChartReady?`          | `(adapter: TimeSeriesChartAdapter) => void`                                     | Called once the chart exists and its data is drawn (works with and without a `table`). |
 | `markers?`               | `MarkersTableOptions`                                                           | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).     |
 | `debug?`                 | `boolean` (default `true`)                                                      | Enables verbose DuckDB/builder logging.                                                            |
-| `chartLibrary?`          | `'echarts' \| 'lightweight'` (default `'echarts'`)                              | Selects the chart backend. `'lightweight'` renders via TradingView Lightweight Charts.             |
+| `chartLibrary?`          | `'echarts' \| 'lightweight' \| 'vela'` (default `'echarts'`)                    | Selects the chart backend. `'lightweight'` renders via TradingView Lightweight Charts; `'vela'` renders candlesticks with Vela (see [Vela](#vela-candlesticks-only)). |
 | `externalManagerLegend?` | `boolean` (default `true`)                                                      | When `true`, legend management is handled by external snippets instead of the chart library.       |
 | `isDark?`                | `boolean`                                                                       | Passes dark-mode state to the chart component for theme-aware styling.                             |
 | `onFacadeReady?`         | `(facade: TimeSeriesFacade) => void`                                            | Called once the facade is initialized; useful for programmatic access to the facade.               |
@@ -476,9 +476,22 @@ Lastra entries support the same `columnsSelect`, `candlestick`, and `resolution`
 
 The Lightweight Charts time axis is whole UTC seconds. The builder never drops a marker that falls in the same second as another: markers with an identical look (position, shape, color and price) are merged into one glyph labeled `×N`, and markers that look different are stacked on the bar. Every marker's text is listed in the hover tooltip. This applies to injected markers and to markers that come from the JSON column. See [Using it with data you already hold](#using-it-with-data-you-already-hold).
 
+### Vela (candlesticks only)
+
+```svelte
+<SvelteTimeSeries {table} {markers} chartLibrary="vela" />
+<SvelteTimeSeries candles={{ times, open, high, low, close }} chartLibrary="vela" />
+```
+
+- Renders one OHLCV market with [Vela](https://luxalgo.com/vela) (`@luxalgo/vela`, a peer dependency of `@qtsurfer/sveltecharts`; Apache-2.0 with an attribution requirement: its mark must stay visible or be credited elsewhere on the page, see its `NOTICE`).
+- Needs candles: a `table` with OHLC columns (`setDataset` is not supported) or `candles` arrays. A table without OHLC data shows a clear error; a `price` line is rejected with a message.
+- Extra columns are drawn as lines, and markers from the JSON column as shapes anchored to the closest bar that has a value: `circle` natively, `square`, `arrowUp` and `arrowDown` as filled polygons. Any other `icon` is a circle.
+- Does not draw `injectedSeries`, `injectedMarkers` or panes: the components ignore them and warn once.
+- `TimeSeriesChart` loads it on demand; `SvelteTimeSeries` imports it with the package.
+
 ### Unified adapter
 
-Both backends implement the `TimeSeriesChartAdapter` interface exported from `@qtsurfer/sveltecharts`. You can therefore instantiate either builder directly and pass it to `TimeSeriesFacade`:
+All three backends implement the `TimeSeriesChartAdapter` interface exported from `@qtsurfer/sveltecharts`. You can therefore instantiate either builder directly and pass it to `TimeSeriesFacade`:
 
 ```ts
 import {
@@ -634,7 +647,7 @@ Taken from the demo at `packages/svelte-timeseries/src/routes/+page.svelte`:
 4. **Full dataset (10,245,084 values)**: showcases dense quantitative strategies with every column available.
 5. **Synchronized markers**: active in the last two scenarios to overlay `_m` signals on top of `price`.
 
-All scenarios support both `chartLibrary="echarts"` and `chartLibrary="lightweight"`. The demo includes a selector to switch between them at runtime.
+All scenarios support `chartLibrary="echarts"` and `chartLibrary="lightweight"`; `chartLibrary="vela"` needs candlestick data. The demo includes a selector to switch between them at runtime.
 
 ## Development & testing
 

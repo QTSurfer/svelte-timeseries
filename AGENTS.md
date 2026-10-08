@@ -6,22 +6,25 @@ This file provides guidance to AI agents when working with code in this reposito
 
 This is a monorepo containing two main packages:
 1. `@qtsurfer/svelte-timeseries` - Main Svelte component for time-series visualization
-2. `@qtsurfer/sveltecharts` - Chart integration layer for Svelte (ECharts + TradingView Lightweight Charts)
+2. `@qtsurfer/sveltecharts` - Chart integration layer for Svelte (ECharts + TradingView Lightweight Charts + Vela)
 
-The project enables visualization of huge time-series datasets directly in the browser using DuckDB-WASM, Apache Arrow, ECharts, and TradingView Lightweight Charts.
+The project enables visualization of huge time-series datasets directly in the browser using DuckDB-WASM, Apache Arrow, ECharts, TradingView Lightweight Charts, and Vela.
 
 ## Key Architecture Components
 
 ### Core Layers
 1. **DuckDB-WASM** - Runs SQL against Parquet files in the browser without backend
 2. **TimeSeriesFacade** - Coordinates DuckDB + chart builder (via `TimeSeriesChartAdapter`), handles incremental column loads
-3. **@qtsurfer/sveltecharts** - Svelte components and builders for ECharts and TradingView Lightweight Charts
+3. **@qtsurfer/sveltecharts** - Svelte components and builders for ECharts, TradingView Lightweight Charts and Vela
 4. **SvelteKit** - Hosts the component and demo routes
 
 ### Chart Backends
 - **ECharts** (`SVECharts` + `TimeSeriesChartBuilder`) - Default backend; full-featured with built-in legend, tooltip, zoom slider
 - **TradingView Lightweight Charts** (`SVELightweightCharts` + `LightweightTimeSeriesChartBuilder`) - Performance-focused canvas renderer; custom Svelte tooltip, external legend required
-- Both implement `TimeSeriesChartAdapter`; `TimeSeriesFacade` is agnostic to the backend
+- **Vela** (`SVEVelaCharts` + `VelaTimeSeriesChartBuilder`, `@luxalgo/vela`) - Candlesticks only (`setDataset` throws); extra lines and JSON column markers go through an internal native-indicator overlay aligned to the bars; no injected series, injected markers or panes (its `capabilities` are all `false`)
+- All implement `TimeSeriesChartAdapter`; `TimeSeriesFacade` is agnostic to the backend (except for rejecting a non-OHLC table on Vela)
+- Optional adapter members (`setInjectedSeries`, `setInjectedMarkers`, `setPaneHeights`) must be guarded by `capabilities`; `describeUnsupportedInput` turns a missing one into a one-time warning in the components
+- `TimeSeriesChart` loads Vela on demand (dynamic import) so the other engines do not bundle it; `SvelteTimeSeries` imports it statically
 
 ### Main Entry Points
 - `packages/svelte-timeseries/src/lib/component/SvelteTimeSeries.svelte` - Main component (prop `chartLibrary` selects backend)
@@ -29,6 +32,7 @@ The project enables visualization of huge time-series datasets directly in the b
 - `packages/svelte-timeseries/src/lib/duckdb/DuckDB.ts` - DuckDB wrapper
 - `packages/sveltecharts/src/lib/TimeSeriesChartBuilder.ts` - ECharts builder
 - `packages/sveltecharts/src/lib/LightweightTimeSeriesChartBuilder.ts` - Lightweight Charts builder
+- `packages/sveltecharts/src/lib/VelaTimeSeriesChartBuilder.ts` - Vela builder (candlesticks)
 - `packages/sveltecharts/src/lib/chartAdapter.ts` - `TimeSeriesChartAdapter` interface
 - `packages/sveltecharts/src/lib/TimeSeriesChart.svelte` - Arrays entry point (price/candles + injected series and markers, no DuckDB)
 
@@ -96,10 +100,12 @@ pnpm changeset:publish
 
 ### Markers System
 - Two sources: the JSON column in Parquet (`addMarkerPoint`) and the `injectedMarkers` input (`setInjectedMarkers`, buy/sell/info, see below)
-- **ECharts**: rendered as `MarkPoint` symbols on data series (icons: `arrowUp`, `arrowDown`, `circle`, `pin`, etc.); injected markers live on a helper series per host series so the host can stay `silent`
+- Icons guaranteed on every engine: `circle`, `square`, `arrowUp`, `arrowDown` (`none` or unset draws a circle); ECharts also draws `rect`, `roundRect`, `triangle`, `diamond` and `pin` (Lightweight: square, Vela: circle)
+- **ECharts**: rendered as `MarkPoint` symbols on data series; a JSON column marker keeps its own time and takes the value of the closest sample that has one, an injected marker without a price takes the bar at or before its time; injected markers live on a helper series per host series so the host can stay `silent`
 - **Lightweight Charts**: rendered via `createSeriesMarkers` plugin (shapes: `circle`, `arrowUp`, `arrowDown`, `square`); one plugin per series (created lazily for the candlestick and injected series), fed from both sources
 - Markers sharing a UTC second are never dropped (`groupMarkers` in `injectedMarkers.ts`): identical looks (position, shape, color, price) merge into one glyph labeled `×N` and keep every text for the tooltip; different looks stay separate and are stacked (natively by Lightweight Charts, by pixel offset on ECharts)
-- Markers on candlesticks work on both backends: OHLC column names resolve to the candlestick series
+- Markers on candlesticks work on every engine: OHLC column names resolve to the candlestick series (the component does not load an OHLC column as an extra line for its markers)
+- **Vela**: JSON column markers only, anchored to the closest bar that has a value; `circle` is native, `square`/`arrowUp`/`arrowDown` are hand-built polygons
 - Customizable colors, positions (`aboveBar`, `belowBar`, `inBar`, and `atPrice*` when a price is given), and text labels
 
 ### Injected Series & Markers (arrays input)

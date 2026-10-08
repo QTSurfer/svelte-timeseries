@@ -3,17 +3,17 @@
 ![NPM Version](https://img.shields.io/npm/v/%40qtsurfer%2Fsveltecharts?label=version&style=flat-square)
 [![license](https://img.shields.io/npm/l/%40qtsurfer%2Fsveltecharts?style=flat-square)](https://npmjs.com/package/@qtsurfer/sveltecharts)
 
-Svelte 5 components and builders for time-series charts on [Apache ECharts](https://echarts.apache.org/) and [TradingView Lightweight Charts](https://tradingview.github.io/lightweight-charts/). Both backends sit behind one `TimeSeriesChartAdapter` interface.
+Svelte 5 components and builders for time-series charts on [Apache ECharts](https://echarts.apache.org/), [TradingView Lightweight Charts](https://tradingview.github.io/lightweight-charts/) and [Vela](https://luxalgo.com/vela) (candlesticks). All backends sit behind one `TimeSeriesChartAdapter` interface.
 
 This package is the chart layer of [`@qtsurfer/svelte-timeseries`](https://www.npmjs.com/package/@qtsurfer/svelte-timeseries). Use it directly when your data is already in memory and you do not need DuckDB.
 
 ## Installation
 
 ```bash
-pnpm add @qtsurfer/sveltecharts echarts lightweight-charts
+pnpm add @qtsurfer/sveltecharts echarts lightweight-charts @luxalgo/vela
 ```
 
-`echarts`, `lightweight-charts` and `svelte` are peer dependencies.
+`echarts`, `lightweight-charts`, `@luxalgo/vela` and `svelte` are peer dependencies. Vela is Apache-2.0 with an attribution requirement for the charts it draws (see its `NOTICE`).
 
 ## Price data from arrays
 
@@ -101,7 +101,7 @@ For candles, pass `candles={{ times, open, high, low, close }}` instead of `pric
 
 | Prop                     | Type                                        | Description                                                                              |
 | ------------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `chartLibrary?`          | `'echarts' \| 'lightweight'`                | Chart backend. Default `'echarts'`.                                                      |
+| `chartLibrary?`          | `'echarts' \| 'lightweight' \| 'vela'`      | Chart backend. Default `'echarts'`. `'vela'` draws `candles` only (see below).           |
 | `price?`                 | `PriceLineInput`                            | `{ name?, times, values }` or `{ name?, points: [time, value][] }`.                      |
 | `candles?`               | `CandlesInput`                              | `{ times, open, high, low, close }`. Wins over `price`.                                  |
 | `injectedSeries?`        | `InjectedSeries[]`                          | Named lines computed by your app.                                                        |
@@ -151,26 +151,31 @@ type InjectedMarker = {
 
 ### What each backend supports
 
-| Capability                                 | Lightweight Charts                                  | ECharts                                           |
-| ------------------------------------------ | --------------------------------------------------- | ------------------------------------------------- |
-| Injected lines (color, width, style, gaps) | Yes                                                 | Yes                                               |
-| Panes and `paneHeights`                    | Native panes; resizable by dragging the separators  | Stacked grids with a shared zoom and crosshair    |
-| Markers, including on candlesticks         | Yes                                                 | Yes (mark points)                                 |
-| Same-second merge and stacking             | Yes                                                 | Yes                                               |
-| Marker hover text                          | In the crosshair tooltip, for the whole bar         | Overlay while the pointer is on the marker symbol |
-| Line width                                 | Integers from 1 to 4                                | Any positive number                               |
-| Times inside the same second               | Collapse to the first point (chart time is seconds) | Kept (millisecond axis)                           |
+| Capability                                 | Lightweight Charts                                  | ECharts                                           | Vela                                            |
+| ------------------------------------------ | --------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| Injected lines (color, width, style, gaps) | Yes                                                 | Yes                                               | No                                              |
+| Panes and `paneHeights`                    | Native panes; resizable by dragging the separators  | Stacked grids with a shared zoom and crosshair    | No                                              |
+| Markers, including on candlesticks         | Yes                                                 | Yes (mark points)                                 | JSON column markers only (no `injectedMarkers`) |
+| Same-second merge and stacking             | Yes                                                 | Yes                                               | Overlapping markers are offset                  |
+| Marker hover text                          | In the crosshair tooltip, for the whole bar         | Overlay while the pointer is on the marker symbol | No                                              |
+| Line width                                 | Integers from 1 to 4                                | Any positive number                               | -                                               |
+| Times inside the same second               | Collapse to the first point (chart time is seconds) | Kept (millisecond axis)                           | -                                               |
 
-Builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`). `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create.
+Builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`); the Vela builder reports every flag as `false`. `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create. `describeUnsupportedInput(adapter, engine, input)` returns one message per input an adapter cannot draw; the components use it to warn once.
+
+### Vela
+
+`chartLibrary="vela"` on `TimeSeriesChart` draws `candles` (Vela renders one OHLCV market). A `price` line is rejected with a message, and `injectedSeries`, `injectedMarkers` and `paneHeights` are ignored with a warning logged once each. `TimeSeriesChart` loads Vela on demand, so the other engines never download it.
 
 ## Building blocks
 
-| Export                               | What it is                                                                                          |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `TimeSeriesChart`                    | Arrays entry point described above.                                                                 |
-| `SVECharts`, `SVELightweightCharts`  | Chart components: they create the chart and hand you the instance in `onLoad`.                      |
-| `TimeSeriesChartBuilder`             | ECharts builder (`setDataset`, `setCandlestickSeries`, `addMarkerPoint`, `setInjectedSeries`, ...). |
-| `LightweightTimeSeriesChartBuilder`  | Lightweight Charts builder with the same `TimeSeriesChartAdapter` surface.                          |
-| `resolvePriceData`, `applyPriceData` | The conversion from arrays to a dataset and its in-place update, for custom components.             |
+| Export                                               | What it is                                                                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `TimeSeriesChart`                                    | Arrays entry point described above.                                                                                    |
+| `SVECharts`, `SVELightweightCharts`, `SVEVelaCharts` | Chart components: they create the chart and hand you the instance in `onLoad`.                                         |
+| `TimeSeriesChartBuilder`                             | ECharts builder (`setDataset`, `setCandlestickSeries`, `addMarkerPoint`, `setInjectedSeries`, ...).                    |
+| `LightweightTimeSeriesChartBuilder`                  | Lightweight Charts builder with the same `TimeSeriesChartAdapter` surface.                                             |
+| `VelaTimeSeriesChartBuilder`                         | Vela builder: candles, extra lines and JSON column markers (`setCandlestickSeries`, `addDimension`, `addMarkerPoint`). |
+| `resolvePriceData`, `applyPriceData`                 | The conversion from arrays to a dataset and its in-place update, for custom components.                                |
 
 See the [main README](https://github.com/QTSurfer/svelte-timeseries#readme) for the complete reference, including the DuckDB-backed `SvelteTimeSeries` component.
