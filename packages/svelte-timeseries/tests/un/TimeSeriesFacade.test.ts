@@ -600,4 +600,69 @@ describe('TimeSeriesFacade viewport loading', () => {
 			expect(facade.isOHLCMode()).toBe(false);
 		});
 	});
+	describe('isOHLCColumn and ensureMarkerTargetLoaded', () => {
+		const ohlc = { open: 'o', high: 'h', low: 'l', close: 'c' };
+
+		async function candleFacade() {
+			const duckDb = createDuckDB();
+			duckDb.resolveOHLC.mockReturnValue(ohlc);
+			const adapter = createChartAdapter();
+			const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+			await facade.initialize('candles', 'c');
+			return { duckDb, adapter, facade };
+		}
+
+		it('knows the mapped open / high / low / close columns, and only in OHLC mode', async () => {
+			const { facade } = await candleFacade();
+			for (const column of ['o', 'h', 'l', 'c']) expect(facade.isOHLCColumn(column)).toBe(true);
+			expect(facade.isOHLCColumn('sma')).toBe(false);
+			// The default names do not count when the table maps its own.
+			expect(facade.isOHLCColumn('close')).toBe(false);
+
+			const plain = new TimeSeriesFacade(createDuckDB() as never, createChartAdapter() as never);
+			await plain.initialize('prices', 'price');
+			expect(plain.isOHLCColumn('price')).toBe(false);
+		});
+
+		it('does not load an OHLC column as a line: the markers belong on the candles', async () => {
+			const { duckDb, adapter, facade } = await candleFacade();
+
+			await expect(facade.ensureMarkerTargetLoaded('candles', 'c')).resolves.toBe(false);
+
+			expect(duckDb.getSingleDimension).not.toHaveBeenCalled();
+			expect(adapter.addDimension).not.toHaveBeenCalled();
+		});
+
+		it('loads any other column of an OHLC table once, without the request-staleness check', async () => {
+			const { duckDb, adapter, facade } = await candleFacade();
+
+			await expect(facade.ensureMarkerTargetLoaded('candles', 'sma')).resolves.toBe(true);
+
+			expect(duckDb.getSingleDimension).toHaveBeenCalledWith('candles', 'sma', true);
+			expect(adapter.addDimension).toHaveBeenCalledTimes(1);
+			expect(adapter.addDimension).toHaveBeenCalledWith({ sma: [1, 2, 3] }, 'sma');
+		});
+
+		it('leaves a column that is already a series alone', async () => {
+			const { adapter, facade } = await candleFacade();
+			adapter.getLegendStatus.mockReturnValue({ Candlestick: true, sma: true });
+
+			await expect(facade.ensureMarkerTargetLoaded('candles', 'sma')).resolves.toBe(false);
+
+			expect(adapter.addDimension).not.toHaveBeenCalled();
+		});
+
+		it('does nothing outside OHLC mode: the main column is already a series', async () => {
+			const duckDb = createDuckDB();
+			const adapter = createChartAdapter();
+			const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+			await facade.initialize('prices', 'price');
+			duckDb.getSingleDimension.mockClear();
+
+			await expect(facade.ensureMarkerTargetLoaded('prices', 'price')).resolves.toBe(false);
+			await expect(facade.ensureMarkerTargetLoaded('prices', 'other')).resolves.toBe(false);
+
+			expect(duckDb.getSingleDimension).not.toHaveBeenCalled();
+		});
+	});
 });

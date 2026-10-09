@@ -10,6 +10,8 @@
 		type Time
 	} from 'lightweight-charts';
 	import { formatPreciseValue } from './LightweightTimeSeriesChartBuilder';
+	import { getChartHoverHooks } from './chartHooks';
+	import type { MarkerHoverItem } from './injectedMarkers';
 
 	type LightweightChartsConfig = {
 		options?: DeepPartial<ChartOptions>;
@@ -39,6 +41,8 @@
 	let tooltipY = $state(0);
 	let tooltipTime = $state('');
 	let tooltipRows = $state<TooltipRow[]>([]);
+	let tooltipMarkers = $state<MarkerHoverItem[]>([]);
+	let tooltipMoreMarkers = $state(0);
 
 	const baseOptions = $derived<DeepPartial<ChartOptions>>({
 		layout: {
@@ -87,10 +91,14 @@
 	}
 
 	function handleCrosshairMove(param: MouseEventParams<Time>, container: HTMLElement) {
-		if (!param.point || !param.time || param.seriesData.size === 0) {
+		if (!param.point || !param.time) {
 			tooltipVisible = false;
 			return;
 		}
+
+		// Hooks come from the builder created for this chart (if any): own value formatting for
+		// injected series and the markers drawn on the bar under the cursor.
+		const hooks = chart ? getChartHoverHooks(chart) : undefined;
 
 		const rows: TooltipRow[] = [];
 		for (const [series, data] of param.seriesData as Map<
@@ -101,20 +109,27 @@
 			const value = data?.value;
 			if (value === undefined || value === null) continue;
 			const label = (series.options() as { title?: string }).title ?? '';
-			rows.push({ label, value: formatPreciseValue(value) });
+			rows.push({
+				label,
+				value: hooks?.formatValue(series, value) ?? formatPreciseValue(value)
+			});
 		}
 
-		if (rows.length === 0) {
+		const markerHover = hooks?.getMarkerHover(param) ?? null;
+
+		if (rows.length === 0 && !markerHover) {
 			tooltipVisible = false;
 			return;
 		}
 
 		tooltipRows = rows;
+		tooltipMarkers = markerHover?.items ?? [];
+		tooltipMoreMarkers = markerHover?.more ?? 0;
 		tooltipTime = formatTime(param.time);
 
 		// Position tooltip near cursor, avoiding overflow
 		const containerRect = container.getBoundingClientRect();
-		const TOOLTIP_WIDTH = 160;
+		const TOOLTIP_WIDTH = markerHover ? 260 : 160;
 		const TOOLTIP_OFFSET = 12;
 
 		let x = param.point.x + TOOLTIP_OFFSET;
@@ -181,12 +196,29 @@
 			style="left: {tooltipX}px; top: {tooltipY}px;"
 		>
 			<div class="lw-tooltip__time">{tooltipTime}</div>
-			{#each tooltipRows as row (row.label)}
+			{#each tooltipRows as row, i (i)}
 				<div class="lw-tooltip__row">
 					{#if row.label}<span class="lw-tooltip__label">{row.label}</span>{/if}
 					<span class="lw-tooltip__value">{row.value}</span>
 				</div>
 			{/each}
+			{#if tooltipMarkers.length > 0}
+				<div class="lw-tooltip__markers">
+					{#each tooltipMarkers as marker, i (i)}
+						<div class="lw-tooltip__marker">
+							<span class="lw-tooltip__swatch" style="background: {marker.color};"></span>
+							<span class="lw-tooltip__marker-text">
+								<b>{marker.kindLabel}</b>
+								{#if marker.price !== undefined}@ {formatPreciseValue(marker.price)}{/if}
+								{#if marker.text}<span class="lw-tooltip__note">{marker.text}</span>{/if}
+							</span>
+						</div>
+					{/each}
+					{#if tooltipMoreMarkers > 0}
+						<div class="lw-tooltip__more">+{tooltipMoreMarkers} more</div>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -212,7 +244,7 @@
 		color: #0f172a;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 		min-width: 120px;
-		max-width: 200px;
+		max-width: 260px;
 	}
 
 	.lw-tooltip--dark {
@@ -246,5 +278,40 @@
 	.lw-tooltip__value {
 		font-weight: 600;
 		white-space: nowrap;
+	}
+
+	.lw-tooltip__markers {
+		margin-top: 4px;
+		padding-top: 4px;
+		border-top: 1px solid rgba(148, 163, 184, 0.4);
+	}
+
+	.lw-tooltip__marker {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		line-height: 1.5;
+	}
+
+	.lw-tooltip__swatch {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+	}
+
+	.lw-tooltip__marker-text {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.lw-tooltip__note {
+		display: block;
+		opacity: 0.85;
+	}
+
+	.lw-tooltip__more {
+		opacity: 0.6;
+		font-size: 11px;
 	}
 </style>

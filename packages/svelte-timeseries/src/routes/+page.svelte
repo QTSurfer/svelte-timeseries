@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../css/main.css';
+	import { resolve } from '$app/paths';
 	import { SvelteTimeSeries } from '$lib';
 	import {
 		DuckDB,
@@ -12,7 +13,6 @@
 	import EyeIcon from '$lib/icon/EyeIcon.svelte';
 	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
 	import Icon from '@iconify/svelte';
-	import { resolve } from '$app/paths';
 
 	type DemoConfiguration = {
 		name: string;
@@ -319,13 +319,20 @@
 			</div>
 		</div>
 
-		<div class="navbar-center">
+		<div class="navbar-center gap-4">
 			<a
 				href={resolve('/markers-format')}
 				class="btn btn-sm btn-ghost text-primary-content gap-2 hover:bg-primary-content/15 hover:text-primary-content"
 			>
 				<Icon icon="mdi:map-marker-outline" width="1.1em" height="1.1em" />
 				Markers Format
+			</a>
+			<a
+				class="link text-primary-content"
+				href={resolve('/injected')}
+				data-testid="injected-demo-link"
+			>
+				Your own arrays, series and markers
 			</a>
 		</div>
 		<div class="navbar-end">

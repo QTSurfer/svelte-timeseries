@@ -112,6 +112,15 @@
 			<code class="bg-base-300 rounded px-1">arrowDown</code> as filled polygons. Any other value, or
 			none, is a plain circle there, so the ECharts-only extras below are not distinct on Vela.
 		</p>
+		<p class="text-base-content/70 mb-8">
+			Markers you pass as <code class="bg-base-300 rounded px-1">injectedMarkers</code> use the same
+			four shapes through their <code class="bg-base-300 rounded px-1">shape</code> field, with a
+			default per kind (buy <code class="bg-base-300 rounded px-1">arrowUp</code>, sell
+			<code class="bg-base-300 rounded px-1">arrowDown</code>, info
+			<code class="bg-base-300 rounded px-1">circle</code>). ECharts and Lightweight Charts draw
+			them; Vela does not.
+		</p>
+
 		<h2 class="text-lg font-semibold mb-3 flex items-center gap-2">
 			<span class="badge badge-success badge-sm"></span>
 			ECharts &amp; Lightweight: consistent

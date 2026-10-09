@@ -4,7 +4,7 @@ import {
 	type ChartDatasetFormatSimpleObject,
 	type TimeSeriesChartAdapter
 } from '@qtsurfer/sveltecharts';
-import { DuckDB, Tables } from './duckdb/DuckDB';
+import type { DuckDB, Tables } from './duckdb/DuckDB';
 import type { OHLCColumns, OHLCResolution } from './duckdb/ohlc';
 import type { DataRange } from './duckdb/types';
 
@@ -204,6 +204,26 @@ export default class TimeSeriesFacade {
 		this.timeSeriesChartBuilder.addDimension(result, columnsSelect);
 	}
 
+	/**
+	 * Makes `targetDimension` something `loadMarkers` can anchor to. In OHLC mode the open / high /
+	 * low / close columns already are: every engine anchors a marker on those to the candles, so
+	 * loading one as an extra line would only draw a duplicate line and take the markers off the
+	 * candles. Any other column (an indicator, for instance) is not a series of its own in OHLC
+	 * mode, so it is loaded first. Does nothing outside OHLC mode: a plain table's main column is
+	 * already a series. Returns whether a column was loaded.
+	 */
+	async ensureMarkerTargetLoaded(table: string, targetDimension: string): Promise<boolean> {
+		if (
+			this._ohlcMode === null ||
+			this.isOHLCColumn(targetDimension) ||
+			this.isLoadedColumns(targetDimension)
+		) {
+			return false;
+		}
+		await this.ensureDimensionLoaded(table, targetDimension);
+		return true;
+	}
+
 	async addDimension(table: string, columnsSelect: string) {
 		this._requestedDimensions.add(columnsSelect);
 		const requestId = ++this._dataRequestId;
@@ -302,5 +322,10 @@ export default class TimeSeriesFacade {
 	 */
 	isOHLCMode(): boolean {
 		return this._ohlcMode !== null;
+	}
+
+	/** Whether `column` is one of the open / high / low / close columns of the active candlesticks. */
+	isOHLCColumn(column: string): boolean {
+		return this._ohlcMode !== null && Object.values(this._ohlcMode.columns).includes(column);
 	}
 }

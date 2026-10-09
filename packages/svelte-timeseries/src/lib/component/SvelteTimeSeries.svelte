@@ -6,19 +6,26 @@
 	import TimeSeriesFacade from '$lib/TimeSeriesFacade';
 	import type { Columns } from '$lib/TimeSeriesFacade';
 	import type { Snippet } from 'svelte';
-	import { DuckDB } from '../duckdb/DuckDB';
+	// DuckDB is imported on demand (see `loadChart`): arrays-only charts never load it.
 	import type { MarkersTable, MarkersTableOptions, Tables } from '../duckdb/DuckDB';
+	import { selectDataSource } from '../dataSource';
 	import {
 		LightweightTimeSeriesChartBuilder,
 		SVECharts,
 		SVELightweightCharts,
 		SVEVelaCharts,
+		TimeSeriesChart,
 		TimeSeriesChartBuilder,
-		VelaTimeSeriesChartBuilder
+		VelaTimeSeriesChartBuilder,
+		describeUnsupportedInput
 	} from '@qtsurfer/sveltecharts';
 	import type {
+		CandlesInput,
 		ECharts,
+		InjectedMarker,
+		InjectedSeries,
 		LightweightChartApi,
+		PriceLineInput,
 		TimeSeriesChartAdapter,
 		VelaChartApi
 	} from '@qtsurfer/sveltecharts';
@@ -40,6 +47,12 @@
 	};
 	let {
 		table,
+		price,
+		candles,
+		injectedSeries,
+		injectedMarkers,
+		paneHeights,
+		onChartReady,
 		markers,
 		debug = true,
 		externalManagerLegend = true,
@@ -54,9 +67,25 @@
 		onFacadeReady,
 		loadingSnippet
 	}: {
-		table: Tables;
+		/**
+		 * Parquet / Lastra sources. Optional: without it the chart is fed from `price` / `candles`
+		 * and DuckDB is never loaded.
+		 */
+		table?: Tables;
+		/** Price line from arrays (no DuckDB). Used when `table` is not given. */
+		price?: PriceLineInput;
+		/** Candles from OHLC arrays (no DuckDB). Used when `table` is not given. */
+		candles?: CandlesInput;
+		/** Named line series computed by your app (indicators). Works with `table` too. */
+		injectedSeries?: readonly InjectedSeries[];
+		/** Buy / sell / info events drawn on the chart. Works with `table` too. */
+		injectedMarkers?: readonly InjectedMarker[];
+		/** Relative pane heights keyed by pane number, e.g. `{ 0: 3, 1: 1 }`. */
+		paneHeights?: Readonly<Record<number, number>>;
+		/** Called when the chart exists and its data is drawn, with the adapter for advanced use. */
+		onChartReady?: (adapter: TimeSeriesChartAdapter) => void;
 		markers?: MarkersTableOptions;
-		debug: boolean;
+		debug?: boolean;
 		externalManagerLegend?: boolean;
 		columnsSnippet?: Snippet<[DataColumnsProps]>;
 		markersSnippet?: Snippet<[MarkersProps]>;
@@ -75,7 +104,10 @@
 	let timer = $state({ start: performance.now(), end: 0 });
 
 	let timeSeriesFacade = $state<TimeSeriesFacade>();
-	const tableName = $derived(Object.keys(table)[0]);
+	const tableName = $derived(Object.keys(table ?? {})[0]);
+	const dataSource = $derived(selectDataSource(table, Boolean(price || candles)));
+	// Adapter of the table-driven chart, once loaded; injected input is applied through it.
+	let tableAdapter = $state.raw<{ adapter: TimeSeriesChartAdapter; library: string }>();
 
 	let columns = $state<Columns>([]);
 	let matrix = $state([0, 0]);
@@ -84,14 +116,16 @@
 	let loadToken = 0;
 
 	const loadChart = async (chartBuilder: TimeSeriesChartAdapter) => {
-		const currentTable = Object.keys(table)[0];
-		const entry = currentTable ? table[currentTable] : undefined;
-		if (!entry) return;
+		const currentTable = Object.keys(table ?? {})[0];
+		const entry = table && currentTable ? table[currentTable] : undefined;
+		if (!table || !entry) return;
 		const columnsSelect = entry.mainColumn;
 		const myToken = ++loadToken;
 
+		tableAdapter = undefined;
 		loading = true;
 		loadError = '';
+		const { DuckDB } = await import('../duckdb/DuckDB');
 		const duckDb = await DuckDB.create(table, markers, debug);
 		const discardIfStale = (): boolean => {
 			if (myToken === loadToken) return false;
@@ -112,19 +146,11 @@
 
 			let newMarkers: MarkersTable[] | undefined;
 			if (markers) {
-				// An OHLC/candlestick table's open/high/low/close are encoded directly into the
-				// candlestick series, not exposed as their own line series — addMarkerPoint needs
-				// the target dimension to BE a line series to resolve against (ECharts/Lightweight
-				// look it up via that series' encode.y; see TimeSeriesChartBuilder.addMarkerPoint),
-				// so load it first if OHLC mode left it unloaded. A no-op for non-OHLC tables,
-				// whose mainColumn is already its own series from setDataset. Uses
-				// ensureDimensionLoaded, not addDimension — see its doc comment for the race this
-				// avoids (the chart's own initial dataZoom event can otherwise mark addDimension's
-				// in-flight query stale before it resolves).
-				if (facade.isOHLCMode() && !facade.isLoadedColumns(markers.targetDimension)) {
-					await facade.ensureDimensionLoaded(currentTable, markers.targetDimension);
-					if (discardIfStale()) return;
-				}
+				// In OHLC mode a target column that is not open/high/low/close is loaded as a series
+				// first (see ensureMarkerTargetLoaded; it avoids a race with the chart's own initial
+				// dataZoom event by not using addDimension).
+				await facade.ensureMarkerTargetLoaded(currentTable, markers.targetDimension);
+				if (discardIfStale()) return;
 				newMarkers = await facade.loadMarkers(markers.targetDimension);
 				if (discardIfStale()) return;
 			}
@@ -135,7 +161,9 @@
 			matrix = facade.describe();
 			visibleRows = matrix[1];
 			timer.end = performance.now();
+			tableAdapter = { adapter: chartBuilder, library: chartLibrary };
 			onFacadeReady?.(facade);
+			onChartReady?.(chartBuilder);
 		} catch (error) {
 			if (discardIfStale()) return;
 			loadError = error instanceof Error ? error.message : 'Failed to load the chart.';
@@ -144,6 +172,52 @@
 			if (myToken === loadToken) loading = false;
 		}
 	};
+
+	const onArraysChartReady = (adapter: TimeSeriesChartAdapter) => {
+		matrix = [Object.keys(adapter.getLegendStatus()).length, adapter.getTotalRows()];
+		visibleRows = matrix[1];
+		timer.end = performance.now();
+		onChartReady?.(adapter);
+	};
+
+	// An engine that cannot draw the injected input (Vela) says so once instead of ignoring it.
+	// (The arrays chart does the same inside `TimeSeriesChart`.)
+	const warnedUnsupported: Record<string, true> = {};
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary) return;
+		const issues = describeUnsupportedInput(target.adapter, chartLibrary, {
+			injectedSeries,
+			injectedMarkers,
+			paneHeights
+		});
+		for (const issue of issues) {
+			if (warnedUnsupported[issue]) continue;
+			warnedUnsupported[issue] = true;
+			console.warn(`[svelte-timeseries] ${issue}`);
+		}
+	});
+
+	// Injected input for the table-driven chart. (The arrays chart applies it inside
+	// `TimeSeriesChart`.) Replace the arrays to update; the chart is not rebuilt.
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary) return;
+		target.adapter.setInjectedSeries?.(injectedSeries ?? []);
+	});
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary) return;
+		target.adapter.setInjectedMarkers?.(injectedMarkers ?? []);
+	});
+	$effect(() => {
+		const target = tableAdapter;
+		if (!target || target.library !== chartLibrary || !paneHeights) return;
+		target.adapter.setPaneHeights?.(paneHeights);
+	});
+	$effect(() => {
+		if (dataSource.warning) console.warn(`[svelte-timeseries] ${dataSource.warning}`);
+	});
 
 	const onLoadECharts = async (EChartInstance: ECharts) => {
 		const timeSeriesBuilder = new TimeSeriesChartBuilder(EChartInstance, {
@@ -227,7 +301,19 @@
 	</div>
 
 	<div class={chartClass}>
-		{#if chartLibrary === 'lightweight'}
+		{#if dataSource.source === 'arrays'}
+			<TimeSeriesChart
+				{chartLibrary}
+				{price}
+				{candles}
+				{injectedSeries}
+				{injectedMarkers}
+				{paneHeights}
+				{externalManagerLegend}
+				{isDark}
+				onChartReady={onArraysChartReady}
+			/>
+		{:else if chartLibrary === 'lightweight'}
 			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
 		{:else if chartLibrary === 'vela'}
 			<SVEVelaCharts onLoad={onLoadVela} {loading} {isDark} />
