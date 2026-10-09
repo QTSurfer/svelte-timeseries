@@ -284,6 +284,31 @@ describe('VelaTimeSeriesChartBuilder', () => {
 			expect(firstHandle?.remove).toHaveBeenCalledTimes(1);
 		});
 
+		it('surfaces a failed remount and retries it on the next mutation instead of staying blocked', () => {
+			builder.setCandlestickSeries(data, dims);
+			chart.resolveOverlayReady(createMockOverlayCtx());
+			chart.addNativeIndicator.mockImplementationOnce(() => {
+				throw new Error('addNativeIndicator failed');
+			});
+
+			expect(() => builder.addDimension({ ema: [100, 101, 102] }, 'ema')).toThrow(
+				'addNativeIndicator failed'
+			);
+
+			// The failure must not leave the overlay blocked: the next mutation mounts again.
+			chart.addNativeIndicator.mockClear();
+			builder.addDimension({ ema: [200, 201, 202] }, 'ema');
+			expect(chart.addNativeIndicator).toHaveBeenCalledTimes(1);
+
+			const ctx = createMockOverlayCtx();
+			chart.resolveOverlayReady(ctx);
+			expect(ctx.emit).toHaveBeenCalledWith(
+				expect.objectContaining({
+					series: [expect.objectContaining({ title: 'ema' })]
+				})
+			);
+		});
+
 		it('ends up with both dimensions regardless of which async caller resolves last (regression)', () => {
 			// Regression: TimeSeriesFacade.addDimension is async (it awaits a DuckDB query per
 			// column) — toggling two schema columns in quick succession fires two independent

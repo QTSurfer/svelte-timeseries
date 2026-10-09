@@ -7,7 +7,12 @@
 	import type { Columns } from '$lib/TimeSeriesFacade';
 	import type { Snippet } from 'svelte';
 	// DuckDB is imported on demand (see `loadChart`): arrays-only charts never load it.
-	import type { MarkersTable, MarkersTableOptions, Tables } from '../duckdb/DuckDB';
+	import type {
+		DuckDB as DuckDBClient,
+		MarkersTable,
+		MarkersTableOptions,
+		Tables
+	} from '../duckdb/DuckDB';
 	import { selectDataSource } from '../dataSource';
 	import {
 		LightweightTimeSeriesChartBuilder,
@@ -125,16 +130,19 @@
 		tableAdapter = undefined;
 		loading = true;
 		loadError = '';
-		const { DuckDB } = await import('../duckdb/DuckDB');
-		const duckDb = await DuckDB.create(table, markers, debug);
+		let duckDb: DuckDBClient<Tables> | undefined;
+		let readyFacade: TimeSeriesFacade | undefined;
 		const discardIfStale = (): boolean => {
 			if (myToken === loadToken) return false;
-			duckDb.closeConnection().catch(() => {});
+			duckDb?.closeConnection().catch(() => {});
 			return true;
 		};
-		if (discardIfStale()) return;
 
 		try {
+			const { DuckDB } = await import('../duckdb/DuckDB');
+			duckDb = await DuckDB.create(table, markers, debug);
+			if (discardIfStale()) return;
+
 			const facade = new TimeSeriesFacade(duckDb, chartBuilder);
 			await facade.initialize(currentTable, columnsSelect);
 			if (discardIfStale()) return;
@@ -162,14 +170,26 @@
 			visibleRows = matrix[1];
 			timer.end = performance.now();
 			tableAdapter = { adapter: chartBuilder, library: chartLibrary };
-			onFacadeReady?.(facade);
-			onChartReady?.(chartBuilder);
+			readyFacade = facade;
 		} catch (error) {
 			if (discardIfStale()) return;
+			duckDb?.closeConnection().catch(() => {});
+			timeSeriesFacade = undefined;
+			tableAdapter = undefined;
+			columns = [];
+			matrix = [0, 0];
+			visibleRows = 0;
+			markersData = [];
 			loadError = error instanceof Error ? error.message : 'Failed to load the chart.';
 			if (debug) console.error(error);
 		} finally {
 			if (myToken === loadToken) loading = false;
+		}
+
+		// Outside the try: a throwing consumer callback is not a chart load failure.
+		if (readyFacade) {
+			onFacadeReady?.(readyFacade);
+			onChartReady?.(chartBuilder);
 		}
 	};
 

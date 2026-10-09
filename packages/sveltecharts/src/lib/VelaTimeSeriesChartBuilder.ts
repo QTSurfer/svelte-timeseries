@@ -592,7 +592,12 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 	 */
 	private emitOverlay(): void {
 		if (this.remounting) return;
-		if (!this.overlayCtx || !this.overlayHandle) return;
+		// No handle outside a remount means the previous remount failed: retry it now.
+		if (!this.overlayHandle) {
+			this.remountOverlay();
+			return;
+		}
+		if (!this.overlayCtx) return;
 
 		// The exact same retained-bar set `toOHLCV` just built the chart's bars from — see
 		// `retainedBarIndices`'s doc comment for why every payload below must share it.
@@ -678,15 +683,7 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		this.lastOverlayFingerprint = fingerprint;
 
 		if (changed && this.overlayEverEmitted) {
-			this.remounting = true;
-			this.overlayCtx = null;
-			this.overlayHandle.remove();
-			this.overlayHandle = null;
-			// mountOverlayIndicator's onReady callback clears `remounting` and re-enters
-			// emitOverlay once the fresh indicator's context is ready, re-reading current state
-			// (dataset/extraDimensions/markers/selected) at that point — so this remount doesn't
-			// need to (and, with overlayCtx cleared, can't) emit itself synchronously here.
-			this.mountOverlayIndicator();
+			this.remountOverlay();
 			return;
 		}
 
@@ -695,6 +692,31 @@ export class VelaTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
 		// per-id merge) — squares/triangles never need the remount dance circles do, so they're
 		// just passed as-is on every ordinary emit, remount or not.
 		this.overlayCtx.emit({ series: allSeries, polylines: polygons });
+	}
+
+	/**
+	 * Removes the live overlay indicator (if any) and mounts a replacement.
+	 * mountOverlayIndicator's onReady callback clears `remounting` and re-enters emitOverlay
+	 * once the fresh indicator's context is ready, re-reading current state
+	 * (dataset/extraDimensions/markers/selected) at that point — so this remount doesn't
+	 * need to (and, with overlayCtx cleared, can't) emit itself synchronously.
+	 *
+	 * If the mount throws, onReady never fires, so `remounting` is cleared here and the error is
+	 * rethrown: otherwise emitOverlay would stay blocked for good. The handle stays null, so
+	 * the next emitOverlay retries the mount.
+	 */
+	private remountOverlay(): void {
+		this.remounting = true;
+		this.overlayCtx = null;
+		const stale = this.overlayHandle;
+		this.overlayHandle = null;
+		try {
+			stale?.remove();
+			this.mountOverlayIndicator();
+		} catch (error) {
+			this.remounting = false;
+			throw error;
+		}
 	}
 
 	/**
