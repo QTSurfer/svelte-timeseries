@@ -21,6 +21,13 @@ export type {
 	MarkerHover,
 	MarkerHoverItem
 } from './injectedMarkers';
-export type { CandlesInput, PriceLineInput, ResolvedPriceData } from './priceInput';
+export type { CandlesInput, CandlesSource, PriceLineInput, ResolvedPriceData } from './priceInput';
 export { applyPriceData, priceSignature, resolvePriceData } from './priceInput';
+export type {
+	AggregatedCandles,
+	CandleInterval,
+	PriceTicks,
+	TickCandlesInput
+} from './candleAggregation';
+export { aggregateCandles } from './candleAggregation';
 export * from './types';

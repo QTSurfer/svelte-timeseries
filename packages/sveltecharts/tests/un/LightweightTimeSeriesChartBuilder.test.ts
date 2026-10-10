@@ -114,6 +114,21 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 		);
 	});
 
+	it('does not widen the price scale for floating-point noise', () => {
+		builder.setDataset({
+			_ts: [1000, 2000, 3000],
+			price: [100.1 + 0.2, 69574.62 + 0.01, 1.1 * 1.1]
+		});
+
+		expect(chart.addSeries).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
+			})
+		);
+		expect(formatPreciseValue(100.1 + 0.2)).toBe('100.3');
+	});
+
 	it('updates precision when a new viewport contains smaller values', () => {
 		builder.setDataset({ _ts: [1000, 2000], price: [1, 2] });
 		const priceSeries = chart.addSeries.mock.results[0].value;

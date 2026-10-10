@@ -216,6 +216,195 @@ describe('DuckDBTimeSeries OHLC mode', () => {
 	});
 });
 
+describe('DuckDBTimeSeries ticker candles', () => {
+	const ticker = ['_ts', 'opn', 'hig', 'low', 'cls', 'vol', 'bid', 'bsz', 'ask', 'asz'];
+	const klines = ['_ts', 'opn', 'hig', 'low', 'cls', 'vol', 'ntr'];
+	const config = { url: '/ticker.parquet', mainColumn: 'cls' } as const;
+	const columns = { open: 'cls_open', high: 'cls_high', low: 'cls_low', close: 'cls' };
+
+	it('never reports the open / high / low of a ticker feed as bar prices', () => {
+		const { timeSeries } = createTimeSeries();
+
+		expect(timeSeries.resolveOHLC('prices', ticker, config)).toBeUndefined();
+		expect(
+			timeSeries.resolveOHLC('prices', ticker, { ...config, resolution: '1m' })
+		).toBeUndefined();
+	});
+
+	it('detects a ticker and aggregates its close column', () => {
+		const { timeSeries } = createTimeSeries();
+
+		expect(
+			timeSeries.resolveTickCandles('prices', ticker, { ...config, resolution: '1m' })
+		).toEqual({
+			price: 'cls',
+			columns,
+			resolution: '1m',
+			detected: true
+		});
+		expect(timeSeries.resolveTickCandles('prices', ticker, config)).toMatchObject({
+			resolution: undefined
+		});
+	});
+
+	it('leaves bar data alone', () => {
+		const { timeSeries } = createTimeSeries();
+
+		expect(timeSeries.resolveOHLC('prices', klines, config)).toEqual({
+			open: 'opn',
+			high: 'hig',
+			low: 'low',
+			close: 'cls'
+		});
+		expect(timeSeries.resolveTickCandles('prices', klines, config)).toBeUndefined();
+	});
+
+	it('honours an explicit mapping on a table that has quotes', () => {
+		const { timeSeries } = createTimeSeries();
+		const explicit = { open: 'opn', high: 'hig', low: 'low', close: 'cls' };
+
+		expect(timeSeries.resolveOHLC('prices', ticker, { ...config, candlestick: explicit })).toEqual(
+			explicit
+		);
+		expect(
+			timeSeries.resolveTickCandles('prices', ticker, { ...config, candlestick: explicit })
+		).toBeUndefined();
+	});
+
+	it('honours candlestick: false', () => {
+		const { timeSeries } = createTimeSeries();
+
+		expect(
+			timeSeries.resolveTickCandles('prices', ticker, { ...config, candlestick: false })
+		).toBeUndefined();
+		expect(
+			timeSeries.resolveOHLC('prices', ticker, { ...config, candlestick: false })
+		).toBeUndefined();
+	});
+
+	it('lets a table without quotes ask for candles from a price column', () => {
+		const { timeSeries } = createTimeSeries();
+		const ticks = ['_ts', 'last', 'opn', 'hig', 'low'];
+		const asked = {
+			url: '/t.parquet',
+			mainColumn: 'last',
+			candlestick: { price: 'LAST' },
+			resolution: '5s'
+		} as const;
+
+		expect(timeSeries.resolveTickCandles('prices', ticks, asked)).toEqual({
+			price: 'last',
+			columns: { open: 'last_open', high: 'last_high', low: 'last_low', close: 'last' },
+			resolution: '5s',
+			detected: false
+		});
+		expect(timeSeries.resolveOHLC('prices', ticks, asked)).toBeUndefined();
+		expect(() =>
+			timeSeries.resolveTickCandles('prices', ticks, {
+				...asked,
+				candlestick: { price: 'missing' }
+			})
+		).toThrowError(/price column "missing" not found/);
+	});
+
+	it('aggregates the price column in SQL and names the outputs without clashing with low', async () => {
+		const { queries, timeSeries } = createTimeSeries();
+		queries.queryBatch.mockResolvedValueOnce(
+			asBatches(
+				createArrowTable({
+					_ts: [new Date(60_000)],
+					cls_open: [10],
+					cls_high: [14],
+					cls_low: [8],
+					cls: [12]
+				})
+			)
+		);
+
+		const result = await timeSeries.getOHLC('prices', columns, '1m', 'cls');
+
+		expect(result).toEqual({
+			_ts: [60_000],
+			cls_open: [10],
+			cls_high: [14],
+			cls_low: [8],
+			cls: [12]
+		});
+		const sql = queries.queryBatch.mock.calls[0][0];
+		expect(sql).toContain(`time_bucket(INTERVAL '1 minute', "_ts")`);
+		expect(sql).toMatch(/FIRST\("cls" ORDER BY "_ts"\)\s+AS "cls_open"/);
+		expect(sql).toMatch(/MAX\("cls"\)\s+AS "cls_high"/);
+		expect(sql).toMatch(/MIN\("cls"\)\s+AS "cls_low"/);
+		expect(sql).toMatch(/LAST\("cls" ORDER BY "_ts"\)\s+AS "cls"/);
+		expect(sql).toContain('WHERE "cls" IS NOT NULL');
+		expect(sql).not.toMatch(/"(opn|hig)"/);
+	});
+
+	it('aggregates the price column in viewport reloads', async () => {
+		const { queries, timeSeries } = createTimeSeries();
+		queries.query.mockResolvedValueOnce(
+			createArrowTable({
+				_ts: [new Date(60_000)],
+				cls_open: [10],
+				cls_high: [14],
+				cls_low: [8],
+				cls: [12],
+				bid: [11]
+			})
+		);
+
+		await timeSeries.getWindowedOHLC(
+			't',
+			['cls_open', 'cls_high', 'cls_low', 'cls', 'bid'],
+			columns,
+			'1m',
+			{ start: 90_000, end: 130_000 },
+			500,
+			'cls'
+		);
+
+		const sql = queries.query.mock.calls[0][0];
+		expect(sql).toContain('FIRST("cls" ORDER BY "_ts") AS "cls_open"');
+		expect(sql).toContain('MAX("cls") AS "cls_high"');
+		expect(sql).toContain('MIN("cls") AS "cls_low"');
+		expect(sql).toContain('LAST("cls" ORDER BY "_ts") AS "cls"');
+		expect(sql).toContain('LAST("bid" ORDER BY "_ts") AS "bid"');
+		expect(sql).toContain('AND "cls" IS NOT NULL');
+		expect(sql.indexOf('GROUP BY 1')).toBeLessThan(sql.indexOf('ROW_NUMBER() OVER'));
+		expect(sql).not.toContain('"opn"');
+	});
+
+	it('does not touch the SQL of bar data', async () => {
+		const { queries, timeSeries } = createTimeSeries();
+		queries.query.mockResolvedValueOnce(
+			createArrowTable({ _ts: [new Date(60_000)], opn: [1], hig: [2], low: [0], cls: [1] })
+		);
+
+		await timeSeries.getWindowedOHLC(
+			'k',
+			['opn', 'hig', 'low', 'cls'],
+			{ open: 'opn', high: 'hig', low: 'low', close: 'cls' },
+			'1m',
+			{ start: 0, end: 120_000 }
+		);
+
+		const sql = queries.query.mock.calls[0][0];
+		expect(sql).toContain('FIRST("opn" ORDER BY "_ts") AS "opn"');
+		expect(sql).not.toContain('IS NOT NULL');
+	});
+
+	it('refuses to aggregate a price column without a resolution', async () => {
+		const { timeSeries } = createTimeSeries();
+
+		await expect(timeSeries.getOHLC('prices', columns, undefined, 'cls')).rejects.toThrowError(
+			/need a resolution/
+		);
+		await expect(
+			timeSeries.getWindowedOHLC('t', ['cls'], columns, undefined, { start: 0, end: 1 }, 10, 'cls')
+		).rejects.toThrowError(/need a resolution/);
+	});
+});
+
 describe('DuckDBTimeSeries viewport conversion', () => {
 	it.each([0, 1, 50])('resolves vectors once per column for %s rows', async (rowCount) => {
 		const { queries, timeSeries } = createTimeSeries();

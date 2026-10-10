@@ -9,7 +9,9 @@ type DemoWindow = Window & {
   __demo: {
     current: {
       LightweightChart: {
-        panes(): { getSeries(): { options(): { title: string } }[] }[];
+        panes(): {
+          getSeries(): { options(): { title: string; visible?: boolean } }[];
+        }[];
         timeScale(): {
           timeToCoordinate(time: number): number | null;
           getVisibleRange(): { from: number; to: number } | null;
@@ -20,6 +22,7 @@ type DemoWindow = Window & {
         convertToPixel(finder: object, value: number[]): number[];
       };
       option: { dataset: { source: Record<string, number[]> } };
+      dataset: Record<string, number[]>;
     };
   };
 };
@@ -164,10 +167,9 @@ test("keeps the parquet path working with injected series", async ({
   await open(page, "lightweight");
   await page.getByTestId("scenario").selectOption("parquet");
 
-  await expect(page.locator("#svelte-timeseries summary")).toHaveText(
-    /SCHEMA/,
-    { timeout: 60_000 },
-  );
+  await expect(
+    page.locator("#svelte-timeseries summary").filter({ hasText: /SCHEMA/ }),
+  ).toBeVisible({ timeout: 60_000 });
   // The file's column plus the moving average the demo computes from it and injects.
   await expect
     .poll(
@@ -182,6 +184,67 @@ test("keeps the parquet path working with injected series", async ({
       { timeout: 60_000 },
     )
     .toEqual(["temp", "Moving average (5)"]);
+});
+
+// The Legend selector of the base page: External lists the series and markers in a side panel,
+// Internal (ECharts only) leaves them to the chart.
+function legendPanel(page: Page, title: RegExp) {
+  return page
+    .locator("#svelte-timeseries details")
+    .filter({ has: page.locator("summary", { hasText: title }) });
+}
+
+async function openLegendPanel(page: Page, title: RegExp) {
+  const panel = legendPanel(page, title);
+  // The panels share one accordion: only one of them is open at a time.
+  if ((await panel.getAttribute("open")) === null) {
+    await panel.locator("summary").click();
+  }
+  return panel;
+}
+
+test("lists the series and markers in a side panel and hides them from there", async ({
+  page,
+}) => {
+  await open(page, "lightweight");
+  await expect(legendPanel(page, /SERIES/)).toBeVisible();
+  await expect(legendPanel(page, /MARKERS/)).toBeVisible();
+
+  const drawn = () =>
+    page.evaluate(() =>
+      (window as unknown as DemoWindow).__demo.current.LightweightChart.panes()
+        .flatMap((pane) => pane.getSeries())
+        .filter((series) => series.options().visible !== false)
+        .map((series) => series.options().title),
+    );
+  await expect.poll(drawn).toContain("EMA 20");
+
+  // The first row of the series panel is the EMA: its eye hides it, a second click shows it again.
+  const series = await openLegendPanel(page, /SERIES/);
+  await series.locator("label.swap").first().click();
+  await expect.poll(drawn).not.toContain("EMA 20");
+  await series.locator("label.swap").first().click();
+  await expect.poll(drawn).toContain("EMA 20");
+});
+
+test("offers the internal legend on ECharts only and then drops the side panel", async ({
+  page,
+}) => {
+  await open(page, "lightweight");
+  await expect(
+    page.getByTestId("legend").locator("option[value=internal]"),
+  ).toHaveJSProperty("disabled", true);
+
+  await page.getByTestId("engine").selectOption("echarts");
+  await expect(
+    page.getByTestId("legend").locator("option[value=internal]"),
+  ).toHaveJSProperty("disabled", false);
+  await expect(legendPanel(page, /SERIES/)).toBeVisible();
+
+  const before = await chartsCreated(page);
+  await page.getByTestId("legend").selectOption("internal");
+  await expect.poll(() => chartsCreated(page)).toBeGreaterThan(before);
+  await expect(page.locator("#svelte-timeseries summary")).toHaveCount(0);
 });
 
 // Vela draws candles only and has no injected series, markers or panes. These check that the two
@@ -218,17 +281,25 @@ test("draws candles from arrays on Vela and warns once about the injected input 
     await page.getByTestId(id).click();
   }
   const ours = warnings.filter((text) => text.includes('chartLibrary="vela"'));
-  expect(ours.filter((text) => text.includes('"injectedSeries"'))).toHaveLength(1);
-  expect(ours.filter((text) => text.includes('"injectedMarkers"'))).toHaveLength(1);
+  expect(ours.filter((text) => text.includes('"injectedSeries"'))).toHaveLength(
+    1,
+  );
+  expect(
+    ours.filter((text) => text.includes('"injectedMarkers"')),
+  ).toHaveLength(1);
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
-test("rejects a price line on Vela with a visible message", async ({ page }) => {
+test("rejects a price line on Vela with a visible message", async ({
+  page,
+}) => {
   const warnings = collectWarnings(page);
   await openVela(page, "line");
 
   await expect(page.getByRole("alert")).toContainText("draws candles only");
-  expect(warnings.some((text) => text.includes("draws candles only"))).toBe(true);
+  expect(warnings.some((text) => text.includes("draws candles only"))).toBe(
+    true,
+  );
 });
 
 test("tells the table chart that Vela needs candles", async ({ page }) => {
@@ -239,3 +310,41 @@ test("tells the table chart that Vela needs candles", async ({ page }) => {
     { timeout: 60_000 },
   );
 });
+
+for (const engine of ["lightweight", "echarts"] as const) {
+  test(`aggregates ticks into candles and updates them in place (${engine})`, async ({
+    page,
+  }) => {
+    await open(page, engine);
+    const before = await chartsCreated(page);
+    await page.getByTestId("scenario").selectOption("ticks");
+    await expect.poll(() => chartsCreated(page)).toBe(before + 1);
+
+    // The bars the chart holds: Lightweight Charts keeps its dataset on the builder, ECharts in its option.
+    const bars = () =>
+      page.evaluate(() => {
+        const { current } = (window as unknown as DemoWindow).__demo;
+        const data = current.dataset ?? current.option.dataset.source;
+        const consistent = data._ts.every(
+          (_, i) =>
+            data.high[i] >= Math.max(data.open[i], data.close[i]) &&
+            data.low[i] <= Math.min(data.open[i], data.close[i]),
+        );
+        return { count: data._ts.length, first: data._ts[0], consistent };
+      });
+
+    // An hour of one-second ticks, 1-minute bars by default.
+    await expect.poll(async () => (await bars()).count).toBe(60);
+    expect((await bars()).first).toBe(START);
+    expect((await bars()).consistent).toBe(true);
+
+    await page.getByTestId("interval").selectOption("5s");
+    await expect.poll(async () => (await bars()).count).toBe(720);
+    await page.getByTestId("interval").selectOption("1s");
+    await expect.poll(async () => (await bars()).count).toBe(3600);
+
+    expect((await bars()).consistent).toBe(true);
+    // Only the bar length changed: the chart was updated, not rebuilt.
+    expect(await chartsCreated(page)).toBe(before + 1);
+  });
+}

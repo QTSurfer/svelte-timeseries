@@ -59,6 +59,9 @@
 		// addMarkerPoint only mutates internal state — build() is what actually calls
 		// ECharts.setOption and flushes it to the chart.
 		builder.build();
+		// ECharts opens on the middle 10% of the data and applies a zoom only once it has drawn its
+		// first frame, so ask for all of it on the next one.
+		requestAnimationFrame(() => builder.goToZoom(0, 100));
 		loadingEcharts = false;
 	}
 

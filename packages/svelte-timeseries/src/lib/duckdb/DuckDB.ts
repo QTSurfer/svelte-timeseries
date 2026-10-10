@@ -3,12 +3,17 @@ import { Schema, Table } from 'apache-arrow';
 import { DuckDBConnection } from './DuckDBConnection';
 import { DuckDBRegistry } from './DuckDBRegistry';
 import { DuckDBQueries } from './DuckDBQueries';
-import { DuckDBTimeSeries, type OHLCColumns, type OHLCResolution } from './DuckDBTimeSeries';
+import {
+	DuckDBTimeSeries,
+	type OHLCColumns,
+	type OHLCResolution,
+	type TickCandles
+} from './DuckDBTimeSeries';
 import { DuckDBMarkers } from './DuckDBMarkers';
 import type { Tables, TableData, MarkersTableOptions, MarkersTable, DataRange } from './types';
 import { TIMESTAMP_COLUMN } from './types';
 
-export type { OHLCColumns, OHLCResolution };
+export type { OHLCColumns, OHLCResolution, TickCandles };
 export type {
 	SingleResult,
 	BinarySource,
@@ -78,8 +83,16 @@ export class DuckDB<T extends Tables> {
 		return this.timeSeries.resolveOHLC(table, this.getColumns(table), this.getTable(table));
 	}
 
-	getOHLC(table: keyof T, ohlc: OHLCColumns, resolution?: OHLCResolution) {
-		return this.timeSeries.getOHLC(table, ohlc, resolution);
+	/**
+	 * Candles aggregated from the ticks of one price column, when the table asks for them
+	 * (`candlestick: { price }`) or is a ticker feed. See `DuckDBTimeSeries.resolveTickCandles`.
+	 */
+	resolveTickCandles(table: keyof T): TickCandles | undefined {
+		return this.timeSeries.resolveTickCandles(table, this.getColumns(table), this.getTable(table));
+	}
+
+	getOHLC(table: keyof T, ohlc: OHLCColumns, resolution?: OHLCResolution, price?: string) {
+		return this.timeSeries.getOHLC(table, ohlc, resolution, price);
 	}
 
 	getSingleDimension(table: keyof T, column: string, omitTimestamp = true) {
@@ -100,9 +113,10 @@ export class DuckDB<T extends Tables> {
 		ohlc: OHLCColumns,
 		resolution: OHLCResolution | undefined,
 		range: DataRange,
-		limit?: number
+		limit?: number,
+		price?: string
 	) {
-		return this.timeSeries.getWindowedOHLC(table, columns, ohlc, resolution, range, limit);
+		return this.timeSeries.getWindowedOHLC(table, columns, ohlc, resolution, range, limit, price);
 	}
 
 	getDataBoundaries(table: string) {

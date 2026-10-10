@@ -139,3 +139,20 @@ export function createDemoData(count = 600, intervalMs = 60_000, seed = 7): Demo
 
 	return { times, open, high, low, close, ema: ema(close, 20), rsi: rsiValues, markers };
 }
+
+/** One tick per second of a random-walk price, as an exchange feed would deliver them. */
+export function createTicks(
+	count = 3600,
+	seed = 11
+): { times: Float64Array; values: Float64Array } {
+	const random = mulberry32(seed);
+	const times = new Float64Array(count);
+	const values = new Float64Array(count);
+	let price = 100;
+	for (let i = 0; i < count; i++) {
+		price = round(price + (random() - 0.5) * 0.3);
+		times[i] = DEMO_START + i * 1000;
+		values[i] = price;
+	}
+	return { times, values };
+}

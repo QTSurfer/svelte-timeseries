@@ -486,6 +486,29 @@ describe('LightweightTimeSeriesChartBuilder JSON column markers in the same seco
 	});
 });
 
+describe('LightweightTimeSeriesChartBuilder addMarkerPoint symbol option', () => {
+	function shapeOf(options: { icon?: string; shape?: string } | undefined) {
+		vi.clearAllMocks();
+		const mock = createMockChart();
+		const builder = new LightweightTimeSeriesChartBuilder(mock.chart as never);
+		builder.setDataset({ _ts: times, price: [10, 11, 12, 13] });
+		builder.addMarkerPoint(1, { dimName: 'price', timestamp: 2000, name: 'Signal' }, options);
+		const plugin = vi.mocked(createSeriesMarkers).mock.results[0].value;
+		return plugin.setMarkers.mock.lastCall[0][0].shape;
+	}
+
+	it('takes the symbol from icon, or from shape as the same option', () => {
+		expect(shapeOf({ icon: 'arrowUp' })).toBe('arrowUp');
+		expect(shapeOf({ shape: 'arrowDown' })).toBe('arrowDown');
+		expect(shapeOf({ shape: 'circle' })).toBe('circle');
+	});
+
+	it('prefers icon when both are given and falls back to a visible circle without either', () => {
+		expect(shapeOf({ icon: 'arrowUp', shape: 'circle' })).toBe('arrowUp');
+		expect(shapeOf(undefined)).toBe('circle');
+	});
+});
+
 describe('LightweightTimeSeriesChartBuilder candlestick markers', () => {
 	const dims = { open: 'open', high: 'high', low: 'low', close: 'close' };
 	const candles = {

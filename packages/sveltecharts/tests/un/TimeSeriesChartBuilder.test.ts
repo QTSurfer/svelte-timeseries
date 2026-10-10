@@ -630,6 +630,27 @@ describe('TimeSeriesChartBuilder', () => {
 		});
 	});
 
+	describe('addMarkerPoint symbol option', () => {
+		function symbolOf(options: { icon?: string; shape?: string } | undefined) {
+			builder.setDataset({ _ts: [1000, 2000, 3000], price: [100, 101, 102] });
+			builder.addMarkerPoint(0, { dimName: 'price', timestamp: 2000, name: 'Buy' }, options);
+			const opts = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls[0][0];
+			return opts.series.find((s: any) => s.id === 'price').markPoint.data[0].symbol;
+		}
+
+		it('takes the symbol from icon, or from shape as the same option', () => {
+			expect(symbolOf({ icon: 'pin' })).toBe('pin');
+		});
+
+		it('accepts shape as an alias of icon', () => {
+			expect(symbolOf({ shape: 'diamond' })).toBe('diamond');
+		});
+
+		it('prefers icon when both are given', () => {
+			expect(symbolOf({ icon: 'pin', shape: 'diamond' })).toBe('pin');
+		});
+	});
+
 	describe('setSeriesStyle', () => {
 		it('applies style to all series', () => {
 			builder.setDataset({

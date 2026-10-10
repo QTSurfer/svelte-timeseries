@@ -23,7 +23,7 @@
 		applyPriceData,
 		priceSignature,
 		resolvePriceData,
-		type CandlesInput,
+		type CandlesSource,
 		type PriceLineInput,
 		type ResolvedPriceData
 	} from './priceInput';
@@ -43,8 +43,8 @@
 		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
 		/** A price line from arrays. Ignored when `candles` is given. */
 		price?: PriceLineInput;
-		/** Candles from OHLC arrays. */
-		candles?: CandlesInput;
+		/** Candles from OHLC arrays, or a price line with an `interval` to aggregate into bars. */
+		candles?: CandlesSource;
 		/** Named line series computed by your app (indicators). Replace the array to update. */
 		injectedSeries?: readonly InjectedSeries[];
 		/** Buy / sell / info events. Replace the array to update. */

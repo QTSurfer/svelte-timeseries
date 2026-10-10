@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
 	OHLC_CANDIDATES,
 	detectOHLCFromColumns,
+	isTickerSchema,
 	resolutionToInterval,
+	tickCandleColumns,
 	type OHLCColumns
 } from '../../src/lib/duckdb/ohlc';
+
+// Columns of an exchange ticker feed: a last price (`cls`) with 24-hour statistics and quotes.
+const TICKER = ['t', 'opn', 'hig', 'low', 'cls', 'vol', 'vlq', 'bid', 'bsz', 'ask', 'asz'];
+// Columns of a bar (kline) file: real per-bar prices, no quotes.
+const KLINES = ['ts', 'opn', 'hig', 'low', 'cls', 'vol', 'vlq', 'ntr'];
 
 describe('detectOHLCFromColumns', () => {
 	it('matches the canonical names', () => {
@@ -131,5 +138,57 @@ describe('resolutionToInterval', () => {
 		expect(() => resolutionToInterval(' 5m' as never)).toThrowError(/Invalid resolution/);
 		expect(() => resolutionToInterval('5 m' as never)).toThrowError(/Invalid resolution/);
 		expect(() => resolutionToInterval('5mm' as never)).toThrowError(/Invalid resolution/);
+	});
+});
+
+describe('isTickerSchema', () => {
+	it('recognises a ticker feed by its quote columns', () => {
+		expect(isTickerSchema(TICKER)).toBe(true);
+		expect(isTickerSchema(['t', 'BID', 'Ask', 'last'])).toBe(true);
+	});
+
+	it('does not take bar data for a ticker', () => {
+		expect(isTickerSchema(KLINES)).toBe(false);
+		expect(isTickerSchema(['_ts', 'open', 'high', 'low', 'close', 'volume'])).toBe(false);
+	});
+
+	it('needs both quotes', () => {
+		expect(isTickerSchema(['t', 'opn', 'hig', 'low', 'cls', 'bid'])).toBe(false);
+		expect(isTickerSchema(['t', 'opn', 'hig', 'low', 'cls', 'ask'])).toBe(false);
+		expect(isTickerSchema([])).toBe(false);
+	});
+
+	it('still sees OHLC-looking columns in a ticker, which is why the quotes decide', () => {
+		expect(detectOHLCFromColumns(TICKER)).toEqual({
+			open: 'opn',
+			high: 'hig',
+			low: 'low',
+			close: 'cls'
+		});
+		expect(detectOHLCFromColumns(KLINES)).toEqual(detectOHLCFromColumns(TICKER));
+	});
+
+	it('leaves a ticker that names its price "last" without candles, as before', () => {
+		expect(detectOHLCFromColumns(['t', 'last', 'opn', 'hig', 'low', 'bid', 'ask'])).toBeUndefined();
+	});
+});
+
+describe('tickCandleColumns', () => {
+	it('keeps the price column as the close and derives the other names', () => {
+		expect(tickCandleColumns('cls', TICKER)).toEqual({
+			open: 'cls_open',
+			high: 'cls_high',
+			low: 'cls_low',
+			close: 'cls'
+		});
+	});
+
+	it('never clashes with a column of the table, whatever its case', () => {
+		const columns = tickCandleColumns('cls', ['cls', 'CLS_OPEN', 'cls_high_']);
+		expect(columns.open).toBe('cls_open_');
+		expect(columns.high).toBe('cls_high');
+		const names = Object.values(columns).map((name) => name.toLowerCase());
+		expect(new Set(names).size).toBe(4);
+		expect(names).not.toContain('low');
 	});
 });

@@ -102,6 +102,62 @@ describe('resolvePriceData: candles', () => {
 	});
 });
 
+describe('resolvePriceData: candles aggregated from a price line', () => {
+	const ticks = {
+		times: [0, 400, 900, 1000, 1500, 3000],
+		values: [10, 12, 9, 11, 13, 20]
+	};
+
+	it('aggregates the ticks into the same dataset OHLC arrays would give', () => {
+		const { data, issues } = resolvePriceData(undefined, { ...ticks, interval: '1s' });
+		expect(issues).toEqual([]);
+		expect(data).toMatchObject({ mode: 'candles', signature: 'candles' });
+		expect(data.mode === 'candles' && data.dataset).toEqual({
+			_ts: [0, 1000, 3000],
+			open: [10, 11, 20],
+			high: [12, 13, 20],
+			low: [9, 11, 20],
+			close: [9, 13, 20]
+		});
+		expect(data).toEqual(
+			resolvePriceData(undefined, {
+				times: [0, 1000, 3000],
+				open: [10, 11, 20],
+				high: [12, 13, 20],
+				low: [9, 11, 20],
+				close: [9, 13, 20]
+			}).data
+		);
+	});
+
+	it('shares the candles signature, so changing the interval updates in place', () => {
+		expect(priceSignature(undefined, { ...ticks, interval: '1s' })).toBe('candles');
+		expect(priceSignature(undefined, { ...ticks, interval: '1m' })).toBe('candles');
+	});
+
+	it('reports an invalid interval instead of throwing', () => {
+		const { data, issues } = resolvePriceData(undefined, { ...ticks, interval: '1y' as never });
+		expect(data.mode).toBe('none');
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain('Invalid candle interval');
+	});
+
+	it('reports missing arrays', () => {
+		const { data, issues } = resolvePriceData(undefined, { times: [1], interval: '1s' } as never);
+		expect(data.mode).toBe('none');
+		expect(issues[0]).toContain('times and values');
+	});
+
+	it('still wins over a price line', () => {
+		const { data, issues } = resolvePriceData(
+			{ times: [1], values: [1] },
+			{ ...ticks, interval: 1000 }
+		);
+		expect(data.mode).toBe('candles');
+		expect(issues[0]).toContain('only the candles');
+	});
+});
+
 describe('resolvePriceData: nothing', () => {
 	it('resolves to none without input', () => {
 		expect(resolvePriceData().data).toEqual({ mode: 'none', signature: 'none' });

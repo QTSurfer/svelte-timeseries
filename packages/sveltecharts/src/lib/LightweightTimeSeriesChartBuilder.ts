@@ -227,7 +227,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			time: this.toChartTime(data.timestamp),
 			timeMs: data.timestamp,
 			color: options?.color ?? '#000000',
-			shape: this.mapMarkerShape(options?.icon),
+			shape: this.mapMarkerShape(options?.icon ?? options?.shape),
 			position: this.mapMarkerPosition(options?.position),
 			text: data.name,
 			visible: true,

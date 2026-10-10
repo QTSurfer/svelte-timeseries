@@ -7,7 +7,8 @@ describe('package public API', () => {
 		expect(Object.keys(publicApi).sort()).toEqual([
 			'DuckDB',
 			'SvelteTimeSeries',
-			'TimeSeriesFacade'
+			'TimeSeriesFacade',
+			'aggregateCandles'
 		]);
 	});
 

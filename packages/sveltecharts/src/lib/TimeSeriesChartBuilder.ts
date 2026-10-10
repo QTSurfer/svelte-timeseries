@@ -922,12 +922,14 @@ export class TimeSeriesChartBuilder {
 		options?: ChartMarkerPointOptions
 	): this {
 		try {
+			const symbol = options?.icon ?? options?.shape;
 			const opt: MarkerPointOption = {
 				icon: 'none',
 				position: 'inside',
 				symbolSize: 18,
 				color: 'black',
-				...(options as Partial<MarkerPointOption>)
+				...(options as Partial<MarkerPointOption>),
+				...(symbol === undefined ? {} : { icon: symbol as IconType })
 			};
 			opt.icon = this.normalizeVisibleIcon(opt.icon);
 
