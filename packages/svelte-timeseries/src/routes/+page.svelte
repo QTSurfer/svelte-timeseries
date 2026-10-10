@@ -1,6 +1,5 @@
 <script lang="ts">
 	import '../css/main.css';
-	import { resolve } from '$app/paths';
 	import { SvelteTimeSeries } from '$lib';
 	import {
 		DuckDB,
@@ -10,9 +9,8 @@
 	} from '$lib/duckdb/DuckDB';
 	import { generateSyntheticCandles } from '$lib/syntheticData';
 	import { onMount } from 'svelte';
-	import EyeIcon from '$lib/icon/EyeIcon.svelte';
-	import EyeOffIcon from '$lib/icon/EyeOffIcon.svelte';
-	import Icon from '@iconify/svelte';
+	import DemoNavbar from './DemoNavbar.svelte';
+	import LegendPanel from './LegendPanel.svelte';
 
 	type DemoConfiguration = {
 		name: string;
@@ -312,54 +310,7 @@
 </script>
 
 <div class="grid grid-rows-[auto_auto_1fr] h-screen relative">
-	<div class="navbar shadow-sm bg-primary">
-		<div class="navbar-start text-primary-content">
-			<div class="flex gap-2 items-baseline text-2xl font-bold">
-				SvelteTimeSeries <span class="font-extralight text-sm">DEMO</span>
-			</div>
-		</div>
-
-		<div class="navbar-center gap-4">
-			<a
-				href={resolve('/markers-format')}
-				class="btn btn-sm btn-ghost text-primary-content gap-2 hover:bg-primary-content/15 hover:text-primary-content"
-			>
-				<Icon icon="mdi:map-marker-outline" width="1.1em" height="1.1em" />
-				Markers Format
-			</a>
-			<a
-				class="link text-primary-content"
-				href={resolve('/injected')}
-				data-testid="injected-demo-link"
-			>
-				Your own arrays, series and markers
-			</a>
-		</div>
-		<div class="navbar-end">
-			<div class="flex gap-8 text-primary-content px-4">
-				<a href="https://github.com/QTSurfer/svelte-timeseries" target="_blank">
-					<Icon icon="fa6-brands:github" width="1.5em" height="1.5em" />
-				</a>
-				<a href="https://x.com/QTSurfer" target="_blank" class="tooltip tooltip-bottom z-10">
-					<Icon icon="fa6-brands:x-twitter" width="1.5em" height="1.5em" />
-				</a>
-				<a
-					href="https://npmjs.com/package/@qtsurfer/svelte-timeseries"
-					target="_blank"
-					class="tooltip tooltip-bottom z-10 flex gap-2 items-center"
-				>
-					<img
-						src="https://img.shields.io/npm/v/%40qtsurfer%2Fsvelte-timeseries?label=version&style=flat-square"
-						alt="version"
-					/>
-					<img
-						src="https://img.shields.io/npm/dt/%40qtsurfer%2Fsvelte-timeseries?label=downloads&style=flat-square"
-						alt="downloads"
-					/>
-				</a>
-			</div>
-		</div>
-	</div>
+	<DemoNavbar />
 
 	<div class="border-b bg-base-200 px-4 py-3">
 		<div class="flex flex-wrap items-end gap-3">
@@ -575,90 +526,30 @@
 				>
 					{#snippet columnsSnippet(props)}
 						{#if showCustomSidebar && props.columns.length > 0}
-							<details
-								class="collapse collapse-arrow bg-base-300 border border-base-300 min-h-[3.6rem] max-h-full"
-								name="data"
-								open
-							>
-								<summary class="collapse-title font-semibold"> SCHEMA </summary>
-								<div class="collapse-content text-sm p-0 h-100">
-									<ul class="list overflow-auto h-full bg-base-100">
-										{#each props.columns as column (column.name)}
-											<li class="list-row">
-												<div class="list-col-grow">
-													{column.name}
-												</div>
-												<div>
-													<label>
-														<input
-															type="checkbox"
-															hidden
-															checked={column.checked}
-															onchange={() => props.toggleColumn(column.name)}
-														/>
-														{#if column.checked}
-															<div class="swap-on">
-																<EyeIcon />
-															</div>
-														{:else}
-															<div class="swap-off">
-																<EyeOffIcon />
-															</div>
-														{/if}
-													</label>
-												</div>
-											</li>
-										{/each}
-									</ul>
-								</div>
-							</details>
+							<LegendPanel
+								title="SCHEMA"
+								fixedHeight
+								items={props.columns.map((column) => ({
+									label: column.name,
+									checked: column.checked,
+									onToggle: () => props.toggleColumn(column.name)
+								}))}
+							/>
 						{/if}
 					{/snippet}
 
 					{#snippet markersSnippet(props)}
 						{#if showCustomSidebar}
-							<details
-								class="collapse collapse-arrow bg-base-300 border border-base-300 min-h-[3.6rem] max-h-full"
-								name="data"
-								open
-							>
-								<summary class="collapse-title font-semibold"> MARKERS </summary>
-								<div class="collapse-content text-sm p-0">
-									<ul class="list overflow-auto h-full bg-base-100">
-										{#each props.markers as marker, i (i)}
-											<li class="list-row">
-												<div class="flex items-center">
-													<button
-														class="btn btn-primary btn-xs"
-														onclick={() => props.goToMarker(marker._ts)}
-													>
-														Go to
-													</button>
-												</div>
-												<div class="list-col-grow">
-													<div class="font-bold">{marker.text}</div>
-												</div>
-												<div class="flex items-center">
-													<label class="swap">
-														<input
-															type="checkbox"
-															checked={true}
-															onchange={() => props.toggleMarker(i, marker.shape)}
-														/>
-
-														<div class="swap-on">
-															<EyeIcon />
-														</div>
-														<div class="swap-off">
-															<EyeOffIcon />
-														</div>
-													</label>
-												</div>
-											</li>
-										{/each}
-									</ul>
-								</div>
-							</details>
+							<LegendPanel
+								title="MARKERS"
+								boldLabels
+								items={props.markers.map((marker, i) => ({
+									label: marker.text,
+									checked: true,
+									onToggle: () => props.toggleMarker(i, marker.shape),
+									onGo: () => props.goToMarker(marker._ts)
+								}))}
+							/>
 						{/if}
 					{/snippet}
 
