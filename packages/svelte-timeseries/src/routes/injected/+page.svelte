@@ -3,21 +3,25 @@
 	import { base, resolve } from '$app/paths';
 	import { SvelteTimeSeries } from '$lib';
 	import type {
-		CandlesInput,
+		CandleInterval,
+		CandlesSource,
 		InjectedMarker,
 		InjectedSeries,
 		PriceLineInput,
 		TimeSeriesChartAdapter
 	} from '$lib';
 	import type TimeSeriesFacade from '$lib/TimeSeriesFacade';
-	import { createDemoData } from './demoData';
+	import { createDemoData, createTicks } from './demoData';
 
-	type Scenario = 'line' | 'candles' | 'parquet';
+	type Scenario = 'line' | 'candles' | 'ticks' | 'parquet';
 	type ChartLibrary = 'echarts' | 'lightweight' | 'vela';
 
 	// Arrays you already hold: nothing is read from a file and DuckDB is never loaded.
 	const demo = createDemoData(900);
 	let visibleBars = $state(600);
+	// An hour of one-second ticks, aggregated into bars of the chosen length.
+	const ticks = createTicks();
+	let interval = $state<CandleInterval>('1m');
 
 	let scenario = $state<Scenario>('line');
 	let chartLibrary = $state<ChartLibrary>('lightweight');
@@ -37,14 +41,18 @@
 	const price = $derived<PriceLineInput | undefined>(
 		scenario === 'line' ? { name: 'Price', times, values: close } : undefined
 	);
-	const candles = $derived<CandlesInput | undefined>(
+	const candles = $derived<CandlesSource | undefined>(
 		scenario === 'candles'
 			? { times, open: slice(demo.open), high: slice(demo.high), low: slice(demo.low), close }
-			: undefined
+			: scenario === 'ticks'
+				? { times: ticks.times, values: ticks.values, interval }
+				: undefined
 	);
 
 	const arraySeries = $derived.by<InjectedSeries[]>(() => {
 		const list: InjectedSeries[] = [];
+		// The indicators and markers below are computed on the minute bars, not on the ticks.
+		if (scenario === 'ticks') return list;
 		if (showEma) {
 			list.push({ name: 'EMA 20', times, values: slice(demo.ema), color: '#f59e0b', lineWidth: 2 });
 		}
@@ -55,7 +63,9 @@
 	});
 
 	const arrayMarkers = $derived<InjectedMarker[]>(
-		showMarkers ? demo.markers.filter((marker) => marker.time <= times[times.length - 1]) : []
+		showMarkers && scenario !== 'ticks'
+			? demo.markers.filter((marker) => marker.time <= times[times.length - 1])
+			: []
 	);
 
 	// Parquet scenario: a file drives the chart and the app adds what it computes from that data.
@@ -117,6 +127,7 @@
 			<select class="select select-bordered select-sm" data-testid="scenario" bind:value={scenario}>
 				<option value="line">Arrays: price line</option>
 				<option value="candles">Arrays: candles</option>
+				<option value="ticks">Arrays: ticks to candles</option>
 				<option value="parquet">Parquet (temps_gzip_mini) + injected</option>
 			</select>
 		</label>
@@ -132,7 +143,22 @@
 				<option value="vela">Vela (candles only)</option>
 			</select>
 		</label>
-		{#if scenario !== 'parquet'}
+		{#if scenario === 'ticks'}
+			<label class="flex items-center gap-1">
+				Bar length
+				<select
+					class="select select-bordered select-sm"
+					data-testid="interval"
+					bind:value={interval}
+				>
+					<option value="1s">1s</option>
+					<option value="5s">5s</option>
+					<option value="15s">15s</option>
+					<option value="1m">1m</option>
+					<option value="5m">5m</option>
+				</select>
+			</label>
+		{:else if scenario !== 'parquet'}
 			<button
 				class="btn btn-sm"
 				data-testid="append"

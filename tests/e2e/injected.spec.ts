@@ -20,6 +20,7 @@ type DemoWindow = Window & {
         convertToPixel(finder: object, value: number[]): number[];
       };
       option: { dataset: { source: Record<string, number[]> } };
+      dataset: Record<string, number[]>;
     };
   };
 };
@@ -239,3 +240,41 @@ test("tells the table chart that Vela needs candles", async ({ page }) => {
     { timeout: 60_000 },
   );
 });
+
+for (const engine of ["lightweight", "echarts"] as const) {
+  test(`aggregates ticks into candles and updates them in place (${engine})`, async ({
+    page,
+  }) => {
+    await open(page, engine);
+    const before = await chartsCreated(page);
+    await page.getByTestId("scenario").selectOption("ticks");
+    await expect.poll(() => chartsCreated(page)).toBe(before + 1);
+
+    // The bars the chart holds: Lightweight Charts keeps its dataset on the builder, ECharts in its option.
+    const bars = () =>
+      page.evaluate(() => {
+        const { current } = (window as unknown as DemoWindow).__demo;
+        const data = current.dataset ?? current.option.dataset.source;
+        const consistent = data._ts.every(
+          (_, i) =>
+            data.high[i] >= Math.max(data.open[i], data.close[i]) &&
+            data.low[i] <= Math.min(data.open[i], data.close[i]),
+        );
+        return { count: data._ts.length, first: data._ts[0], consistent };
+      });
+
+    // An hour of one-second ticks, 1-minute bars by default.
+    await expect.poll(async () => (await bars()).count).toBe(60);
+    expect((await bars()).first).toBe(START);
+    expect((await bars()).consistent).toBe(true);
+
+    await page.getByTestId("interval").selectOption("5s");
+    await expect.poll(async () => (await bars()).count).toBe(720);
+    await page.getByTestId("interval").selectOption("1s");
+    await expect.poll(async () => (await bars()).count).toBe(3600);
+
+    expect((await bars()).consistent).toBe(true);
+    // Only the bar length changed: the chart was updated, not rebuilt.
+    expect(await chartsCreated(page)).toBe(before + 1);
+  });
+}

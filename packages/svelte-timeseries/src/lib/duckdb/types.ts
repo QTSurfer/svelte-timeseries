@@ -1,5 +1,5 @@
-import type { OHLCColumns, OHLCResolution } from './ohlc';
-export type { OHLCColumns, OHLCResolution };
+import type { OHLCColumns, OHLCResolution, TickCandlestick } from './ohlc';
+export type { OHLCColumns, OHLCResolution, TickCandlestick };
 
 export type SingleResult = string | number;
 export type TimeSeriesValue = number | null;
@@ -23,7 +23,7 @@ export type EpochUnit = 's' | 'ms' | 'us' | 'ns';
 type TableDataBase = {
 	mainColumn: string;
 	columnsSelect?: string[];
-	candlestick?: OHLCColumns | false;
+	candlestick?: OHLCColumns | TickCandlestick | false;
 	resolution?: OHLCResolution;
 	timestampUnit?: EpochUnit;
 };

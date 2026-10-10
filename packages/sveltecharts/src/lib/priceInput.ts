@@ -9,6 +9,7 @@ import type {
 	OHLCDimensions,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
+import { aggregateCandles, type TickCandlesInput } from './candleAggregation';
 import { toSortedColumns, type NumericArray } from './seriesInput';
 
 /** A price line. Give either parallel `times` / `values` arrays or `points`. */
@@ -41,6 +42,9 @@ export type CandlesInput = {
 	close: NumericArray;
 };
 
+/** What `candles` accepts: OHLC arrays, or a price line to aggregate into bars (`TickCandlesInput`). */
+export type CandlesSource = CandlesInput | TickCandlesInput;
+
 export const DEFAULT_PRICE_NAME = 'price';
 const TIME_COLUMN = '_ts';
 export const CANDLE_DIMENSIONS: OHLCDimensions = {
@@ -71,7 +75,7 @@ export type ResolvedPriceData =
  */
 export function priceSignature(
 	price?: PriceLineInput | null,
-	candles?: CandlesInput | null
+	candles?: CandlesSource | null
 ): string {
 	if (candles) return 'candles';
 	if (price) return `line:${price.name || DEFAULT_PRICE_NAME}`;
@@ -92,12 +96,24 @@ function toNullable(values: Float64Array): (number | null)[] {
  */
 export function resolvePriceData(
 	price?: PriceLineInput | null,
-	candles?: CandlesInput | null
+	candles?: CandlesSource | null
 ): { data: ResolvedPriceData; issues: string[] } {
 	const issues: string[] = [];
 
 	if (candles) {
 		if (price) issues.push('Both "candles" and "price" were given; only the candles are drawn.');
+		if (isTickCandles(candles)) {
+			if (!isArrayLike(candles.times) || !isArrayLike(candles.values)) {
+				issues.push('"candles" with an "interval" needs array-like times and values.');
+				return { data: { mode: 'none', signature: 'none' }, issues };
+			}
+			try {
+				return { data: resolveCandles(aggregateCandles(candles, candles.interval)), issues };
+			} catch (error) {
+				issues.push(`"candles": ${error instanceof Error ? error.message : String(error)}`);
+				return { data: { mode: 'none', signature: 'none' }, issues };
+			}
+		}
 		if (
 			![candles.times, candles.open, candles.high, candles.low, candles.close].every(isArrayLike)
 		) {
@@ -184,6 +200,10 @@ function resolveCandles(candles: CandlesInput): ResolvedPriceData {
 		},
 		signature: 'candles'
 	};
+}
+
+function isTickCandles(candles: CandlesSource): candles is TickCandlesInput {
+	return (candles as TickCandlesInput).interval !== undefined;
 }
 
 function isArrayLike(value: unknown): value is ArrayLike<unknown> {

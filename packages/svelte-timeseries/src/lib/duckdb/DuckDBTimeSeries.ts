@@ -1,11 +1,28 @@
 import { escapeIdent, timestampToMilliseconds } from './utilities';
-import { detectOHLCFromColumns, resolutionToInterval } from './ohlc';
+import {
+	detectOHLCFromColumns,
+	isTickerSchema,
+	resolutionToInterval,
+	tickCandleColumns
+} from './ohlc';
 import type { OHLCColumns, OHLCResolution } from './ohlc';
 import type { DuckDBQueries } from './DuckDBQueries';
 import type { Tables, TableData, DataRange, TimeSeriesData, TimeSeriesValue } from './types';
 import { TIMESTAMP_COLUMN } from './types';
 
 export type { OHLCColumns, OHLCResolution };
+
+/** Candles built from the ticks of one price column (see `TickCandlestick`). */
+export type TickCandles = {
+	/** The price column that is aggregated. */
+	price: string;
+	/** Names of the bar columns the aggregation produces. */
+	columns: OHLCColumns;
+	/** Bucket size. Without it ticks cannot be drawn as candles. */
+	resolution?: OHLCResolution;
+	/** `true` when the table was recognized as a ticker feed, `false` when the config asked for it. */
+	detected: boolean;
+};
 
 export class DuckDBTimeSeries<T extends Tables> {
 	constructor(
@@ -17,19 +34,72 @@ export class DuckDBTimeSeries<T extends Tables> {
 		return escapeIdent(TIMESTAMP_COLUMN);
 	}
 
+	/**
+	 * Bar columns to draw as candles, if any. A ticker feed is never reported here: its open / high /
+	 * low are rolling statistics, not bar prices (see `resolveTickCandles`). An explicit
+	 * `candlestick` mapping is always honored.
+	 */
 	resolveOHLC(table: keyof T, columns: string[], config: TableData): OHLCColumns | undefined {
 		if (config.candlestick === false) return undefined;
-		if (config.candlestick) return config.candlestick;
-		return detectOHLCFromColumns(columns);
+		if (config.candlestick) return 'price' in config.candlestick ? undefined : config.candlestick;
+		const detected = detectOHLCFromColumns(columns);
+		return detected && !isTickerSchema(columns) ? detected : undefined;
 	}
 
+	/**
+	 * Candles to aggregate from the ticks of a price column, if the table asks for them
+	 * (`candlestick: { price }`) or is recognized as a ticker feed (OHLC-looking columns plus `bid`
+	 * and `ask`, see `isTickerSchema`) and has no explicit `candlestick` setting. The price of a
+	 * detected ticker is the column that would have been its close.
+	 */
+	resolveTickCandles(
+		table: keyof T,
+		columns: string[],
+		config: TableData
+	): TickCandles | undefined {
+		const candlestick = config.candlestick;
+		if (candlestick === false) return undefined;
+
+		let price: string | undefined;
+		let detected = false;
+		if (candlestick) {
+			if (!('price' in candlestick)) return undefined;
+			price = columns.find((column) => column.toLowerCase() === candlestick.price.toLowerCase());
+			if (!price) {
+				throw new Error(
+					`Candlestick price column "${candlestick.price}" not found in ${String(table)}. Available: ${columns.join(', ')}.`
+				);
+			}
+		} else if (isTickerSchema(columns)) {
+			price = detectOHLCFromColumns(columns)?.close;
+			detected = true;
+		}
+		if (!price) return undefined;
+
+		return {
+			price,
+			columns: tickCandleColumns(price, columns),
+			resolution: config.resolution,
+			detected
+		};
+	}
+
+	/**
+	 * OHLC bars of a table. With `price`, every bar is aggregated from the ticks of that column over
+	 * `resolution` buckets (required) and `ohlc` only names the output columns; without it the
+	 * `ohlc` columns are the bar prices.
+	 */
 	async getOHLC(
 		table: keyof T,
 		ohlc: OHLCColumns,
-		resolution?: OHLCResolution
+		resolution?: OHLCResolution,
+		price?: string
 	): Promise<TimeSeriesData> {
+		if (price !== undefined && !resolution) {
+			throw new Error('Candles built from a price column need a resolution.');
+		}
 		const sql = resolution
-			? this.buildOHLCResampledSQL(String(table), ohlc, resolution)
+			? this.buildOHLCResampledSQL(String(table), ohlc, resolution, price)
 			: this.buildOHLCRawSQL(String(table), ohlc);
 
 		const result = await this.queries.queryBatch(sql);
@@ -152,11 +222,15 @@ export class DuckDBTimeSeries<T extends Tables> {
 		ohlc: OHLCColumns,
 		resolution: OHLCResolution | undefined,
 		range: DataRange,
-		maxPoints?: number
+		maxPoints?: number,
+		price?: string
 	): Promise<TimeSeriesData> {
 		this.validatePointBudget(maxPoints);
 		if (!Number.isFinite(range.start) || !Number.isFinite(range.end)) {
 			throw new Error('Window range must contain finite timestamps.');
+		}
+		if (price !== undefined && !resolution) {
+			throw new Error('Candles built from a price column need a resolution.');
 		}
 
 		const dimensions = [...new Set([...Object.values(ohlc), ...columns])];
@@ -171,7 +245,8 @@ export class DuckDBTimeSeries<T extends Tables> {
 					ohlc,
 					resolution,
 					normalizedRange,
-					maxPoints
+					maxPoints,
+					price
 				)
 			: this.buildWindowedSQL(table, dimensions, normalizedRange, maxPoints);
 		return this.queryWindowedData(sql, 'Unexpected null timestamp in windowed OHLC data.');
@@ -227,17 +302,20 @@ export class DuckDBTimeSeries<T extends Tables> {
 		ohlc: OHLCColumns,
 		resolution: OHLCResolution,
 		range: DataRange,
-		maxPoints?: number
+		maxPoints?: number,
+		price?: string
 	): string {
 		const interval = resolutionToInterval(resolution);
 		const timestamp = this.tsColumnQuery;
 		const selectedColumns = [timestamp, ...columns.map((column) => escapeIdent(column))];
 		const ohlcColumns = new Set(Object.values(ohlc));
+		// With a price column all four bar values come from it; `ohlc` only names the outputs.
+		const source = (column: string) => escapeIdent(price ?? column);
 		const aggregations = [
-			`FIRST(${escapeIdent(ohlc.open)} ORDER BY ${timestamp}) AS ${escapeIdent(ohlc.open)}`,
-			`MAX(${escapeIdent(ohlc.high)}) AS ${escapeIdent(ohlc.high)}`,
-			`MIN(${escapeIdent(ohlc.low)}) AS ${escapeIdent(ohlc.low)}`,
-			`LAST(${escapeIdent(ohlc.close)} ORDER BY ${timestamp}) AS ${escapeIdent(ohlc.close)}`,
+			`FIRST(${source(ohlc.open)} ORDER BY ${timestamp}) AS ${escapeIdent(ohlc.open)}`,
+			`MAX(${source(ohlc.high)}) AS ${escapeIdent(ohlc.high)}`,
+			`MIN(${source(ohlc.low)}) AS ${escapeIdent(ohlc.low)}`,
+			`LAST(${source(ohlc.close)} ORDER BY ${timestamp}) AS ${escapeIdent(ohlc.close)}`,
 			...columns
 				.filter((column) => !ohlcColumns.has(column))
 				.map(
@@ -252,7 +330,7 @@ export class DuckDBTimeSeries<T extends Tables> {
 			FROM ${escapeIdent(table)}
 			WHERE ${timestamp} >= time_bucket(INTERVAL '${interval}', epoch_ms(${range.start}))
 			  AND ${timestamp} < time_bucket(INTERVAL '${interval}', epoch_ms(${range.end}))
-			      + INTERVAL '${interval}'
+			      + INTERVAL '${interval}'${price === undefined ? '' : `\n\t\t\t  AND ${escapeIdent(price)} IS NOT NULL`}
 			GROUP BY 1
 		`;
 
@@ -336,23 +414,29 @@ export class DuckDBTimeSeries<T extends Tables> {
 	private buildOHLCResampledSQL(
 		table: string,
 		ohlc: OHLCColumns,
-		resolution: OHLCResolution
+		resolution: OHLCResolution,
+		price?: string
 	): string {
 		const interval = resolutionToInterval(resolution);
 		const ts = this.tsColumnQuery;
-		const o = escapeIdent(ohlc.open);
-		const h = escapeIdent(ohlc.high);
-		const l = escapeIdent(ohlc.low);
-		const c = escapeIdent(ohlc.close);
+		// With a price column all four bar values come from it and `ohlc` only names the outputs.
+		// Ticks without a price are left out so they cannot open or close a bar.
+		const o = escapeIdent(price ?? ohlc.open);
+		const h = escapeIdent(price ?? ohlc.high);
+		const l = escapeIdent(price ?? ohlc.low);
+		const c = escapeIdent(price ?? ohlc.close);
+		const alias = (name: string) => (price === undefined ? name : escapeIdent(name));
+		const where = price === undefined ? '' : `WHERE ${c} IS NOT NULL`;
 
 		return `
 			SELECT
 				time_bucket(INTERVAL '${interval}', ${ts}) AS ${TIMESTAMP_COLUMN},
-				FIRST(${o} ORDER BY ${ts}) AS ${ohlc.open},
-				MAX(${h})                  AS ${ohlc.high},
-				MIN(${l})                  AS ${ohlc.low},
-				LAST(${c} ORDER BY ${ts})  AS ${ohlc.close}
+				FIRST(${o} ORDER BY ${ts}) AS ${alias(ohlc.open)},
+				MAX(${h})                  AS ${alias(ohlc.high)},
+				MIN(${l})                  AS ${alias(ohlc.low)},
+				LAST(${c} ORDER BY ${ts})  AS ${alias(ohlc.close)}
 			FROM ${table}
+			${where}
 			GROUP BY 1
 			ORDER BY 1
 		`;

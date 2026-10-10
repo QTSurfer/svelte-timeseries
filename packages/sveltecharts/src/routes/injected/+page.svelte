@@ -1,20 +1,25 @@
 <script lang="ts">
 	import { TimeSeriesChart } from '$lib';
 	import type {
-		CandlesInput,
+		CandleInterval,
+		CandlesSource,
 		InjectedMarker,
 		InjectedSeries,
 		PriceLineInput,
 		TimeSeriesChartAdapter
 	} from '$lib';
-	import { createDemoData, ema as computeEma } from './demoData';
+	import { createDemoData, createTicks, ema as computeEma } from './demoData';
 
-	type Mode = 'line' | 'candles';
+	type Mode = 'line' | 'candles' | 'ticks';
+	const MODES: Mode[] = ['line', 'candles', 'ticks'];
 
 	// Bars are generated up front; "Append bars" reveals more of them, so the arrays handed to the
 	// chart are replaced (never mutated) and the chart updates in place.
 	const demo = createDemoData(900);
 	let visibleBars = $state(600);
+	// An hour of one-second ticks, aggregated into bars of the chosen length.
+	const ticks = createTicks();
+	let interval = $state<CandleInterval>('1m');
 	let mode = $state<Mode>('line');
 	let showEma = $state(true);
 	let showRsi = $state(true);
@@ -34,7 +39,7 @@
 	const price = $derived<PriceLineInput | undefined>(
 		mode === 'line' ? { name: 'Price', times, values: close } : undefined
 	);
-	const candles = $derived<CandlesInput | undefined>(
+	const candles = $derived<CandlesSource | undefined>(
 		mode === 'candles'
 			? {
 					times,
@@ -43,11 +48,15 @@
 					low: slice(demo.low),
 					close
 				}
-			: undefined
+			: mode === 'ticks'
+				? { times: ticks.times, values: ticks.values, interval }
+				: undefined
 	);
 
 	const series = $derived.by<InjectedSeries[]>(() => {
 		const list: InjectedSeries[] = [];
+		// The indicators and markers below are computed on the minute bars, not on the ticks.
+		if (mode === 'ticks') return list;
 		if (showEma) {
 			list.push({
 				name: 'EMA 20',
@@ -74,7 +83,9 @@
 	});
 
 	const markers = $derived<InjectedMarker[]>(
-		showMarkers ? demo.markers.filter((marker) => marker.time <= times[times.length - 1]) : []
+		showMarkers && mode !== 'ticks'
+			? demo.markers.filter((marker) => marker.time <= times[times.length - 1])
+			: []
 	);
 
 	const adapters: Partial<Record<'lightweight' | 'echarts', TimeSeriesChartAdapter>> = {};
@@ -89,12 +100,28 @@
 <main>
 	<h1>Price data from arrays, injected series and markers</h1>
 	<div class="toolbar">
-		<button data-testid="mode" onclick={() => (mode = mode === 'line' ? 'candles' : 'line')}>
+		<button
+			data-testid="mode"
+			onclick={() => (mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length])}
+		>
 			Mode: {mode}
 		</button>
-		<button data-testid="append" onclick={() => (visibleBars = Math.min(900, visibleBars + 100))}>
-			Append 100 bars ({visibleBars})
-		</button>
+		{#if mode === 'ticks'}
+			<label>
+				Bar length
+				<select data-testid="interval" bind:value={interval}>
+					<option value="1s">1s</option>
+					<option value="5s">5s</option>
+					<option value="15s">15s</option>
+					<option value="1m">1m</option>
+					<option value="5m">5m</option>
+				</select>
+			</label>
+		{:else}
+			<button data-testid="append" onclick={() => (visibleBars = Math.min(900, visibleBars + 100))}>
+				Append 100 bars ({visibleBars})
+			</button>
+		{/if}
 		<button data-testid="toggle-ema" onclick={() => (showEma = !showEma)}>EMA 20</button>
 		<button data-testid="toggle-dashed" onclick={() => (emaDashed = !emaDashed)}>
 			EMA dashed

@@ -10,6 +10,8 @@ import type { DataRange } from './duckdb/types';
 
 export type Columns = { name: string; checked: boolean }[];
 
+const DAY_MS = 86_400_000;
+
 interface ViewportSettings {
 	maxPoints: number;
 	reloadThreshold: number;
@@ -21,7 +23,9 @@ export default class TimeSeriesFacade {
 	private _requestedDataRange: DataRange | null = null;
 	private _requestedDimensions = new Set<string>();
 	private _currentTable: string = '';
-	private _ohlcMode: { columns: OHLCColumns; resolution?: OHLCResolution } | null = null;
+	/** `price` is set when the bars are aggregated from the ticks of that column (ticker feeds). */
+	private _ohlcMode: { columns: OHLCColumns; resolution?: OHLCResolution; price?: string } | null =
+		null;
 	private _settings: ViewportSettings = { maxPoints: 500000, reloadThreshold: 0.1 };
 	private _dataRequestId = 0;
 
@@ -34,7 +38,36 @@ export default class TimeSeriesFacade {
 		this.resetViewportState(table);
 		this.timeSeriesChartBuilder.setLegendIcon('rect');
 
-		const ohlc = this.duckDb.resolveOHLC(table);
+		// A ticker feed keeps rolling 24-hour statistics in its open / high / low columns, so its
+		// candles are aggregated from the price column. Without a resolution there is nothing to
+		// aggregate into: draw the price as a line (what `resolveOHLC` leaves to the code below).
+		const ticker = this.duckDb.resolveTickCandles(table);
+		if (ticker?.resolution) {
+			this._ohlcMode = {
+				columns: ticker.columns,
+				resolution: ticker.resolution,
+				price: ticker.price
+			};
+			const result = await this.duckDb.getOHLC(
+				table,
+				ticker.columns,
+				ticker.resolution,
+				ticker.price
+			);
+			this.timeSeriesChartBuilder.setCandlestickSeries(result, ticker.columns);
+			this.captureFullDataRange();
+			return;
+		}
+		if (ticker) {
+			const reason = ticker.detected
+				? 'looks like a ticker feed: its open / high / low columns are rolling statistics, not bar prices, so they are not drawn as candles'
+				: 'asks for candles from a price column';
+			console.warn(
+				`[svelte-timeseries] "${table}" ${reason}. Set "resolution" (for example "1m") to aggregate "${ticker.price}" into candles. Until then the price is drawn as a line; set "candlestick: false" to skip this notice.`
+			);
+		}
+
+		const ohlc = ticker ? undefined : this.duckDb.resolveOHLC(table);
 		if (ohlc) {
 			const resolution = this.duckDb.getTable(table).resolution;
 			this._ohlcMode = { columns: ohlc, resolution };
@@ -75,14 +108,7 @@ export default class TimeSeriesFacade {
 		if (!requestedDimensions.length) return;
 
 		const data = this._ohlcMode
-			? await this.duckDb.getWindowedOHLC(
-					this._currentTable,
-					requestedDimensions,
-					this._ohlcMode.columns,
-					this._ohlcMode.resolution,
-					range,
-					this._settings.maxPoints
-				)
+			? await this.fetchWindowedOHLC(requestedDimensions, range)
 			: await this.duckDb.getWindowedData(
 					this._currentTable,
 					requestedDimensions,
@@ -103,6 +129,28 @@ export default class TimeSeriesFacade {
 			this._fullDataRange.start + width * (start / 100),
 			this._fullDataRange.start + width * (end / 100)
 		);
+	}
+
+	/**
+	 * The whole data range, widened by a day on each side. A stopgap: windows are compared with a
+	 * timestamp without a time zone, which on a time-zone-aware time column is read in the session's
+	 * time zone and shifts the window by its UTC offset (a whole-hour offset, at most 14 hours). The
+	 * padding keeps "all data" from losing its first or last hours. Remove it once the window
+	 * comparison itself is time-zone safe.
+	 */
+	private paddedFullDataRange(): DataRange | null {
+		const full = this._fullDataRange;
+		if (!full) return null;
+		return { start: full.start - DAY_MS, end: full.end + DAY_MS };
+	}
+
+	private fetchWindowedOHLC(columns: string[], range: DataRange) {
+		const mode = this._ohlcMode;
+		if (!mode) throw new Error('Candlestick mode is not active.');
+		const args = [this._currentTable, columns, mode.columns, mode.resolution, range] as const;
+		return mode.price === undefined
+			? this.duckDb.getWindowedOHLC(...args, this._settings.maxPoints)
+			: this.duckDb.getWindowedOHLC(...args, this._settings.maxPoints, mode.price);
 	}
 
 	private captureFullDataRange() {
@@ -227,8 +275,15 @@ export default class TimeSeriesFacade {
 	async addDimension(table: string, columnsSelect: string) {
 		this._requestedDimensions.add(columnsSelect);
 		const requestId = ++this._dataRequestId;
+		// Resampled candles have a different number of rows than the raw table, so a column added on
+		// top of them has to be fetched resampled too, over the whole range if nothing is zoomed yet.
+		const resampled = this._ohlcMode?.resolution !== undefined;
 		const range =
-			table === this._currentTable ? (this._requestedDataRange ?? this._dataRange) : null;
+			table === this._currentTable
+				? (this._requestedDataRange ??
+					this._dataRange ??
+					(resampled ? this.paddedFullDataRange() : null))
+				: null;
 
 		if (!range) {
 			const result = await this.duckDb.getSingleDimension(table, columnsSelect, true);
@@ -238,12 +293,14 @@ export default class TimeSeriesFacade {
 		}
 
 		const requestedDimensions = this.getRequestedDimensions();
-		const data = await this.duckDb.getWindowedData(
-			table,
-			requestedDimensions,
-			range,
-			this._settings.maxPoints
-		);
+		const data = resampled
+			? await this.fetchWindowedOHLC(requestedDimensions, range)
+			: await this.duckDb.getWindowedData(
+					table,
+					requestedDimensions,
+					range,
+					this._settings.maxPoints
+				);
 		if (requestId !== this._dataRequestId) return;
 
 		this.applyWindowData(data, requestedDimensions);

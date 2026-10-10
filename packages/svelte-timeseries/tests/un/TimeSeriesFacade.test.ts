@@ -90,6 +90,16 @@ function createDuckDB() {
 		resolveOHLC: vi.fn<
 			() => { open: string; high: string; low: string; close: string } | undefined
 		>(() => undefined),
+		resolveTickCandles: vi.fn<
+			() =>
+				| {
+						price: string;
+						columns: { open: string; high: string; low: string; close: string };
+						resolution?: string;
+						detected: boolean;
+				  }
+				| undefined
+		>(() => undefined),
 		getSingleDimension: vi.fn(
 			async (_table: string, column: string, omitTimestamp: boolean): Promise<ChartData> =>
 				omitTimestamp ? { [column]: [1, 2, 3] } : { _ts: [1000, 3000, 5000], [column]: [1, 2, 3] }
@@ -664,5 +674,146 @@ describe('TimeSeriesFacade viewport loading', () => {
 
 			expect(duckDb.getSingleDimension).not.toHaveBeenCalled();
 		});
+	});
+});
+
+describe('TimeSeriesFacade ticker candles', () => {
+	const columns = { open: 'cls_open', high: 'cls_high', low: 'cls_low', close: 'cls' };
+	const ticker = { price: 'cls', columns, resolution: '1m', detected: true };
+
+	it('aggregates the price column instead of drawing the 24-hour statistics as bars', async () => {
+		const duckDb = createDuckDB();
+		duckDb.resolveTickCandles.mockReturnValue(ticker);
+		duckDb.resolveOHLC.mockReturnValue({ open: 'opn', high: 'hig', low: 'low', close: 'cls' });
+		const adapter = createChartAdapter();
+		const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+
+		await facade.initialize('prices', 'cls');
+
+		expect(duckDb.getOHLC).toHaveBeenCalledWith('prices', columns, '1m', 'cls');
+		expect(adapter.setCandlestickSeries).toHaveBeenCalledWith(expect.anything(), columns);
+		expect(duckDb.resolveOHLC).not.toHaveBeenCalled();
+		expect(adapter.setDataset).not.toHaveBeenCalled();
+	});
+
+	it('draws the price as a line and says why when there is no resolution', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const duckDb = createDuckDB();
+			duckDb.resolveTickCandles.mockReturnValue({ ...ticker, resolution: undefined });
+			duckDb.resolveOHLC.mockReturnValue({ open: 'opn', high: 'hig', low: 'low', close: 'cls' });
+			const adapter = createChartAdapter();
+			const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+
+			await facade.initialize('prices', 'cls');
+
+			expect(adapter.setCandlestickSeries).not.toHaveBeenCalled();
+			expect(duckDb.getOHLC).not.toHaveBeenCalled();
+			expect(duckDb.getSingleDimension).toHaveBeenCalledWith('prices', 'cls', false);
+			expect(adapter.setDataset).toHaveBeenCalled();
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(warn.mock.calls[0][0]).toContain('"resolution"');
+			expect(warn.mock.calls[0][0]).toContain('ticker feed');
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('keeps aggregating the price column when the viewport changes', async () => {
+		const duckDb = createDuckDB();
+		duckDb.resolveTickCandles.mockReturnValue(ticker);
+		const adapter = createChartAdapter();
+		adapter.getLoadedDimensions.mockReturnValue(Object.values(columns));
+		const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+		await facade.initialize('prices', 'cls');
+
+		await facade.onViewportChange(2000, 3000);
+
+		expect(duckDb.getWindowedOHLC).toHaveBeenCalledWith(
+			'prices',
+			Object.values(columns),
+			columns,
+			'1m',
+			{ start: 2000, end: 3000 },
+			500000,
+			'cls'
+		);
+		expect(duckDb.getWindowedData).not.toHaveBeenCalled();
+	});
+
+	it('adds a column on top of resampled candles resampled too, not as raw rows', async () => {
+		const duckDb = createDuckDB();
+		duckDb.resolveTickCandles.mockReturnValue(ticker);
+		duckDb.getWindowedOHLC.mockResolvedValueOnce({
+			_ts: [1000, 2000],
+			cls_open: [1, 2],
+			cls_high: [2, 3],
+			cls_low: [0, 1],
+			cls: [1, 2],
+			vol: [7, 8]
+		});
+		const adapter = createChartAdapter();
+		adapter.getLoadedDimensions.mockReturnValue(Object.values(columns));
+		const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+		await facade.initialize('prices', 'cls');
+
+		await facade.addDimension('prices', 'vol');
+
+		expect(duckDb.getSingleDimension).not.toHaveBeenCalled();
+		expect(duckDb.getWindowedData).not.toHaveBeenCalled();
+		expect(duckDb.getWindowedOHLC).toHaveBeenCalledWith(
+			'prices',
+			[...Object.values(columns), 'vol'],
+			columns,
+			'1m',
+			{ start: 1000 - 86_400_000, end: 5000 + 86_400_000 },
+			500000,
+			'cls'
+		);
+		expect(adapter.addDimension).toHaveBeenCalledWith({ vol: [7, 8] }, 'vol');
+	});
+
+	it('resamples a column added on top of resampled bar data as well', async () => {
+		const duckDb = createDuckDB();
+		const ohlc = { open: 'opn', high: 'hig', low: 'low', close: 'cls' };
+		duckDb.resolveOHLC.mockReturnValue(ohlc);
+		duckDb.getTable.mockReturnValue({ resolution: '1m' });
+		duckDb.getWindowedOHLC.mockResolvedValueOnce({
+			_ts: [1000],
+			opn: [1],
+			hig: [2],
+			low: [0],
+			cls: [1],
+			vol: [3]
+		});
+		const adapter = createChartAdapter();
+		adapter.getLoadedDimensions.mockReturnValue(Object.values(ohlc));
+		const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+		await facade.initialize('prices', 'cls');
+
+		await facade.addDimension('prices', 'vol');
+
+		expect(duckDb.getSingleDimension).not.toHaveBeenCalled();
+		expect(duckDb.getWindowedOHLC).toHaveBeenCalledWith(
+			'prices',
+			[...Object.values(ohlc), 'vol'],
+			ohlc,
+			'1m',
+			{ start: 1000 - 86_400_000, end: 5000 + 86_400_000 },
+			500000
+		);
+	});
+
+	it('still loads a column in full for bar data without a resolution', async () => {
+		const duckDb = createDuckDB();
+		duckDb.resolveOHLC.mockReturnValue({ open: 'opn', high: 'hig', low: 'low', close: 'cls' });
+		const adapter = createChartAdapter();
+		const facade = new TimeSeriesFacade(duckDb as never, adapter as never);
+		await facade.initialize('prices', 'cls');
+
+		await facade.addDimension('prices', 'vol');
+
+		expect(duckDb.getSingleDimension).toHaveBeenCalledWith('prices', 'vol', true);
+		expect(duckDb.getWindowedOHLC).not.toHaveBeenCalled();
 	});
 });

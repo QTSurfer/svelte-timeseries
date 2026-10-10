@@ -25,7 +25,7 @@
 		describeUnsupportedInput
 	} from '@qtsurfer/sveltecharts';
 	import type {
-		CandlesInput,
+		CandlesSource,
 		ECharts,
 		InjectedMarker,
 		InjectedSeries,
@@ -79,8 +79,11 @@
 		table?: Tables;
 		/** Price line from arrays (no DuckDB). Used when `table` is not given. */
 		price?: PriceLineInput;
-		/** Candles from OHLC arrays (no DuckDB). Used when `table` is not given. */
-		candles?: CandlesInput;
+		/**
+		 * Candles from OHLC arrays, or a price line with an `interval` to aggregate into bars (no
+		 * DuckDB). Used when `table` is not given.
+		 */
+		candles?: CandlesSource;
 		/** Named line series computed by your app (indicators). Works with `table` too. */
 		injectedSeries?: readonly InjectedSeries[];
 		/** Buy / sell / info events drawn on the chart. Works with `table` too. */

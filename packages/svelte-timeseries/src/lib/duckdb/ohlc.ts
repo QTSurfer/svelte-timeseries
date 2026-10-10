@@ -6,6 +6,16 @@ export type OHLCColumns = {
 };
 
 /**
+ * Candlestick built from the ticks of one price column instead of from bar columns: every bar is
+ * `FIRST` / `MAX` / `MIN` / `LAST` of `price` over a `resolution` bucket. Use it for tick or
+ * ticker data, where there are no per-bar OHLC columns.
+ */
+export type TickCandlestick = {
+	/** The price column to aggregate, for example a ticker's last price. */
+	price: string;
+};
+
+/**
  * Candlestick resolution string. Examples: '15s', '1m', '5m', '15m', '1h', '4h', '1d'.
  * Format: <number><unit> where unit is s (seconds), m (minutes), h (hours), d (days).
  * When omitted, raw tick data is returned without resampling.
@@ -70,4 +80,39 @@ export function resolutionToInterval(resolution: OHLCResolution): string {
 	};
 	const label = unitMap[unit];
 	return `${n} ${label}${Number(n) !== 1 ? 's' : ''}`;
+}
+
+/** Quote columns whose presence marks a ticker feed (see {@link isTickerSchema}). */
+const TICKER_QUOTE_COLUMNS = ['bid', 'ask'] as const;
+
+/**
+ * Whether the columns describe a ticker feed: a last price with best bid / ask quotes (`bid` and
+ * `ask`, case-insensitive). In such a feed `open`, `high` and `low` are statistics of a rolling
+ * window (24 hours for an exchange ticker), not the prices of one bar, so they must not be drawn
+ * as candles. Bar data (klines) has no quote columns. Decided from the schema alone.
+ */
+export function isTickerSchema(columns: readonly string[]): boolean {
+	const lowercased = new Set(columns.map((column) => column.toLowerCase()));
+	return TICKER_QUOTE_COLUMNS.every((column) => lowercased.has(column));
+}
+
+/**
+ * Names of the bar columns built from the ticks of `price`: the close keeps the price column's own
+ * name (markers aimed at it reach the candles), the others are derived and never clash with a
+ * column of the table (DuckDB compares column names case-insensitively).
+ */
+export function tickCandleColumns(price: string, existing: readonly string[]): OHLCColumns {
+	const taken = new Set([...existing, price].map((column) => column.toLowerCase()));
+	const derive = (role: string): string => {
+		let name = `${price}_${role}`;
+		while (taken.has(name.toLowerCase())) name += '_';
+		taken.add(name.toLowerCase());
+		return name;
+	};
+	return {
+		open: derive('open'),
+		high: derive('high'),
+		low: derive('low'),
+		close: price
+	};
 }

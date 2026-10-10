@@ -5,6 +5,7 @@ This file provides guidance to AI agents when working with code in this reposito
 ## Project Overview
 
 This is a monorepo containing two main packages:
+
 1. `@qtsurfer/svelte-timeseries` - Main Svelte component for time-series visualization
 2. `@qtsurfer/sveltecharts` - Chart integration layer for Svelte (ECharts + TradingView Lightweight Charts + Vela)
 
@@ -13,12 +14,14 @@ The project enables visualization of huge time-series datasets directly in the b
 ## Key Architecture Components
 
 ### Core Layers
+
 1. **DuckDB-WASM** - Runs SQL against Parquet files in the browser without backend
 2. **TimeSeriesFacade** - Coordinates DuckDB + chart builder (via `TimeSeriesChartAdapter`), handles incremental column loads
 3. **@qtsurfer/sveltecharts** - Svelte components and builders for ECharts, TradingView Lightweight Charts and Vela
 4. **SvelteKit** - Hosts the component and demo routes
 
 ### Chart Backends
+
 - **ECharts** (`SVECharts` + `TimeSeriesChartBuilder`) - Default backend; full-featured with built-in legend, tooltip, zoom slider
 - **TradingView Lightweight Charts** (`SVELightweightCharts` + `LightweightTimeSeriesChartBuilder`) - Performance-focused canvas renderer; custom Svelte tooltip, external legend required
 - **Vela** (`SVEVelaCharts` + `VelaTimeSeriesChartBuilder`, `@luxalgo/vela`) - Candlesticks only (`setDataset` throws); extra lines and JSON column markers go through an internal native-indicator overlay aligned to the bars; no injected series, injected markers or panes (its `capabilities` are all `false`)
@@ -27,6 +30,7 @@ The project enables visualization of huge time-series datasets directly in the b
 - `TimeSeriesChart` loads Vela on demand (dynamic import) so the other engines do not bundle it; `SvelteTimeSeries` imports it statically
 
 ### Main Entry Points
+
 - `packages/svelte-timeseries/src/lib/component/SvelteTimeSeries.svelte` - Main component (prop `chartLibrary` selects backend)
 - `packages/svelte-timeseries/src/lib/TimeSeriesFacade.ts` - Core coordination logic
 - `packages/svelte-timeseries/src/lib/duckdb/DuckDB.ts` - DuckDB wrapper
@@ -39,11 +43,13 @@ The project enables visualization of huge time-series datasets directly in the b
 ## Common Development Commands
 
 ### Installation
+
 ```bash
 pnpm ci:install
 ```
 
 ### Development
+
 ```bash
 # Start development server for svelte-timeseries
 pnpm dev:ts
@@ -51,11 +57,11 @@ pnpm dev:ts
 # Start development server for sveltecharts
 pnpm dev:charts
 
-# Run both in parallel
-pnpm dev
+# There is no combined script: run both in two terminals if you need both
 ```
 
 ### Building
+
 ```bash
 # Build all packages
 pnpm build
@@ -66,6 +72,7 @@ pnpm --filter @qtsurfer/sveltecharts build
 ```
 
 ### Testing & Quality
+
 ```bash
 # Run checks
 pnpm check
@@ -83,6 +90,7 @@ pnpm spellcheck
 `spellcheck` runs cSpell against `packages/**/src/**`. The project dictionary lives in `cspell-project-words.txt` at the repo root — add domain-specific words there rather than disabling cSpell inline.
 
 ### Publishing
+
 ```bash
 # Version packages
 pnpm changeset:version
@@ -94,11 +102,13 @@ pnpm changeset:publish
 ## Key Development Concepts
 
 ### Lazy Loading
+
 - Primary column loads initially
 - Additional columns download only when toggled on
 - Uses `toggleColumn()` method in TimeSeriesFacade
 
 ### Markers System
+
 - Two sources: the JSON column in Parquet (`addMarkerPoint`) and the `injectedMarkers` input (`setInjectedMarkers`, buy/sell/info, see below)
 - Icons guaranteed on every engine: `circle`, `square`, `arrowUp`, `arrowDown` (`none` or unset draws a circle); ECharts also draws `rect`, `roundRect`, `triangle`, `diamond` and `pin` (Lightweight: square, Vela: circle)
 - **ECharts**: rendered as `MarkPoint` symbols on data series; a JSON column marker keeps its own time and takes the value of the closest sample that has one, an injected marker without a price takes the bar at or before its time; injected markers live on a helper series per host series so the host can stay `silent`
@@ -109,21 +119,32 @@ pnpm changeset:publish
 - Customizable colors, positions (`aboveBar`, `belowBar`, `inBar`, and `atPrice*` when a price is given), and text labels
 
 ### Injected Series & Markers (arrays input)
+
 - Inputs: `price` / `candles` (arrays, no DuckDB), `injectedSeries`, `injectedMarkers`, `paneHeights`; same props on `TimeSeriesChart` (sveltecharts) and `SvelteTimeSeries`
 - Time unit is epoch **milliseconds** everywhere; values accept `number[]`, typed arrays and `null`/`NaN` gaps
 - Declarative and incremental: `setInjectedSeries` / `setInjectedMarkers` / `setPaneHeights` are optional members of `TimeSeriesChartAdapter`; the builder diffs by series name (array identity + length, never a value scan), so updates add/update/remove in place, never rebuild the chart and keep the visible range. Backends advertise support through the optional `capabilities` object
 - Panes: `InjectedSeries.pane` (0 = price pane) is mapped to consecutive panes. Lightweight Charts uses native panes (`paneIndex`, stretch factors); ECharts stacks grids (`buildPaneLayout`) and replaces the grid/axis components only when the pane count changes
-- Pure, unit-tested logic lives in `seriesInput.ts`, `injectedMarkers.ts`, `priceInput.ts` and `echartsInjected.ts`; builders only wire it to a chart instance
+- Pure, unit-tested logic lives in `seriesInput.ts`, `injectedMarkers.ts`, `priceInput.ts`, `candleAggregation.ts`, `pricePrecision.ts` and `echartsInjected.ts`; builders only wire it to a chart instance
 - Marker hover: Lightweight Charts resolves it from the crosshair (the bar under the cursor, binary search on sorted markers) through `chartHooks.ts`, which `SVELightweightCharts` reads; ECharts shows an overlay on `mouseover` of a mark point (its axis tooltip would otherwise take precedence)
 - `SvelteTimeSeries` loads DuckDB only for a non-empty `table` (dynamic import in `loadChart`, decision in `dataSource.ts`); arrays-only charts never start it. Keep it that way: no static value import of `DuckDB` in the component
 
+### Candles from ticks, ticker feeds
+
+- Arrays: `candles` takes OHLC arrays or `{ times, values, interval, volumes? }`; `aggregateCandles` (`candleAggregation.ts`, exported by both packages) is the pure aggregation, bucketing by epoch milliseconds (UTC), skipping empty buckets and non-finite ticks
+- Parquet / Lastra: an exchange ticker (OHLC-looking columns plus `bid` and `ask`, decided from the schema in `ohlc.ts`) keeps rolling 24-hour statistics in its `opn` / `hig` / `low`, so they are never read as bar prices: `DuckDBTimeSeries.resolveTickCandles` aggregates the price column in SQL (`candlestick: { price }` asks for the same), `resolveOHLC` returns nothing for such a table, and without a `resolution` the price is drawn as a line
+- A column toggled on top of resampled candles is fetched resampled (`TimeSeriesFacade.addDimension`), never as raw rows
+- `getPricePrecision` / `formatPreciseValue` ignore floating-point noise (values with 15 or more significant digits are rounded to the fewest decimals that equal them within a relative 1e-13)
+- `scripts/measure-performance.mjs` times both backends against the `/performance` route of the sveltecharts demo (production build, headless Chromium); the README Performance section holds its numbers
+
 ### Svelte & Runtime
+
 - **Svelte 5** (`^5.43.14`) with runes API (`$state`, `$derived`, `$effect`, etc.)
 - **ECharts 6** (`^6.0.0`)
 - **TradingView Lightweight Charts 5** (`^5.1.0`) — uses `createSeriesMarkers` plugin for marker rendering
 - Do NOT use legacy Svelte 4 reactive syntax (`$:`, `export let`, stores)
 
 ### Performance Features
+
 - Columnar data processing with Apache Arrow
 - ECharts sampling and progressive rendering
 - DuckDB query optimizations
@@ -204,11 +225,13 @@ When implementing a change:
 2. Implement modification
 3. Update demo routes if behavior changes
 4. Validate:
+
 ```bash
 pnpm check
 pnpm build
 pnpm spellcheck
 ```
+
 5. Verify:
 
 - Component renders correctly
@@ -277,23 +300,28 @@ Agents must ensure:
 ---
 
 ## Common Agent Tasks
+
 Add new column visualization:
+
 1. Extend TimeSeriesFacade toggle logic
 2. Extend both `TimeSeriesChartBuilder` and `LightweightTimeSeriesChartBuilder` series config
 3. Ensure lazy loading query
 4. Verify incremental chart update on both backends
 
 Add marker type:
+
 1. Extend marker schema
 2. Add renderer in both chart builders (ECharts MarkPoint + Lightweight createSeriesMarkers)
 3. Validate overlay rendering on both backends
 
 Extend injected series or markers:
+
 1. Change the pure logic first (`seriesInput.ts` / `injectedMarkers.ts`) and its tests
 2. Wire it in both builders; keep new `TimeSeriesChartAdapter` members optional and report them in `capabilities`
 3. Check `/injected` in both demo apps on both backends: chart not recreated on updates, visible range kept
 
 Modify query logic:
+
 1. Update DuckDB wrapper
 2. Preserve Arrow compatibility
 3. Maintain incremental data loading
@@ -303,6 +331,7 @@ Modify query logic:
 ## Decision Policy When Uncertain
 
 Prefer:
+
 - Minimal change
 - Architectural preservation
 - Performance safety
