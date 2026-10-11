@@ -1,5 +1,15 @@
 # @qtsurfer/sveltecharts
 
+## 0.17.0
+
+### Minor Changes
+
+- [#116](https://github.com/QTSurfer/svelte-timeseries/pull/116) [`ccaa518`](https://github.com/QTSurfer/svelte-timeseries/commit/ccaa518b6115ec69c0f7317ba57553f8f5d9a97c) Thanks [@mrmx](https://github.com/mrmx)! - Viewport API for the Lightweight Charts engine, and a fit-all that shows the whole range.
+  - `TimeSeriesChartAdapter` gains `onCrosshairMove`, `onVisibleRangeChange`, `setVisibleRange(fromMs, toMs)` and `fitContent()`. Lightweight Charts implements them; check the new `capabilities.crosshairEvents`, `capabilities.visibleRangeEvents` and `capabilities.viewport` flags before calling them. ECharts and Vela do not report these yet.
+  - `TimeSeriesChart` accepts `onCrosshairMove` and `onVisibleRangeChange` props, and a `resetView` prop: change its value to show all the data again, for example when a new run replaces the arrays under the same series name. New arrays alone keep the current view.
+  - Lightweight Charts accepts a bar spacing down to 0.001 px, so `fitContent` shows a dense series (100k ticks over 14 hours) in full. A new dataset passed to `setDataset` also resets the view to all of it.
+  - New exported types: `CrosshairMoveEvent` and `TimeRangeMs`.
+
 ## 0.16.0
 
 ### Minor Changes
