@@ -3,6 +3,7 @@
 	// of N points and exposes `window.__perf` so a script can time a mount and the updates after it.
 	import { tick } from 'svelte';
 	import { TimeSeriesChart } from '$lib';
+	import DemoNav from '../DemoNav.svelte';
 	import type { InjectedSeries, PriceLineInput, TimeSeriesChartAdapter } from '$lib';
 
 	type Backend = 'lightweight' | 'echarts';
@@ -143,7 +144,110 @@
 		gc: collect
 	};
 	(globalThis as unknown as { __perf: typeof api }).__perf = api;
+
+	// A panel for trying the same calls by hand. The script uses `window.__perf` directly.
+	const SIZES = [10_000, 50_000, 100_000, 250_000];
+	let chosenBackend = $state<Backend>('lightweight');
+	let points = $state(100_000);
+	let mountedPoints = $state(0);
+	let busy = $state(false);
+	let log = $state<string[]>([]);
+
+	type Result = { created?: number; apply?: number; paint: number; allocated: number | null };
+	const ms = (value: number) => `${value.toFixed(1)} ms`;
+	const describe = ({ created, apply, paint, allocated }: Result) =>
+		[
+			created === undefined ? undefined : `created ${ms(created)}`,
+			apply === undefined ? undefined : `apply ${ms(apply)}`,
+			`paint ${ms(paint)}`,
+			allocated === null ? undefined : `allocated ${(allocated / 1_048_576).toFixed(1)} MB`
+		]
+			.filter(Boolean)
+			.join(', ');
+
+	async function run(label: string, action: () => Promise<Result | void>) {
+		busy = true;
+		try {
+			const result = await action();
+			log = [`${label}: ${result ? describe(result) : 'done'}`, ...log].slice(0, 12);
+		} finally {
+			busy = false;
+		}
+	}
+
+	const mount = () =>
+		run(`mount ${chosenBackend} ${points.toLocaleString()} points`, async () => {
+			// As the script does: a new chart starts from nothing, so the time is the cost of a mount.
+			if (mounted) await api.unmount();
+			const result = await api.mount(chosenBackend, points);
+			mountedPoints = points;
+			return result;
+		});
+	const unmount = () =>
+		run('unmount', async () => {
+			await api.unmount();
+			mountedPoints = 0;
+		});
 </script>
+
+<DemoNav current="/performance" />
+
+<div class="panel" data-testid="panel">
+	<p>
+		Times how long a chart takes to draw a price of N points and to apply updates after it. Pick a
+		backend and a size, press <b>Mount</b>, then try the updates.
+		<code>scripts/measure-performance.mjs</code>
+		drives the same calls through <code>window.__perf</code>. The allocated heap needs Chrome
+		started with <code>--enable-precise-memory-info</code> and <code>--expose-gc</code>, as the
+		script does; otherwise it reads 0.
+	</p>
+	<div class="controls">
+		<label>
+			Backend
+			<select data-testid="backend" bind:value={chosenBackend} disabled={busy}>
+				<option value="lightweight">Lightweight Charts</option>
+				<option value="echarts">ECharts</option>
+			</select>
+		</label>
+		<label>
+			Points
+			<select data-testid="points" bind:value={points} disabled={busy}>
+				{#each SIZES as size (size)}
+					<option value={size}>{size.toLocaleString()}</option>
+				{/each}
+			</select>
+		</label>
+		<button data-testid="mount" onclick={mount} disabled={busy}>Mount</button>
+		<button data-testid="unmount" onclick={unmount} disabled={busy || !mounted}>Unmount</button>
+		<span class="separator"></span>
+		<button
+			data-testid="add-series"
+			onclick={() => run('add series', () => api.addSeries(mountedPoints))}
+			disabled={busy || !mounted}>Add series</button
+		>
+		<button
+			data-testid="replace-series"
+			onclick={() =>
+				run('replace series', () => api.replaceSeries(mountedPoints, Date.now() % 1000))}
+			disabled={busy || !mounted}>Replace series</button
+		>
+		<button
+			data-testid="remove-series"
+			onclick={() => run('remove series', () => api.removeSeries())}
+			disabled={busy || !mounted}>Remove series</button
+		>
+		<button
+			data-testid="append"
+			onclick={() => run('append 1,000 points', () => api.append(mountedPoints, 1000))}
+			disabled={busy || !mounted}>Append 1,000 points</button
+		>
+	</div>
+	<ul class="log" data-testid="log">
+		{#each log as line, i (i)}
+			<li>{line}</li>
+		{/each}
+	</ul>
+</div>
 
 <div style="width: 1200px; height: 600px">
 	{#if mounted}
@@ -161,3 +265,56 @@
 		/>
 	{/if}
 </div>
+
+<style>
+	.panel {
+		max-width: 1200px;
+		margin-bottom: 1rem;
+		font-size: 0.9375rem;
+	}
+
+	.panel p {
+		margin-bottom: 0.75rem;
+		color: #475569;
+	}
+
+	.controls {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+	}
+
+	.controls label {
+		display: inline-flex;
+		gap: 0.375rem;
+		align-items: center;
+	}
+
+	.controls button,
+	.controls select {
+		border: 1px solid #cbd5e1;
+		border-radius: 6px;
+		padding: 0.25rem 0.75rem;
+		background: white;
+	}
+
+	.controls button:disabled,
+	.controls select:disabled {
+		opacity: 0.5;
+	}
+
+	.separator {
+		width: 1px;
+		height: 1.5rem;
+		background: #cbd5e1;
+	}
+
+	.log {
+		margin-top: 0.75rem;
+		min-height: 2.5rem;
+		font-variant-numeric: tabular-nums;
+		font-size: 0.8125rem;
+		color: #0f172a;
+	}
+</style>

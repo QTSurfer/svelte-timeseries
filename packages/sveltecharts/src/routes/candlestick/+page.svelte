@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DemoNav from '../DemoNav.svelte';
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { LightweightTimeSeriesChartBuilder } from '$lib/LightweightTimeSeriesChartBuilder';
 	import { VelaTimeSeriesChartBuilder } from '$lib/VelaTimeSeriesChartBuilder';
@@ -152,6 +153,7 @@
 </script>
 
 <main>
+	<DemoNav current="/candlestick" />
 	<h1>Candlestick demo</h1>
 
 	<p class="note">

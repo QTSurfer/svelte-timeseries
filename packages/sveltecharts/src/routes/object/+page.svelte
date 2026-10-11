@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DemoNav from '../DemoNav.svelte';
 	import { SVECharts, type ECharts } from '$lib';
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
@@ -44,6 +45,7 @@
 </script>
 
 <main>
+	<DemoNav current="/object" />
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">

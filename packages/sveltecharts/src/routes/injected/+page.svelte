@@ -1,11 +1,17 @@
 <script lang="ts">
+	import DemoNav from '../DemoNav.svelte';
 	import { TimeSeriesChart } from '$lib';
 	import type {
 		CandleInterval,
 		CandlesSource,
+		CrosshairMoveEvent,
 		InjectedMarker,
 		InjectedSeries,
+		LegendItem,
+		LightweightChartOptions,
+		LightweightDeepPartial,
 		PriceLineInput,
+		TimeRangeMs,
 		TimeSeriesChartAdapter
 	} from '$lib';
 	import { createDemoData, createTicks, ema as computeEma } from './demoData';
@@ -15,7 +21,10 @@
 
 	// Bars are generated up front; "Append bars" reveals more of them, so the arrays handed to the
 	// chart are replaced (never mutated) and the chart updates in place.
-	const demo = createDemoData(900);
+	// "New run" replaces the data under the same series names: with `resetView` the chart shows all
+	// of it again instead of keeping the old view.
+	let run = $state(0);
+	const demo = $derived(createDemoData(900, 60_000, 7 + run));
 	let visibleBars = $state(600);
 	// An hour of one-second ticks, aggregated into bars of the chosen length.
 	const ticks = createTicks();
@@ -26,6 +35,46 @@
 	let showSma = $state(false);
 	let emaDashed = $state(false);
 	let showMarkers = $state(true);
+
+	// Options of the chart itself (see the "Options" row of the toolbar).
+	let markerSize = $state(1);
+	let hoverTolerance = $state(4);
+	let axisLabels = $state(true);
+	let hideRsi = $state(false);
+	let collapseEmptyPanes = $state(false);
+	let decimals = $state('auto');
+	let background = $state<'default' | 'dark' | 'sepia'>('default');
+
+	const priceDecimals = $derived(decimals === 'auto' ? undefined : Number(decimals));
+	const BACKGROUNDS: Record<string, LightweightDeepPartial<LightweightChartOptions> | undefined> = {
+		default: undefined,
+		dark: {
+			layout: { background: { color: '#0b1020' }, textColor: '#e2e8f0' },
+			grid: {
+				vertLines: { color: 'rgba(148, 163, 184, 0.12)' },
+				horzLines: { color: 'rgba(148, 163, 184, 0.12)' }
+			}
+		} as LightweightDeepPartial<LightweightChartOptions>,
+		sepia: {
+			layout: { background: { color: '#f5ecd9' }, textColor: '#3b2f1e' }
+		} as LightweightDeepPartial<LightweightChartOptions>
+	};
+	const lightweightOptions = $derived(BACKGROUNDS[background]);
+
+	// What the Lightweight chart reports: crosshair, visible range and the series for a legend.
+	let crosshair = $state('');
+	let visibleRange = $state('');
+	let legend = $state<LegendItem[]>([]);
+	const clock = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+	function onCrosshairMove(event: CrosshairMoveEvent) {
+		crosshair =
+			event.time === undefined
+				? ''
+				: `${clock(event.time)}  ${event.price === undefined ? '-' : event.price.toFixed(3)}`;
+	}
+	function onVisibleRangeChange(range: TimeRangeMs) {
+		visibleRange = `${clock(range.from)} - ${clock(range.to)}`;
+	}
 
 	// Charts created, per backend: it must stay at 1 however the inputs change.
 	let created = $state({ lightweight: 0, echarts: 0 });
@@ -64,7 +113,9 @@
 				values: slice(demo.ema),
 				color: '#f59e0b',
 				lineWidth: 2,
-				lineStyle: emaDashed ? 'dashed' : 'solid'
+				lineStyle: emaDashed ? 'dashed' : 'solid',
+				lastValueVisible: axisLabels,
+				priceLineVisible: axisLabels
 			});
 		}
 		if (showSma) {
@@ -73,22 +124,40 @@
 				times,
 				values: computeEma(close, 60),
 				color: '#8b5cf6',
-				lineStyle: 'dotted'
+				lineStyle: 'dotted',
+				lastValueVisible: axisLabels,
+				priceLineVisible: axisLabels
 			});
 		}
 		if (showRsi) {
-			list.push({ name: 'RSI 14', times, values: slice(demo.rsi), color: '#06b6d4', pane: 1 });
+			list.push({
+				name: 'RSI 14',
+				times,
+				values: slice(demo.rsi),
+				color: '#06b6d4',
+				pane: 1,
+				visible: !hideRsi,
+				lastValueVisible: axisLabels,
+				priceLineVisible: axisLabels
+			});
 		}
 		return list;
 	});
 
 	const markers = $derived<InjectedMarker[]>(
 		showMarkers && mode !== 'ticks'
-			? demo.markers.filter((marker) => marker.time <= times[times.length - 1])
+			? demo.markers
+					.filter((marker) => marker.time <= times[times.length - 1])
+					.map((marker) => ({ ...marker, size: markerSize }))
 			: []
 	);
 
 	const adapters: Partial<Record<'lightweight' | 'echarts', TimeSeriesChartAdapter>> = {};
+	function lastQuarter() {
+		const [first, last] = adapters.lightweight?.getRangeValues() ?? [0, 0];
+		adapters.lightweight?.setVisibleRange?.(first + (last - first) * 0.75, last);
+	}
+
 	function ready(kind: 'lightweight' | 'echarts', adapter: TimeSeriesChartAdapter) {
 		adapters[kind] = adapter;
 		created[kind] += 1;
@@ -98,6 +167,7 @@
 </script>
 
 <main>
+	<DemoNav current="/injected" />
 	<h1>Price data from arrays, injected series and markers</h1>
 	<div class="toolbar">
 		<button
@@ -136,9 +206,80 @@
 		</span>
 	</div>
 
+	<div class="toolbar" data-testid="options">
+		<strong>Options</strong>
+		<label>
+			Marker size
+			<select data-testid="marker-size" bind:value={markerSize}>
+				<option value={1}>1 (default)</option>
+				<option value={2}>2</option>
+				<option value={3}>3</option>
+			</select>
+		</label>
+		<label>
+			Hover tolerance (Lightweight)
+			<select data-testid="hover-tolerance" bind:value={hoverTolerance}>
+				<option value={0}>0 px</option>
+				<option value={4}>4 px (default)</option>
+				<option value={12}>12 px</option>
+				<option value={24}>24 px</option>
+			</select>
+		</label>
+		<label>
+			Price decimals (Lightweight)
+			<select data-testid="decimals" bind:value={decimals}>
+				<option value="auto">Auto</option>
+				<option value="0">0</option>
+				<option value="2">2</option>
+				<option value="4">4</option>
+				<option value="8">8</option>
+			</select>
+		</label>
+		<label>
+			Background (Lightweight)
+			<select data-testid="background" bind:value={background}>
+				<option value="default">Default</option>
+				<option value="dark">Dark</option>
+				<option value="sepia">Sepia</option>
+			</select>
+		</label>
+		<label>
+			<input data-testid="axis-labels" type="checkbox" bind:checked={axisLabels} />
+			Last value on the axis (Lightweight)
+		</label>
+		<label>
+			<input data-testid="hide-rsi" type="checkbox" bind:checked={hideRsi} />
+			Hide RSI (keep its pane)
+		</label>
+		<label>
+			<input data-testid="collapse-panes" type="checkbox" bind:checked={collapseEmptyPanes} />
+			Collapse empty panes
+		</label>
+	</div>
+
+	<div class="toolbar" data-testid="view">
+		<strong>View</strong>
+		<button data-testid="fit" onclick={() => adapters.lightweight?.fitContent?.()}>Fit all</button>
+		<button data-testid="last-quarter" onclick={lastQuarter}>Last quarter</button>
+		<button data-testid="new-run" onclick={() => (run += 1)}>New run (reset view)</button>
+		<span class="readout" data-testid="crosshair">crosshair: {crosshair || '-'}</span>
+		<span class="readout" data-testid="visible-range">visible: {visibleRange || '-'}</span>
+	</div>
+
 	<div class="charts-container">
 		<div class="chart" data-testid="chart-lightweight">
 			<h2>Lightweight Charts</h2>
+			<div class="legend" data-testid="legend">
+				{#each legend as item (item.name)}
+					<button
+						class:off={!item.visible}
+						onclick={() => adapters.lightweight?.toggleLegend(item.name)}
+					>
+						<span class="dot" style:background={item.color}></span>
+						{item.name}
+					</button>
+				{/each}
+			</div>
 			<div class="chart-wrapper">
 				<TimeSeriesChart
 					chartLibrary="lightweight"
@@ -146,6 +287,14 @@
 					{candles}
 					injectedSeries={series}
 					injectedMarkers={markers}
+					markerHoverTolerance={hoverTolerance}
+					{priceDecimals}
+					{lightweightOptions}
+					{collapseEmptyPanes}
+					resetView={run}
+					{onCrosshairMove}
+					{onVisibleRangeChange}
+					onLegendChange={(items) => (legend = items)}
 					onChartReady={(adapter) => ready('lightweight', adapter)}
 				/>
 			</div>
@@ -160,6 +309,8 @@
 					{candles}
 					injectedSeries={series}
 					injectedMarkers={markers}
+					{collapseEmptyPanes}
+					resetView={run}
 					onChartReady={(adapter) => ready('echarts', adapter)}
 				/>
 			</div>
@@ -193,11 +344,49 @@
 		margin-bottom: 1rem;
 	}
 
-	.toolbar button {
+	.toolbar button,
+	.toolbar select {
 		border: 1px solid #cbd5e1;
 		border-radius: 6px;
 		padding: 0.25rem 0.75rem;
 		background: white;
+	}
+
+	.readout {
+		font-variant-numeric: tabular-nums;
+		color: #475569;
+		font-size: 0.875rem;
+	}
+
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0 1rem 0.5rem;
+		min-height: 1.5rem;
+	}
+
+	.legend button {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		border: 1px solid #cbd5e1;
+		border-radius: 999px;
+		padding: 0.125rem 0.625rem;
+		font-size: 0.8125rem;
+		background: white;
+	}
+
+	.legend button.off {
+		opacity: 0.45;
+		text-decoration: line-through;
+	}
+
+	.dot {
+		width: 0.625rem;
+		height: 0.625rem;
+		border-radius: 50%;
+		display: inline-block;
 	}
 
 	.charts-container {

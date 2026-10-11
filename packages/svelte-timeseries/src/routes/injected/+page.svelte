@@ -39,6 +39,9 @@
 	let showEma = $state(true);
 	let showRsi = $state(true);
 	let showMarkers = $state(true);
+	// Look of the injected input (data-level options of the library).
+	let markerSize = $state(1);
+	let axisLabels = $state(true);
 
 	// Chart instances created, so an update can be told apart from a rebuild.
 	let created = $state(0);
@@ -87,11 +90,16 @@
 	const toggled = (keys: string[], key: string) =>
 		keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key];
 	const visibleSeries = (list: InjectedSeries[]) =>
-		list.map((series) =>
-			hiddenSeries.includes(series.name) ? { ...series, visible: false } : series
-		);
+		list.map((series) => ({
+			...series,
+			visible: !hiddenSeries.includes(series.name),
+			lastValueVisible: axisLabels,
+			priceLineVisible: axisLabels
+		}));
 	const visibleMarkers = (list: InjectedMarker[]) =>
-		list.filter((marker) => !hiddenMarkers.includes(markerKey(marker)));
+		list
+			.filter((marker) => !hiddenMarkers.includes(markerKey(marker)))
+			.map((marker) => ({ ...marker, size: markerSize }));
 
 	// Parquet scenario: a file drives the chart and the app adds what it computes from that data.
 	const TABLE = 'temps_mini';
@@ -195,6 +203,29 @@
 					<option value="vela">Vela (candles only)</option>
 				</select>
 			</label>
+
+			{#if scenario !== 'ticks'}
+				<label class="form-control flex w-full max-w-40 flex-col">
+					<div class="label pb-1">
+						<span class="label-text font-semibold">Marker size</span>
+					</div>
+					<select class="select select-bordered" data-testid="marker-size" bind:value={markerSize}>
+						<option value={1}>1 (default)</option>
+						<option value={2}>2</option>
+						<option value={3}>3</option>
+					</select>
+				</label>
+
+				<label class="flex items-center gap-2 pb-3">
+					<input
+						type="checkbox"
+						class="checkbox checkbox-primary"
+						data-testid="axis-labels"
+						bind:checked={axisLabels}
+					/>
+					<span class="label-text font-semibold">Last value on the axis (Lightweight)</span>
+				</label>
+			{/if}
 
 			{#if scenario === 'ticks'}
 				<label class="form-control flex w-full max-w-40 flex-col">
