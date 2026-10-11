@@ -68,7 +68,26 @@ export type ChartCapabilities = {
 	injectedMarkers?: boolean;
 	/** Markers show their text on hover. */
 	markerTooltip?: boolean;
+	/** `onCrosshairMove` reports the crosshair position (time, price, pixel point). */
+	crosshairEvents?: boolean;
+	/** `onVisibleRangeChange` reports the visible time range when it changes. */
+	visibleRangeEvents?: boolean;
+	/** `setVisibleRange` and `fitContent` move the view to a time range or to all the data. */
+	viewport?: boolean;
 };
+
+/** Crosshair position, reported by `onCrosshairMove`. Fields are absent when the cursor leaves the chart. */
+export type CrosshairMoveEvent = {
+	/** Epoch milliseconds of the bar under the cursor. */
+	time?: number;
+	/** Value of the first series that has one at that bar (the close of a candle). */
+	price?: number;
+	/** Cursor position in pixels, relative to the chart's top-left corner. */
+	point?: { x: number; y: number };
+};
+
+/** Visible time range in epoch milliseconds. */
+export type TimeRangeMs = { from: number; to: number };
 
 export interface TimeSeriesChartAdapter {
 	/**
@@ -108,4 +127,18 @@ export interface TimeSeriesChartAdapter {
 	 * Unlisted panes get `1`, the price pane `3`.
 	 */
 	setPaneHeights?(heights: Readonly<Record<number, number>>): this;
+	/**
+	 * Calls `handler` on every crosshair move. Returns the function that removes the handler. Check
+	 * `capabilities.crosshairEvents` first.
+	 */
+	onCrosshairMove?(handler: (event: CrosshairMoveEvent) => void): () => void;
+	/**
+	 * Calls `handler` when the visible time range changes. Returns the function that removes the
+	 * handler. Check `capabilities.visibleRangeEvents` first.
+	 */
+	onVisibleRangeChange?(handler: (range: TimeRangeMs) => void): () => void;
+	/** Shows the time range `[fromMs, toMs]` (epoch milliseconds). Check `capabilities.viewport` first. */
+	setVisibleRange?(fromMs: number, toMs: number): this;
+	/** Shows all the data. Check `capabilities.viewport` first. */
+	fitContent?(): this;
 }

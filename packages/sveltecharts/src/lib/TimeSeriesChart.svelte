@@ -14,7 +14,7 @@
 	import SVELightweightCharts from './SVELightweightCharts.svelte';
 	import { TimeSeriesChartBuilder } from './TimeSeriesChartBuilder';
 	import { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';
-	import type { TimeSeriesChartAdapter } from './chartAdapter';
+	import type { CrosshairMoveEvent, TimeRangeMs, TimeSeriesChartAdapter } from './chartAdapter';
 	import { describeUnsupportedInput } from './inputSupport';
 	import type { ECharts, LightweightChartApi, VelaChartApi } from './types';
 	import type { InjectedMarker } from './injectedMarkers';
@@ -37,7 +37,10 @@
 		paneHeights,
 		externalManagerLegend = false,
 		isDark = false,
-		onChartReady
+		resetView,
+		onChartReady,
+		onCrosshairMove,
+		onVisibleRangeChange
 	}: {
 		/** Chart backend. Default `'echarts'`. `'vela'` draws candles only. */
 		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
@@ -54,8 +57,21 @@
 		/** ECharts only: hide the built-in legend (default `false`, the legend toggles series). */
 		externalManagerLegend?: boolean;
 		isDark?: boolean;
+		/**
+		 * Change this value to show all the data again, for example when a new run replaces the arrays
+		 * under the same series name. New arrays alone keep the current view, so live updates do not
+		 * jump. Any value works: the chart compares it with the previous one.
+		 */
+		resetView?: unknown;
 		/** Called once the chart exists and its price data is drawn, with the adapter for anything else. */
 		onChartReady?: (adapter: TimeSeriesChartAdapter) => void;
+		/**
+		 * Crosshair moves: the bar time, its price and the pixel point. Lightweight only; the other
+		 * engines do not report it (see `capabilities.crosshairEvents`).
+		 */
+		onCrosshairMove?: (event: CrosshairMoveEvent) => void;
+		/** Visible time range changes, in epoch milliseconds. Lightweight only. */
+		onVisibleRangeChange?: (range: TimeRangeMs) => void;
 	} = $props();
 
 	// The chart is rebuilt only when the kind of price data changes (line <-> candles, or another
@@ -66,6 +82,7 @@
 	/** Why the price input cannot be drawn by this engine, shown instead of an empty chart. */
 	let rejection = $state('');
 	let applied: ResolvedPriceData | undefined;
+	let appliedReset: unknown;
 	let announced = false;
 	const reported: Record<string, true> = {};
 
@@ -128,14 +145,40 @@
 			return;
 		}
 		rejection = '';
+		const reset = resetView !== appliedReset;
 		const outcome = applyPriceData(target.adapter, data, applied);
 		// Vela fits itself to its data; moving it before its data has landed leaves the chart blank.
-		if (outcome === 'created' && chartLibrary !== 'vela') showAll(target);
+		if ((outcome === 'created' || reset) && chartLibrary !== 'vela') showAll(target);
 		applied = data;
+		appliedReset = resetView;
 		if (!announced) {
 			announced = true;
 			onChartReady?.(target.adapter);
 		}
+	});
+
+	$effect(() => {
+		const target = ready;
+		if (!target || target.key !== chartKey || !onCrosshairMove) return;
+		if (!target.adapter.capabilities?.crosshairEvents) {
+			report([
+				`chartLibrary="${chartLibrary}" does not report crosshair moves: onCrosshairMove is never called.`
+			]);
+			return;
+		}
+		return target.adapter.onCrosshairMove?.((event) => onCrosshairMove?.(event));
+	});
+
+	$effect(() => {
+		const target = ready;
+		if (!target || target.key !== chartKey || !onVisibleRangeChange) return;
+		if (!target.adapter.capabilities?.visibleRangeEvents) {
+			report([
+				`chartLibrary="${chartLibrary}" does not report visible range changes: onVisibleRangeChange is never called.`
+			]);
+			return;
+		}
+		return target.adapter.onVisibleRangeChange?.((range) => onVisibleRangeChange?.(range));
 	});
 
 	$effect(() => {
