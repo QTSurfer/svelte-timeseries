@@ -201,12 +201,13 @@ export function buildMarkPointItem(group: MarkerGroup, index: number, y: number,
 			}
 		: { show: false };
 
+	const size = MARKER_SYMBOL_SIZE * (group.size ?? 1);
 	return {
 		name: `${INJECTED_MARK_PREFIX}${index}`,
 		coord: [group.timeMs, y],
 		symbol: markerSymbol(group.shape),
-		symbolSize: MARKER_SYMBOL_SIZE,
-		symbolOffset: markerOffset(group.position, MARKER_SYMBOL_SIZE, stack),
+		symbolSize: size,
+		symbolOffset: markerOffset(group.position, size, stack),
 		itemStyle: { color: group.color },
 		label,
 		// Read back on hover (custom fields survive in the event's `data`).

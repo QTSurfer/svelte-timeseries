@@ -7,9 +7,11 @@ export type {
 	ChartDataValue,
 	ChartDatasetFormatSimpleObject,
 	CrosshairMoveEvent,
+	LegendItem,
 	TimeRangeMs,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
+export { mergeChartOptions } from './chartOptions';
 export { describeUnsupportedInput } from './inputSupport';
 export type { InjectedInput } from './inputSupport';
 export { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';

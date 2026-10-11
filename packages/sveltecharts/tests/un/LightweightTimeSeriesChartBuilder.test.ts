@@ -7,9 +7,11 @@ import {
 import { createSeriesMarkers } from 'lightweight-charts';
 
 function createMockSeries() {
+	const options: Record<string, unknown> = { visible: true };
 	return {
 		setData: vi.fn(),
-		applyOptions: vi.fn()
+		applyOptions: vi.fn((next: Record<string, unknown>) => Object.assign(options, next)),
+		options: vi.fn(() => options)
 	};
 }
 
@@ -21,12 +23,14 @@ function createMockChart() {
 		setVisibleLogicalRange: vi.fn(),
 		setVisibleRange: vi.fn(),
 		fitContent: vi.fn(),
+		timeToIndex: vi.fn((_time: number, _findNearest?: boolean): number | null => 0),
 		subscribeVisibleTimeRangeChange: vi.fn(),
 		unsubscribeVisibleTimeRangeChange: vi.fn()
 	};
 
 	return {
-		addSeries: vi.fn(() => createMockSeries()),
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		addSeries: vi.fn((_definition?: unknown, _options?: any) => createMockSeries()),
 		removeSeries: vi.fn(),
 		applyOptions: vi.fn(),
 		subscribeCrosshairMove: vi.fn(),
@@ -587,5 +591,155 @@ describe('LightweightTimeSeriesChartBuilder viewport API', () => {
 			visibleRangeEvents: true,
 			viewport: true
 		});
+	});
+});
+
+describe('LightweightTimeSeriesChartBuilder price decimals', () => {
+	let chart: ReturnType<typeof createMockChart>;
+	let builder: LightweightTimeSeriesChartBuilder;
+	const noisy = { _ts: [1000, 2000, 3000], price: [48000, 48000.5, 48000.123456789] };
+	const precisionOfLine = () => {
+		const series = chart.addSeries.mock.results[0].value;
+		return series.applyOptions.mock.calls
+			.map((call: unknown[]) => (call[0] as { priceFormat?: { precision: number } }).priceFormat)
+			.filter(Boolean)
+			.at(-1)?.precision;
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		chart = createMockChart();
+	});
+
+	it('follows the data by default, so one long value widens the axis', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never);
+		builder.setDataset(noisy);
+		expect(chart.addSeries.mock.calls[0][1].priceFormat.precision).toBe(9);
+	});
+
+	it('uses the fixed decimals from the options', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never, { priceDecimals: 2 });
+		builder.setDataset(noisy);
+		expect(chart.addSeries.mock.calls[0][1].priceFormat).toEqual({
+			type: 'price',
+			precision: 2,
+			minMove: 0.01
+		});
+	});
+
+	it('changes the decimals of a drawn series and gives them back to the data', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never);
+		builder.setDataset(noisy);
+		builder.setPriceDecimals(1);
+		expect(precisionOfLine()).toBe(1);
+		builder.setPriceDecimals(undefined);
+		expect(precisionOfLine()).toBe(9);
+	});
+
+	it('applies the fixed decimals to candles and keeps them within 0 to 16', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never, { priceDecimals: 99 });
+		builder.setCandlestickSeries(
+			{ _ts: [1000, 2000], open: [1.123456, 2], high: [3, 4], low: [0.5, 1], close: [2, 3] },
+			{ open: 'open', high: 'high', low: 'low', close: 'close' }
+		);
+		expect(chart.addSeries.mock.calls[0][1].priceFormat.precision).toBe(16);
+		builder.setPriceDecimals(-3);
+		const candles = chart.addSeries.mock.results[0].value;
+		expect(candles.applyOptions).toHaveBeenLastCalledWith({
+			priceFormat: { type: 'price', precision: 0, minMove: 1 }
+		});
+	});
+});
+
+describe('LightweightTimeSeriesChartBuilder price decimals', () => {
+	let chart: ReturnType<typeof createMockChart>;
+	let builder: LightweightTimeSeriesChartBuilder;
+	const noisy = { _ts: [1000, 2000, 3000], price: [48000, 48000.5, 48000.123456789] };
+	const lastPrecision = () => {
+		const series = chart.addSeries.mock.results[0].value;
+		return series.applyOptions.mock.calls
+			.map((call: unknown[]) => (call[0] as { priceFormat?: { precision: number } }).priceFormat)
+			.filter(Boolean)
+			.at(-1)?.precision;
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		chart = createMockChart();
+	});
+
+	it('follows the data by default, so one long value widens the axis', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never);
+		builder.setDataset(noisy);
+		expect(chart.addSeries.mock.calls[0][1].priceFormat.precision).toBe(9);
+	});
+
+	it('uses the fixed decimals from the options', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never, { priceDecimals: 2 });
+		builder.setDataset(noisy);
+		expect(chart.addSeries.mock.calls[0][1].priceFormat).toEqual({
+			type: 'price',
+			precision: 2,
+			minMove: 0.01
+		});
+	});
+
+	it('changes the decimals of a drawn series and gives them back to the data', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never);
+		builder.setDataset(noisy);
+		builder.setPriceDecimals(1);
+		expect(lastPrecision()).toBe(1);
+		builder.setPriceDecimals(undefined);
+		expect(lastPrecision()).toBe(9);
+	});
+
+	it('applies the fixed decimals to candles and keeps them within 0 to 16', () => {
+		builder = new LightweightTimeSeriesChartBuilder(chart as never, { priceDecimals: 99 });
+		builder.setCandlestickSeries(
+			{ _ts: [1000, 2000], open: [1.123456, 2], high: [3, 4], low: [0.5, 1], close: [2, 3] },
+			{ open: 'open', high: 'high', low: 'low', close: 'close' }
+		);
+		expect(chart.addSeries.mock.calls[0][1].priceFormat.precision).toBe(16);
+		builder.setPriceDecimals(-3);
+		const candles = chart.addSeries.mock.results[0].value;
+		expect(candles.applyOptions).toHaveBeenLastCalledWith({
+			priceFormat: { type: 'price', precision: 0, minMove: 1 }
+		});
+	});
+});
+
+describe('LightweightTimeSeriesChartBuilder legend items', () => {
+	let chart: ReturnType<typeof createMockChart>;
+	let builder: LightweightTimeSeriesChartBuilder;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		chart = createMockChart();
+		builder = new LightweightTimeSeriesChartBuilder(chart as never);
+	});
+
+	it('advertises the legend capability', () => {
+		expect(builder.capabilities.legend).toBe(true);
+	});
+
+	it('lists the series with their color and visibility, and tells the handler at once', () => {
+		builder.setDataset({ _ts: [1000, 2000], price: [1, 2] });
+		const handler = vi.fn();
+		builder.onLegendChange(handler);
+
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(handler.mock.calls[0][0]).toEqual([
+			expect.objectContaining({ name: 'price', visible: true })
+		]);
+	});
+
+	it('stops calling a handler that was removed', () => {
+		builder.setDataset({ _ts: [1000, 2000], price: [1, 2] });
+		const handler = vi.fn();
+		const stop = builder.onLegendChange(handler);
+		handler.mockClear();
+		stop();
+		builder.toggleLegend('price');
+		expect(handler).not.toHaveBeenCalled();
 	});
 });

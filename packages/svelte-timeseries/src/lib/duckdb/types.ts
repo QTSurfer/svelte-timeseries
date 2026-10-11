@@ -91,7 +91,12 @@ export type DuckDBType =
 	| 'BLOB'
 	| 'JSON';
 
-export type TargetType = DuckDBType | `TIMESTAMP(${EpochUnit})`;
+/**
+ * `'TIMESTAMPTZ'` is a source column of type `TIMESTAMP WITH TIME ZONE`, exposed as a plain
+ * `TIMESTAMP` holding the UTC time: window bounds are built with `epoch_ms()`, which is a plain
+ * `TIMESTAMP`, and comparing the two would shift the window by the session's time zone.
+ */
+export type TargetType = DuckDBType | 'TIMESTAMPTZ' | `TIMESTAMP(${EpochUnit})`;
 
 export interface DataRange {
 	start: number;

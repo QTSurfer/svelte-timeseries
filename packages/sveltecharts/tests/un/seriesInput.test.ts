@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+	COLLAPSED_PANE_RATIO,
 	defaultInjectedColor,
 	diffInjectedSeries,
+	emptyPanes,
 	hasGaps,
 	lineStyleToLightweight,
 	lineWidthToLightweight,
@@ -231,5 +233,48 @@ describe('panes', () => {
 
 	it('applies configured heights by pane number and ignores invalid ones', () => {
 		expect(resolvePaneRatios({ 0: 2, 1: 2, 4: -1 }, [1, 4], true)).toEqual([2, 2, 1]);
+		expect(resolvePaneRatios({ 1: 5 }, [1, 2], true, new Set([1]))).toEqual([
+			3,
+			COLLAPSED_PANE_RATIO,
+			1
+		]);
+	});
+});
+
+describe('emptyPanes', () => {
+	it('lists the panes whose series are all hidden, never the price pane', () => {
+		const panes = emptyPanes([
+			{ pane: 0, visible: false },
+			{ pane: 1, visible: false },
+			{ pane: 2, visible: false },
+			{ pane: 2, visible: true },
+			{ pane: 3, visible: false },
+			{ pane: 3, visible: false }
+		]);
+		expect([...panes].sort()).toEqual([1, 3]);
+	});
+
+	it('finds nothing when no series is given', () => {
+		expect(emptyPanes([]).size).toBe(0);
+	});
+});
+
+describe('lastValueVisible and priceLineVisible', () => {
+	const base = { name: 'a', times: [1], values: [1] };
+
+	it('default to shown and count as a style change when they change', () => {
+		const snapshot = snapshotInjectedSeries(base);
+		expect(snapshot).toMatchObject({ lastValueVisible: true, priceLineVisible: true });
+
+		const applied = new Map([['a', snapshot]]);
+		const diff = diffInjectedSeries(applied, [{ ...base, lastValueVisible: false }]);
+		expect(diff.changed).toHaveLength(1);
+		expect(diff.changed[0]).toMatchObject({ style: true, data: false });
+		expect(
+			diffInjectedSeries(applied, [{ ...base, priceLineVisible: false }]).changed[0]
+		).toMatchObject({
+			style: true
+		});
+		expect(diffInjectedSeries(applied, [base]).changed).toHaveLength(0);
 	});
 });

@@ -59,7 +59,8 @@ function createMockChart() {
 	const timeScale = {
 		getVisibleLogicalRange: vi.fn(() => ({ from: 0, to: 10 })),
 		getVisibleRange: vi.fn(() => visibleRange),
-		timeToIndex: vi.fn(() => 10),
+		timeToIndex: vi.fn((_time: number, _findNearest?: boolean): number | null => 10),
+		options: vi.fn(() => ({ barSpacing: 6 })),
 		setVisibleLogicalRange: vi.fn(),
 		setVisibleRange: vi.fn(),
 		fitContent: vi.fn()
@@ -111,8 +112,123 @@ describe('LightweightTimeSeriesChartBuilder injected series', () => {
 			markerTooltip: true,
 			crosshairEvents: true,
 			visibleRangeEvents: true,
-			viewport: true
+			viewport: true,
+			legend: true
 		});
+	});
+
+	describe('collapsing empty panes', () => {
+		const stretch = () => mock.panes.map((pane) => pane.setStretchFactor.mock.lastCall?.[0]);
+
+		it('keeps every pane at its height by default, even when its series is hidden', () => {
+			builder.setInjectedSeries([{ ...rsi, visible: false }]);
+			expect(stretch()).toEqual([3, 1]);
+		});
+
+		it('shrinks a pane whose series are all hidden, and restores it when one is shown', () => {
+			builder.setCollapseEmptyPanes(true);
+			builder.setInjectedSeries([rsi, { ...ema, pane: 2 }]);
+			expect(stretch()).toEqual([3, 1, 1]);
+
+			builder.setInjectedSeries([
+				{ ...rsi, visible: false },
+				{ ...ema, pane: 2 }
+			]);
+			expect(stretch()).toEqual([3, 0.01, 1]);
+
+			builder.setInjectedSeries([rsi, { ...ema, pane: 2 }]);
+			expect(stretch()).toEqual([3, 1, 1]);
+		});
+
+		it('keeps the pane while one of its series is still visible', () => {
+			builder.setCollapseEmptyPanes(true);
+			builder.setInjectedSeries([
+				{ ...rsi, visible: false },
+				{ ...ema, pane: 1 }
+			]);
+			expect(stretch()).toEqual([3, 1]);
+		});
+
+		it('never collapses the price pane', () => {
+			builder.setCollapseEmptyPanes(true);
+			builder.setInjectedSeries([{ ...ema, visible: false }, rsi]);
+			expect(stretch()[0]).toBe(3);
+		});
+
+		it('follows the legend toggle of an injected series', () => {
+			builder.setCollapseEmptyPanes(true);
+			builder.setInjectedSeries([rsi]);
+			builder.toggleLegend('RSI');
+			expect(stretch()).toEqual([3, 0.01]);
+			builder.toggleLegend('RSI');
+			expect(stretch()).toEqual([3, 1]);
+		});
+	});
+
+	it('reports the series to an external legend as they are added, toggled and removed', () => {
+		const handler = vi.fn();
+		builder.onLegendChange(handler);
+		const names = () => handler.mock.lastCall![0].map((item: { name: string }) => item.name);
+		handler.mockClear();
+
+		builder.setInjectedSeries([{ ...ema, color: '#f59e0b' }]);
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(names()).toEqual(['price', 'EMA']);
+		expect(handler.mock.lastCall![0][1]).toMatchObject({ color: '#f59e0b', visible: true });
+
+		// The same series with new values changes nothing a legend shows.
+		builder.setInjectedSeries([{ ...ema, color: '#f59e0b', values: [1, 2, 3, 4] }]);
+		expect(handler).toHaveBeenCalledTimes(1);
+
+		builder.toggleLegend('EMA');
+		expect(handler).toHaveBeenCalledTimes(2);
+		expect(handler.mock.lastCall![0][1]).toMatchObject({ name: 'EMA', visible: false });
+
+		builder.setInjectedSeries([]);
+		expect(names()).toEqual(['price']);
+	});
+
+	it('shows the last-value label and the price line unless asked not to', () => {
+		builder.setInjectedSeries([ema, { ...rsi, lastValueVisible: false, priceLineVisible: false }]);
+		const created = mock.chart.addSeries.mock.calls.map((call) => call[1]);
+		expect(created.find((options) => options.title === 'EMA')).toMatchObject({
+			lastValueVisible: true,
+			priceLineVisible: true
+		});
+		// Hiding the label also drops the title tag the chart draws next to the axis.
+		expect(
+			created.find((options) => options.title === '' && options.lastValueVisible === false)
+		).toMatchObject({ priceLineVisible: false, priceScaleId: 'right' });
+		expect(created.some((options) => options.title === 'RSI')).toBe(false);
+	});
+
+	it('updates the last-value label and the price line in place', () => {
+		builder.setInjectedSeries([ema]);
+		const emaSeries = mock.series[1];
+		const created = mock.chart.addSeries.mock.calls.length;
+
+		builder.setInjectedSeries([{ ...ema, lastValueVisible: false, priceLineVisible: false }]);
+		expect(emaSeries.state.options).toMatchObject({
+			lastValueVisible: false,
+			priceLineVisible: false,
+			title: ''
+		});
+		expect(mock.chart.addSeries.mock.calls.length).toBe(created);
+
+		builder.setInjectedSeries([ema]);
+		expect(emaSeries.state.options).toMatchObject({
+			lastValueVisible: true,
+			priceLineVisible: true,
+			title: 'EMA'
+		});
+	});
+
+	it('keeps the name of a series without a title for the tooltip', () => {
+		builder.setInjectedSeries([{ ...ema, lastValueVisible: false }, rsi]);
+		const hooks = getChartHoverHooks(mock.chart)!;
+		expect(hooks.getSeriesName!(mock.series[1] as never)).toBe('EMA');
+		expect(hooks.getSeriesName!(mock.series[2] as never)).toBe('RSI');
+		expect(hooks.getSeriesName!(mock.series[0] as never)).toBeUndefined();
 	});
 
 	it('adds a named line series with the requested look and gaps as whitespace', () => {
@@ -177,7 +293,10 @@ describe('LightweightTimeSeriesChartBuilder injected series', () => {
 		expect(injected.applyOptions).toHaveBeenCalledWith({
 			color: '#00ff00',
 			lineWidth: 1,
-			lineStyle: 1
+			lineStyle: 1,
+			lastValueVisible: true,
+			priceLineVisible: true,
+			title: 'EMA'
 		});
 
 		injected.applyOptions.mockClear();
@@ -357,6 +476,17 @@ describe('LightweightTimeSeriesChartBuilder injected markers', () => {
 		expect(pluginFor(mock.series[0]).setMarkers).toHaveBeenLastCalledWith([
 			{ time: 2, color: '#16a34a', shape: 'arrowUp', position: 'belowBar' },
 			{ time: 3, color: '#dc2626', shape: 'arrowDown', position: 'aboveBar' }
+		]);
+	});
+
+	it('passes the size multiplier to the chart marker', () => {
+		builder.setInjectedMarkers([
+			{ time: 2000, kind: 'buy', size: 2 },
+			{ time: 3000, kind: 'sell' }
+		]);
+		expect(pluginFor(mock.series[0]).setMarkers).toHaveBeenLastCalledWith([
+			expect.objectContaining({ time: 2, size: 2 }),
+			expect.not.objectContaining({ size: expect.anything() })
 		]);
 	});
 
@@ -625,6 +755,81 @@ describe('LightweightTimeSeriesChartBuilder hover hooks', () => {
 		builder.setInjectedMarkers(markersAt(20_000));
 		mock.series[0].state.options.visible = false;
 		expect(hover(20)).toBeNull();
+	});
+
+	describe('with many bars per pixel', () => {
+		// In this chart one bar index is one second, and the bar spacing decides how many pixels a
+		// bar takes: 0.25 px per bar puts four bars under one pixel.
+		beforeEach(() => {
+			mock.timeScale.timeToIndex.mockImplementation((time: number) => time);
+			mock.timeScale.options.mockReturnValue({ barSpacing: 0.25 });
+			mock.series[0].dataByIndex.mockImplementation((index: number, direction: number) => {
+				const bars = Array.from({ length: 40 }, (_, i) => i + 1);
+				const found =
+					direction < 0
+						? bars.filter((bar) => bar <= index).at(-1)
+						: bars.find((bar) => bar >= index);
+				return found === undefined ? null : { time: found };
+			});
+		});
+
+		it('shows a marker a few pixels away from the bar under the cursor', () => {
+			builder.setInjectedMarkers(markersAt(20_000));
+			// Four pixels are sixteen bars: the cursor at bar 30 is within reach of the marker at 20.
+			expect(hover(30)!.items.map((item) => item.text)).toEqual(['m0']);
+			expect(hover(2)).toBeNull();
+		});
+
+		it('shows only the nearest marker', () => {
+			builder.setInjectedMarkers(markersAt(20_000, 26_000));
+			expect(hover(25)!.items.map((item) => item.text)).toEqual(['m1']);
+			expect(hover(21)!.items.map((item) => item.text)).toEqual(['m0']);
+		});
+
+		it('does not reach beyond the tolerance, and the tolerance can be changed', () => {
+			builder.setInjectedMarkers(markersAt(20_000));
+			expect(hover(37)).toBeNull();
+			builder.setMarkerHoverTolerance(8);
+			expect(hover(37)!.items).toHaveLength(1);
+			builder.setMarkerHoverTolerance(0);
+			expect(hover(30)).toBeNull();
+			expect(hover(20)!.items).toHaveLength(1);
+		});
+
+		it('takes the tolerance from the builder options', () => {
+			const hoverOn = (tolerance: number | undefined, logical: number) => {
+				const chart = createMockChart();
+				const options = tolerance === undefined ? undefined : { markerHoverTolerance: tolerance };
+				const configured = new LightweightTimeSeriesChartBuilder(chart.chart as never, options);
+				chart.timeScale.timeToIndex.mockImplementation((time: number) => time);
+				chart.timeScale.options.mockReturnValue({ barSpacing: 0.25 });
+				configured.setDataset({ _ts: [1000, 2000, 3000, 4000], price: [10, 11, 12, 13] });
+				chart.series[0].dataByIndex.mockImplementation((index: number, direction: number) => {
+					const bars = Array.from({ length: 40 }, (_, i) => i + 1);
+					const found =
+						direction < 0
+							? bars.filter((bar) => bar <= index).at(-1)
+							: bars.find((bar) => bar >= index);
+					return found === undefined ? null : { time: found };
+				});
+				configured.setInjectedMarkers(markersAt(20_000));
+				return getChartHoverHooks(chart.chart)!.getMarkerHover({ logical } as never);
+			};
+
+			// The marker is 17 bars (4.25 px) from the cursor.
+			expect(hoverOn(undefined, 37)).toBeNull();
+			expect(hoverOn(8, 37)!.items).toHaveLength(1);
+			expect(hoverOn(0, 30)).toBeNull();
+		});
+
+		it('shows the markers of the nearest second together', () => {
+			builder.setInjectedMarkers([
+				{ time: 20_100, kind: 'buy', text: 'a' },
+				{ time: 20_100, kind: 'sell', text: 'b' },
+				{ time: 36_000, kind: 'info', text: 'far' }
+			]);
+			expect(hover(24)!.items.map((item) => item.text)).toEqual(['a', 'b']);
+		});
 	});
 
 	it('merged markers list every original text', () => {

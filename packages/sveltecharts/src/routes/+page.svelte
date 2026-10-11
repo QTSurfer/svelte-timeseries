@@ -1,4 +1,5 @@
 <script lang="ts">
+	import DemoNav from './DemoNav.svelte';
 	import { TimeSeriesChartBuilder } from '$lib/TimeSeriesChartBuilder';
 	import { createDataSet } from '$lib/mockDataSet';
 	import type { MarkArea, MarkerEvent } from '$lib/TimeSeriesChartBuilder';
@@ -44,6 +45,7 @@
 </script>
 
 <main>
+	<DemoNav current="/" />
 	<div class="charts-container">
 		<div class="chart">
 			<div class="chart-wrapper">

@@ -196,6 +196,25 @@ describe('TimeSeriesChartBuilder panes', () => {
 		expect(parseFloat(first.height)).toBeCloseTo(parseFloat(second.height), 1);
 	});
 
+	it('shrinks a pane whose series are all hidden only when asked to', () => {
+		const height = (index: number) =>
+			parseFloat((lastOption(mock.instance).grid as Option[])[index].height);
+
+		builder.setInjectedSeries([{ ...rsi, visible: false }]);
+		expect(height(1)).toBeGreaterThan(10);
+
+		builder.setCollapseEmptyPanes(true);
+		expect(height(1)).toBeLessThan(1);
+
+		builder.setInjectedSeries([rsi]);
+		expect(height(1)).toBeGreaterThan(10);
+
+		builder.setInjectedSeries([{ ...rsi, visible: false }]);
+		expect(height(1)).toBeLessThan(1);
+		builder.setCollapseEmptyPanes(false);
+		expect(height(1)).toBeGreaterThan(10);
+	});
+
 	it('bounds every pane to the data range', () => {
 		builder.setInjectedSeries([rsi]);
 		builder.setDataRange(1000, 4000);

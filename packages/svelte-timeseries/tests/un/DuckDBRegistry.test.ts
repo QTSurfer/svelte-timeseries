@@ -126,6 +126,30 @@ describe('DuckDBRegistry timestamp units', () => {
 			'TIMESTAMP \'1970-01-01\' + ("_ts" * INTERVAL 1 MICROSECOND)'
 		);
 	});
+	it.each(['TIMESTAMP WITH TIME ZONE', 'TIMESTAMPTZ'])(
+		'exposes a %s column as the UTC time, so a window does not shift with the session zone',
+		(type) => {
+			const registry = createRegistry();
+			const field = { name: '_ts', type };
+
+			expect(registry.autoDetectFields([field], 'ms')).toEqual({ _ts: 'TIMESTAMPTZ' });
+			expect(registry.buildCastedSelect('__source', { _ts: 'TIMESTAMPTZ' })).toBe(
+				`SELECT CAST("_ts" AT TIME ZONE 'UTC' AS TIMESTAMP) AS ${TIMESTAMP_COLUMN} FROM "__source"`
+			);
+			expect(registry.buildTimestampSelect(field, 'ms')).toBe(
+				`CAST("_ts" AT TIME ZONE 'UTC' AS TIMESTAMP)`
+			);
+		}
+	);
+
+	it('leaves a plain TIMESTAMP column as it is', () => {
+		const registry = createRegistry();
+		const field = { name: '_ts', type: 'TIMESTAMP' };
+
+		expect(registry.autoDetectFields([field], 'ms')).toEqual({ _ts: 'TIMESTAMP' });
+		expect(registry.buildTimestampSelect(field, 'ms')).toBe('"_ts"');
+	});
+
 	it.each(TIMESTAMP_COLUMN_CANDIDATES)(
 		'normalizes the %s source alias to the shared output column',
 		(sourceColumn) => {

@@ -62,6 +62,24 @@ describe('normalizeInjectedMarkers', () => {
 		expect(marker).toMatchObject({ text: 'hello', series: 'RSI' });
 	});
 
+	it('keeps a valid size and drops one that is not a number above zero, reporting it', () => {
+		const result = normalizeInjectedMarkers([
+			{ time: 1000, kind: 'buy', size: 2 },
+			{ time: 2000, kind: 'buy', size: 0 },
+			{ time: 3000, kind: 'buy', size: -1 },
+			{ time: 4000, kind: 'buy', size: Number.NaN },
+			{ time: 5000, kind: 'buy' }
+		]);
+		expect(result.markers.map((marker) => marker.size)).toEqual([
+			2,
+			undefined,
+			undefined,
+			undefined,
+			undefined
+		]);
+		expect(result.issues).toEqual([expect.stringContaining('3 injected marker(s) had a "size"')]);
+	});
+
 	it('truncates very long texts', () => {
 		const [marker] = normalize({ time: 1000, kind: 'info', text: 'x'.repeat(2000) });
 		expect(marker.text).toHaveLength(500);
@@ -117,6 +135,19 @@ describe('groupMarkers', () => {
 		);
 		expect(groups).toHaveLength(4);
 		expect(groups.every((group) => group.entries.length === 1)).toBe(true);
+	});
+
+	it('does not merge markers of different sizes, and keeps the size on the glyph', () => {
+		const groups = groupMarkers(
+			normalize(
+				{ time: 1000, kind: 'buy', size: 2 },
+				{ time: 1200, kind: 'buy', size: 2 },
+				{ time: 1400, kind: 'buy' }
+			)
+		);
+		expect(groups).toHaveLength(2);
+		expect(groups[0]).toMatchObject({ size: 2, label: '×2' });
+		expect(groups[1].size).toBeUndefined();
 	});
 
 	it('does not merge markers anchored at different prices', () => {
