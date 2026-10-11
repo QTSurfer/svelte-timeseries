@@ -40,6 +40,13 @@ export type InjectedSeries = {
 	pane?: number;
 	/** Default `true`. */
 	visible?: boolean;
+	/**
+	 * Lightweight Charts only: the label with the last value on the price axis. Default `true`;
+	 * set `false` when many series would cover the axis.
+	 */
+	lastValueVisible?: boolean;
+	/** Lightweight Charts only: the dotted line at the last value across the chart. Default `true`. */
+	priceLineVisible?: boolean;
 };
 
 /** Parallel time/value columns: ascending times, `NaN` marking gaps. */
@@ -164,6 +171,8 @@ export type InjectedSeriesSnapshot = {
 	lineStyle: InjectedLineStyle;
 	pane: number;
 	visible: boolean;
+	lastValueVisible: boolean;
+	priceLineVisible: boolean;
 };
 
 export function snapshotInjectedSeries(series: InjectedSeries): InjectedSeriesSnapshot {
@@ -176,7 +185,9 @@ export function snapshotInjectedSeries(series: InjectedSeries): InjectedSeriesSn
 		lineWidth: series.lineWidth,
 		lineStyle: series.lineStyle ?? 'solid',
 		pane: normalizePane(series.pane),
-		visible: series.visible ?? true
+		visible: series.visible ?? true,
+		lastValueVisible: series.lastValueVisible ?? true,
+		priceLineVisible: series.priceLineVisible ?? true
 	};
 }
 
@@ -189,7 +200,7 @@ export type InjectedSeriesChange = {
 	series: InjectedSeries;
 	/** Source arrays were replaced or resized: points must be rebuilt. */
 	data: boolean;
-	/** Color, width or line style changed. */
+	/** Color, width, line style or the last-value label and price line changed. */
 	style: boolean;
 	pane: boolean;
 	visible: boolean;
@@ -260,7 +271,9 @@ export function diffInjectedSeries(
 			style:
 				previous.color !== next.color ||
 				previous.lineWidth !== next.lineWidth ||
-				previous.lineStyle !== next.lineStyle,
+				previous.lineStyle !== next.lineStyle ||
+				previous.lastValueVisible !== next.lastValueVisible ||
+				previous.priceLineVisible !== next.priceLineVisible,
 			pane: previous.pane !== next.pane,
 			visible: previous.visible !== next.visible
 		};
@@ -295,16 +308,42 @@ export function resolvePaneIndexes(
 	return result;
 }
 
-/** Pane numbers (as requested by the app) to dense chart indexes, for `paneHeights`. */
+/**
+ * Pane numbers, other than the price pane, whose series are all hidden. The price pane always
+ * stays: it carries the primary data.
+ */
+export function emptyPanes(series: Iterable<{ pane: number; visible: boolean }>): Set<number> {
+	const shown = new Set<number>();
+	const all = new Set<number>();
+	for (const { pane, visible } of series) {
+		all.add(pane);
+		if (visible) shown.add(pane);
+	}
+	const empty = new Set<number>();
+	for (const pane of all) {
+		if (pane !== 0 && !shown.has(pane)) empty.add(pane);
+	}
+	return empty;
+}
+
+/** Relative height of a collapsed pane: a sliver that keeps its separator and nothing else. */
+export const COLLAPSED_PANE_RATIO = 0.01;
+
+/**
+ * Pane numbers (as requested by the app) to dense chart indexes, for `paneHeights`. Panes in
+ * `collapsed` get {@link COLLAPSED_PANE_RATIO} instead of their height.
+ */
 export function resolvePaneRatios(
 	paneHeights: Readonly<Record<number, number>> | undefined,
 	requestedPanes: Iterable<number>,
-	hasPricePane: boolean
+	hasPricePane: boolean,
+	collapsed?: ReadonlySet<number>
 ): number[] {
 	const occupied = new Set<number>(requestedPanes);
 	if (hasPricePane) occupied.add(0);
 	const ordered = [...occupied].sort((a, b) => a - b);
 	return ordered.map((pane) => {
+		if (collapsed?.has(pane)) return COLLAPSED_PANE_RATIO;
 		const configured = paneHeights?.[pane];
 		if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
 			return configured;

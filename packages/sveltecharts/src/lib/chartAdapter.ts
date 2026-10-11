@@ -74,6 +74,16 @@ export type ChartCapabilities = {
 	visibleRangeEvents?: boolean;
 	/** `setVisibleRange` and `fitContent` move the view to a time range or to all the data. */
 	viewport?: boolean;
+	/** `getLegendItems` and `onLegendChange` describe the series for an external legend. */
+	legend?: boolean;
+};
+
+/** A series as an external legend shows it. `toggleLegend(name)` flips `visible`. */
+export type LegendItem = {
+	name: string;
+	/** CSS color of the line. */
+	color: string;
+	visible: boolean;
 };
 
 /** Crosshair position, reported by `onCrosshairMove`. Fields are absent when the cursor leaves the chart. */
@@ -127,6 +137,18 @@ export interface TimeSeriesChartAdapter {
 	 * Unlisted panes get `1`, the price pane `3`.
 	 */
 	setPaneHeights?(heights: Readonly<Record<number, number>>): this;
+	/**
+	 * When `true`, a pane other than the price pane whose series are all hidden shrinks to a
+	 * sliver, so a hidden indicator does not leave an empty pane behind. Default `false`.
+	 */
+	setCollapseEmptyPanes?(collapse: boolean): this;
+	/** The line series (primary and injected) for an external legend. Check `capabilities.legend`. */
+	getLegendItems?(): LegendItem[];
+	/**
+	 * Calls `handler` now with the current items and again whenever a series is added, removed or
+	 * toggled. Returns the function that removes the handler. Check `capabilities.legend` first.
+	 */
+	onLegendChange?(handler: (items: LegendItem[]) => void): () => void;
 	/**
 	 * Calls `handler` on every crosshair move. Returns the function that removes the handler. Check
 	 * `capabilities.crosshairEvents` first.

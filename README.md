@@ -270,6 +270,8 @@ type InjectedSeries = {
   lineStyle?: "solid" | "dashed" | "dotted";
   pane?: number; // 0 (default) = price pane; other numbers get their own pane
   visible?: boolean; // default true
+  lastValueVisible?: boolean; // Lightweight Charts: label and name tag on the price axis, default true
+  priceLineVisible?: boolean; // Lightweight Charts: line at the last value, default true
 };
 
 type InjectedMarker = {
@@ -280,6 +282,7 @@ type InjectedMarker = {
   color?: string; // default per kind: buy green, sell red, info slate
   shape?: "arrowUp" | "arrowDown" | "circle" | "square"; // default per kind
   series?: string; // name of an injected series to attach to (default: the price series)
+  size?: number; // size multiplier, default 1; markers of different sizes are never merged
 };
 ```
 
@@ -291,23 +294,27 @@ type InjectedMarker = {
 
 - **Default look:** a `buy` is a green arrow up below the bar, a `sell` a red arrow down above it and `info` a neutral circle. With a `price`, the arrow sits just under (buy) or over (sell) that price and the circle is centered on it.
 - **Candles and lines:** markers attach to the price series (the candlesticks, or the first loaded line) unless `series` names an injected series. They hide with the series they belong to.
-- **Same second:** markers that share a UTC second and look alike (position, shape, color and price) are merged into **one glyph labeled `×N`**, and every original text is listed in the tooltip. Markers of the same second that look different (a sell and an info, say) stay separate glyphs and are stacked on the bar. Nothing is dropped. Markers in different seconds of the same bar are stacked by the chart.
+- **Same second:** markers that share a UTC second and look alike (position, shape, color, size and price) are merged into **one glyph labeled `×N`**, and every original text is listed in the tooltip. Markers of the same second that look different (a sell and an info, say) stay separate glyphs and are stacked on the bar. Nothing is dropped. Markers in different seconds of the same bar are stacked by the chart.
 - **Hover text:** on Lightweight Charts the crosshair tooltip lists the markers drawn on the bar under the cursor. On ECharts a small overlay shows them while the pointer is on the marker.
 - **Chart text:** marker texts are shown on hover, not drawn on the chart (except the `×N` count). Markers that come from the JSON column keep drawing their text as before.
 
 ### What each backend supports
 
-| Capability                                 | Lightweight Charts                                            | ECharts                                           | Vela                                           |
-| ------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
-| Injected lines (color, width, style, gaps) | Yes                                                           | Yes                                               | No                                             |
-| Panes and `paneHeights`                    | Native panes; resizable by dragging the separators            | Stacked grids with a shared zoom and crosshair    | No                                             |
-| Markers, including on candlesticks         | Yes                                                           | Yes (mark points)                                 | JSON column markers only, no `injectedMarkers` |
-| Same-second merge and stacking             | Yes                                                           | Yes                                               | Overlapping markers are offset                 |
-| Marker hover text                          | In the crosshair tooltip, for the whole bar                   | Overlay while the pointer is on the marker symbol | No                                             |
-| Line width                                 | Integers from 1 to 4                                          | Any positive number                               | -                                              |
-| Times inside the same second               | Collapse to the first point (the chart time is whole seconds) | Kept (millisecond axis)                           | -                                              |
+| Capability                                                                                               | Lightweight Charts                                            | ECharts                                           | Vela                                           |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Injected lines (color, width, style, gaps)                                                               | Yes                                                           | Yes                                               | No                                             |
+| Panes and `paneHeights`                                                                                  | Native panes; resizable by dragging the separators            | Stacked grids with a shared zoom and crosshair    | No                                             |
+| Markers, including on candlesticks                                                                       | Yes                                                           | Yes (mark points)                                 | JSON column markers only, no `injectedMarkers` |
+| Same-second merge and stacking                                                                           | Yes                                                           | Yes                                               | Overlapping markers are offset                 |
+| Marker hover text                                                                                        | In the crosshair tooltip, for the whole bar                   | Overlay while the pointer is on the marker symbol | No                                             |
+| Line width                                                                                               | Integers from 1 to 4                                          | Any positive number                               | -                                              |
+| Times inside the same second                                                                             | Collapse to the first point (the chart time is whole seconds) | Kept (millisecond axis)                           | -                                              |
+| Crosshair and visible range events, `setVisibleRange`, `fitContent`                                      | Yes                                                           | No                                                | No                                             |
+| Legend items for a legend of your own (`getLegendItems`, `onLegendChange`)                               | Yes                                                           | Draws its own legend                              | No                                             |
+| Marker hover tolerance, `lastValueVisible` and `priceLineVisible`, `priceDecimals`, `lightweightOptions` | Yes                                                           | -                                                 | -                                              |
+| `setCollapseEmptyPanes`                                                                                  | Yes                                                           | Yes                                               | No                                             |
 
-All builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`); the Vela builder reports every flag as `false`. `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create. With `chartLibrary="vela"` the components do the check for you: `injectedSeries`, `injectedMarkers` and `paneHeights` are ignored and a warning is logged once for each.
+All builders report this through an optional `capabilities` object on the adapter (`injectedSeries`, `panes`, `paneHeights`, `injectedMarkers`, `markerTooltip`, `crosshairEvents`, `visibleRangeEvents`, `viewport`, `legend`); the Vela builder reports every flag as `false`. `setInjectedSeries`, `setInjectedMarkers` and `setPaneHeights` are optional members of `TimeSeriesChartAdapter`, so check before calling them on an adapter you did not create. With `chartLibrary="vela"` the components do the check for you: `injectedSeries`, `injectedMarkers` and `paneHeights` are ignored and a warning is logged once for each.
 
 ### Injected series on top of a file
 
@@ -556,7 +563,7 @@ Lastra entries support the same `columnsSelect`, `candlestick`, and `resolution`
 
 #### Markers in the same second
 
-The Lightweight Charts time axis is whole UTC seconds. The builder never drops a marker that falls in the same second as another: markers with an identical look (position, shape, color and price) are merged into one glyph labeled `×N`, and markers that look different are stacked on the bar. Every marker's text is listed in the hover tooltip. This applies to injected markers and to markers that come from the JSON column. See [Using it with data you already hold](#using-it-with-data-you-already-hold).
+The Lightweight Charts time axis is whole UTC seconds. The builder never drops a marker that falls in the same second as another: markers with an identical look (position, shape, color, size and price) are merged into one glyph labeled `×N`, and markers that look different are stacked on the bar. Every marker's text is listed in the hover tooltip. This applies to injected markers and to markers that come from the JSON column. See [Using it with data you already hold](#using-it-with-data-you-already-hold).
 
 ### Vela (candlesticks only)
 

@@ -135,6 +135,14 @@ describe('marker mapping', () => {
 		expect(String(item.tooltipHtml)).toContain('b');
 	});
 
+	it('scales the symbol and its offset with the marker size', () => {
+		const [plain] = groupsOf({ time: 1000, kind: 'sell' });
+		const [big] = groupsOf({ time: 1000, kind: 'sell', size: 2 });
+		expect(buildMarkPointItem(plain, 0, 1).symbolSize).toBe(MARKER_SYMBOL_SIZE);
+		expect(buildMarkPointItem(big, 0, 1).symbolSize).toBe(MARKER_SYMBOL_SIZE * 2);
+		expect(buildMarkPointItem(big, 0, 1).symbolOffset).toEqual([0, -(MARKER_SYMBOL_SIZE * 2)]);
+	});
+
 	it('draws no label for a lone injected marker', () => {
 		const [group] = groupsOf({ time: 1000, kind: 'sell' });
 		expect(buildMarkPointItem(group, 0, 1).label).toEqual({ show: false });

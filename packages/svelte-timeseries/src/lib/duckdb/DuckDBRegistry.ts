@@ -228,7 +228,9 @@ export class DuckDBRegistry<T extends Tables> {
 				TIMESTAMP_COLUMN_CANDIDATES.includes(f.name as (typeof TIMESTAMP_COLUMN_CANDIDATES)[number])
 			) {
 				casts[f.name] = this.isTimestampLikeType(f.type)
-					? 'TIMESTAMP'
+					? this.isTimeZoneAware(f.type)
+						? 'TIMESTAMPTZ'
+						: 'TIMESTAMP'
 					: `TIMESTAMP(${timestampUnit})`;
 				return;
 			}
@@ -264,9 +266,19 @@ export class DuckDBRegistry<T extends Tables> {
 		return type.toUpperCase().includes('TIMESTAMP') || type.toUpperCase() === 'DATE';
 	}
 
+	private isTimeZoneAware(type: string): boolean {
+		return /TIME\s+ZONE|TIMESTAMPTZ/i.test(type);
+	}
+
+	/** The UTC time of a time-zone-aware column as a plain `TIMESTAMP`. */
+	private sqlUtcTimestamp(colSQL: string): string {
+		return `CAST(${colSQL} AT TIME ZONE 'UTC' AS TIMESTAMP)`;
+	}
+
 	private buildTimestampSelect(field: ColumnsSchema[number], timestampUnit: EpochUnit): string {
 		const column = escapeIdent(field.name);
 		if (this.isTimestampLikeType(field.type)) {
+			if (this.isTimeZoneAware(field.type)) return this.sqlUtcTimestamp(column);
 			return field.type.toUpperCase() === 'DATE' ? `CAST(${column} AS TIMESTAMP)` : column;
 		}
 		return this.sqlTimestampFromEpoch(column, timestampUnit);
@@ -298,6 +310,13 @@ export class DuckDBRegistry<T extends Tables> {
 
 			if (target === 'TIMESTAMP') {
 				parts.push(`${colSQL} AS ${isTimestampColumn ? TIMESTAMP_COLUMN : colSQL}`);
+				continue;
+			}
+
+			if (target === 'TIMESTAMPTZ') {
+				parts.push(
+					`${this.sqlUtcTimestamp(colSQL)} AS ${isTimestampColumn ? TIMESTAMP_COLUMN : colSQL}`
+				);
 				continue;
 			}
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TimeSeriesChartBuilder } from '../../src/lib/TimeSeriesChartBuilder';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { TimeSeriesChartBuilder, formatAxisTime } from '../../src/lib/TimeSeriesChartBuilder';
 import type { ECharts } from 'echarts/types/dist/core';
 
 function createMockECharts(): ECharts {
@@ -809,5 +809,31 @@ describe('TimeSeriesChartBuilder', () => {
 			const after = (echarts.setOption as ReturnType<typeof vi.fn>).mock.calls.length;
 			expect(after).toBe(before);
 		});
+	});
+});
+
+describe('time axis labels', () => {
+	const instant = Date.UTC(2025, 9, 28, 22, 13, 20);
+	const zone = process.env.TZ;
+
+	afterEach(() => {
+		if (zone === undefined) delete process.env.TZ;
+		else process.env.TZ = zone;
+	});
+
+	it('shows UTC, whatever time zone the viewer is in', () => {
+		for (const tz of ['Asia/Tokyo', 'America/Los_Angeles', 'Europe/Madrid', 'UTC']) {
+			process.env.TZ = tz;
+			expect(formatAxisTime(instant)).toBe('22:13:20');
+		}
+	});
+
+	it('is what the chart uses on its time axis', () => {
+		process.env.TZ = 'Asia/Tokyo';
+		const echarts = createMockECharts();
+		new TimeSeriesChartBuilder(echarts).setDataset({ _ts: [instant], price: [1] }).build();
+		const [option] = lastSetOptionCall(echarts);
+		expect(option.useUTC).toBe(true);
+		expect(option.xAxis.axisLabel.formatter(instant)).toBe('22:13:20');
 	});
 });

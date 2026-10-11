@@ -8,9 +8,9 @@ import type {
 	ChartDatasetFormatSimpleObject,
 	OHLCDimensions,
 	TimeSeriesChartAdapter
-} from './chartAdapter';
-import { aggregateCandles, type TickCandlesInput } from './candleAggregation';
-import { toSortedColumns, type NumericArray } from './seriesInput';
+} from './chartAdapter.js';
+import { aggregateCandles, type TickCandlesInput } from './candleAggregation.js';
+import { toSortedColumns, type NumericArray } from './seriesInput.js';
 
 /** A price line. Give either parallel `times` / `values` arrays or `points`. */
 export type PriceLineInput = {

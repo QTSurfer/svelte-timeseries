@@ -25,6 +25,7 @@ import type {
 	ChartDatasetFormatSimpleObject,
 	ChartMarkerPointOptions,
 	CrosshairMoveEvent,
+	LegendItem,
 	OHLCDimensions,
 	TimeRangeMs,
 	TimeSeriesChartAdapter
@@ -40,13 +41,14 @@ import {
 	type MarkerHover,
 	type NormalizedMarker
 } from './injectedMarkers';
-import { getPricePrecision, getSignificantPrecision } from './pricePrecision';
+import { getPricePrecision, getSignificantPrecision, normalizeDecimals } from './pricePrecision';
 import {
 	defaultInjectedColor,
 	diffInjectedSeries,
 	lineStyleToLightweight,
 	lineWidthToLightweight,
 	normalizePane,
+	emptyPanes,
 	resolvePaneIndexes,
 	resolvePaneRatios,
 	snapshotInjectedSeries,
@@ -60,7 +62,29 @@ export { getPricePrecision, formatPreciseValue } from './pricePrecision';
 
 type ConfigBuilder = {
 	externalManagerLegend?: boolean;
+	/**
+	 * How far from a marker, in pixels, the cursor still shows its text. Default
+	 * {@link DEFAULT_MARKER_HOVER_TOLERANCE}; `0` limits the hover to the bar under the cursor.
+	 */
+	markerHoverTolerance?: number;
+	/** Shrink panes whose series are all hidden (see `TimeSeriesChartAdapter.setCollapseEmptyPanes`). */
+	collapseEmptyPanes?: boolean;
+	/**
+	 * Decimals shown on the price axis for the price line and the candles: a whole number from 0
+	 * to 16. By default they follow the data (the most decimals any value needs).
+	 */
+	priceDecimals?: number;
 };
+
+/**
+ * Title the chart draws next to the price axis. A series that hides its last-value label has none:
+ * the chart draws the title as a tag at the last point, which is what covers the axis.
+ */
+const injectedTitle = (series: { name: string; lastValueVisible?: boolean }) =>
+	series.lastValueVisible === false ? '' : series.name;
+
+/** Pixels around the cursor within which the hover looks for the nearest marker. */
+export const DEFAULT_MARKER_HOVER_TOLERANCE = 4;
 
 type MarkerState = {
 	id: number;
@@ -124,6 +148,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	private resetViewOnBuild = false;
 	private crosshairHandlers = new Set<(event: CrosshairMoveEvent) => void>();
 	private rangeHandlers = new Set<(range: TimeRangeMs) => void>();
+	private legendHandlers = new Set<(items: LegendItem[]) => void>();
+	private legendSignature = '';
 	private _building = false;
 	private _timeRangeForced = false;
 	private candlestickPlugin: ISeriesMarkersPluginApi<Time> | null = null;
@@ -144,7 +170,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		markerTooltip: true,
 		crosshairEvents: true,
 		visibleRangeEvents: true,
-		viewport: true
+		viewport: true,
+		legend: true
 	};
 
 	constructor(instance: IChartApi, builderConfig?: ConfigBuilder) {
@@ -153,7 +180,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		instance.applyOptions({ timeScale: { minBarSpacing: MIN_BAR_SPACING } });
 		registerChartHoverHooks(instance, {
 			getMarkerHover: (param) => this.getMarkerHover(param),
-			formatValue: (series, value) => this.formatInjectedValue(series, value)
+			formatValue: (series, value) => this.formatInjectedValue(series, value),
+			getSeriesName: (series) => this.injectedName(series)
 		});
 	}
 
@@ -176,6 +204,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this.resetViewOnBuild = true;
 		this.build();
 		this.reconcileInjectedPanes();
+		this.notifyLegend();
 		return this;
 	}
 
@@ -227,7 +256,9 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this._dataDirty = true;
 		this.addSeries(dimName, dimName, true);
 
-		return this.build();
+		this.build();
+		this.notifyLegend();
+		return this;
 	}
 
 	addMarkerPoint(
@@ -289,7 +320,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 					continue;
 				}
 				const lineData = this.toLineData(dim);
-				const precision = getPricePrecision(this.dataset[dim] ?? []);
+				const precision = this.precisionOf(this.dataset[dim] ?? []);
 				if (precision !== this.pricePrecisions.get(dim)) {
 					series.applyOptions({
 						priceFormat: { type: 'price', precision, minMove: 10 ** -precision }
@@ -323,6 +354,8 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		const injected = column && !this.series.has(column) ? this.injected.get(column) : undefined;
 		if (injected) {
 			injected.api.applyOptions({ visible: !injected.api.options().visible });
+			this.reconcileInjectedPanes();
+			this.notifyLegend();
 			return this;
 		}
 		if (!column || !this.series.has(column)) {
@@ -332,7 +365,53 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		const nextVisible = !(this.selected[column] ?? false);
 		this.selected[column] = nextVisible;
 		this.series.get(column)?.applyOptions({ visible: nextVisible });
+		this.notifyLegend();
 		return this;
+	}
+
+	/** The line series, primary and injected, with their color and visibility. */
+	getLegendItems(): LegendItem[] {
+		const items: LegendItem[] = [];
+		for (const [dim, api] of this.series) {
+			const name = this.yDimensionNames[this.yDimensions.indexOf(dim)] ?? dim;
+			items.push({
+				name: dim === name ? dim : name,
+				color: String((api.options() as { color?: string }).color ?? ''),
+				visible: this.selected[dim] ?? false
+			});
+		}
+		for (const [name, entry] of this.injected) {
+			const options = entry.api.options() as { color?: string; visible?: boolean };
+			items.push({
+				name,
+				color: String(options.color ?? entry.autoColor),
+				visible: options.visible !== false
+			});
+		}
+		return items;
+	}
+
+	/**
+	 * Calls `handler` now with the current items, and again when a series is added, removed or
+	 * toggled. The name is what `toggleLegend` takes.
+	 */
+	onLegendChange(handler: (items: LegendItem[]) => void): () => void {
+		this.legendHandlers.add(handler);
+		const items = this.getLegendItems();
+		this.legendSignature = JSON.stringify(items);
+		handler(items);
+		return () => {
+			this.legendHandlers.delete(handler);
+		};
+	}
+
+	private notifyLegend() {
+		if (this.legendHandlers.size === 0) return;
+		const items = this.getLegendItems();
+		const signature = JSON.stringify(items);
+		if (signature === this.legendSignature) return;
+		this.legendSignature = signature;
+		for (const handler of this.legendHandlers) handler(items);
 	}
 
 	/** Shows all the data, as a new chart does. */
@@ -553,6 +632,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this.reconcileInjectedPanes();
 		this.syncAllMarkerHosts();
 		this.restoreView(view);
+		this.notifyLegend();
 		return this;
 	}
 
@@ -567,6 +647,38 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this.reportIssues(issues);
 		this.injectedMarkers = markers;
 		this.syncAllMarkerHosts();
+		return this;
+	}
+
+	/**
+	 * Fixes the decimals of the price axis for the price line and the candles (a whole number from 0
+	 * to 16), or hands them back to the data with `undefined`. Injected series keep their own.
+	 */
+	setPriceDecimals(decimals: number | undefined): this {
+		this.builderConfig = { ...this.builderConfig, priceDecimals: decimals };
+		for (const [dim, series] of this.series) {
+			const precision = this.precisionOf(this.dataset[dim] ?? []);
+			if (precision === this.pricePrecisions.get(dim)) continue;
+			series.applyOptions({ priceFormat: { type: 'price', precision, minMove: 10 ** -precision } });
+			this.pricePrecisions.set(dim, precision);
+		}
+		if (this._candlestickSeries && this._ohlcDims) {
+			const precision = this.getCandlestickPrecision(this._ohlcDims);
+			if (precision !== this.candlestickPrecision) {
+				this._candlestickSeries.applyOptions({
+					priceFormat: this.getCandlestickPriceFormat(this._ohlcDims)
+				});
+				this.candlestickPrecision = precision;
+			}
+		}
+		return this;
+	}
+
+	/** Shrinks panes whose series are all hidden (`false`, the default, keeps them at full height). */
+	setCollapseEmptyPanes(collapse: boolean): this {
+		this.builderConfig = { ...this.builderConfig, collapseEmptyPanes: collapse };
+		this.appliedPaneLayout = '';
+		this.reconcileInjectedPanes();
 		return this;
 	}
 
@@ -589,11 +701,12 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 				color: series.color ?? autoColor,
 				lineWidth: lineWidthToLightweight(series.lineWidth),
 				lineStyle: lineStyleToLightweight(series.lineStyle),
-				title: series.name,
+				title: injectedTitle(series),
 				priceScaleId: 'right',
 				visible: series.visible ?? true,
 				crosshairMarkerVisible: false,
-				lastValueVisible: true,
+				lastValueVisible: series.lastValueVisible ?? true,
+				priceLineVisible: series.priceLineVisible ?? true,
 				priceFormat: { type: 'price', precision, minMove: 10 ** -precision }
 			},
 			paneIndex
@@ -629,7 +742,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			entry.api.applyOptions({
 				color: series.color ?? entry.autoColor,
 				lineWidth: lineWidthToLightweight(series.lineWidth),
-				lineStyle: lineStyleToLightweight(series.lineStyle)
+				lineStyle: lineStyleToLightweight(series.lineStyle),
+				lastValueVisible: series.lastValueVisible ?? true,
+				priceLineVisible: series.priceLineVisible ?? true,
+				title: injectedTitle(series)
 			});
 		}
 		if (change.visible) {
@@ -694,7 +810,15 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		// An emptied price pane must not be removed: it would shift every other pane up.
 		panes[0].setPreserveEmptyPane(true);
 
-		const ratios = resolvePaneRatios(this.paneHeights, requested.values(), hasPrice);
+		const collapsed = this.builderConfig.collapseEmptyPanes
+			? emptyPanes(
+					[...this.injected.values()].map((entry) => ({
+						pane: entry.pane,
+						visible: entry.api.options().visible
+					}))
+				)
+			: undefined;
+		const ratios = resolvePaneRatios(this.paneHeights, requested.values(), hasPrice, collapsed);
 		const layout = ratios.join(',');
 		if (ratios.length === panes.length && layout !== this.appliedPaneLayout) {
 			ratios.forEach((ratio, index) => panes[index].setStretchFactor(ratio));
@@ -752,12 +876,29 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	 * belongs to the bar of its series that is at or just before its time (where the chart draws
 	 * it), so the hit test is a binary search on the sorted markers and costs nothing per move.
 	 */
+	/** Sets how far from a marker, in pixels, the cursor still shows its text (`0` = the bar only). */
+	setMarkerHoverTolerance(pixels: number): this {
+		this.builderConfig = { ...this.builderConfig, markerHoverTolerance: pixels };
+		return this;
+	}
+
 	private getMarkerHover(param: MouseEventParams<Time>): MarkerHover | null {
 		if (this.markerGroups.size === 0 || param.logical === undefined) {
 			return null;
 		}
-		const logical = Math.round(param.logical);
 
+		const exact = this.markerGroupsOnBar(Math.round(param.logical));
+		if (exact.length > 0) {
+			exact.sort((a, b) => a.second - b.second);
+			return toHoverItems(exact);
+		}
+
+		const nearest = this.nearestMarkerGroups(param.logical);
+		return nearest.length > 0 ? toHoverItems(nearest) : null;
+	}
+
+	/** Markers drawn on the bar at `logical`, up to the next bar. */
+	private markerGroupsOnBar(logical: number): MarkerGroup[] {
 		const hits: MarkerGroup[] = [];
 		for (const [hostKey, groups] of this.markerGroups) {
 			const host = this.getHostSeries(hostKey);
@@ -770,12 +911,55 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			const to = next ? (next.time as number) : Number.POSITIVE_INFINITY;
 			hits.push(...findGroupsInSpan(groups, from, to));
 		}
+		return hits;
+	}
 
-		if (hits.length === 0) {
-			return null;
+	/**
+	 * The markers of the second nearest to the cursor, when it is within the hover tolerance. With
+	 * many bars per pixel the bar under the cursor is a matter of luck, so a marker a few pixels
+	 * away has to count.
+	 */
+	private nearestMarkerGroups(logical: number): MarkerGroup[] {
+		const tolerance = this.builderConfig.markerHoverTolerance ?? DEFAULT_MARKER_HOVER_TOLERANCE;
+		const timeScale = this.LightweightChart.timeScale();
+		const barSpacing = timeScale.options().barSpacing;
+		if (!(tolerance > 0) || !(barSpacing > 0)) return [];
+		// The tolerance in bars: how far the cursor can be from the bar a marker belongs to.
+		const reach = tolerance / barSpacing;
+		const low = Math.floor(logical - reach);
+		const high = Math.ceil(logical + reach);
+
+		let nearest: MarkerGroup[] = [];
+		let nearestDistance = Number.POSITIVE_INFINITY;
+		for (const [hostKey, groups] of this.markerGroups) {
+			const host = this.getHostSeries(hostKey);
+			if (!host || !host.options().visible) continue;
+
+			const first = host.dataByIndex(low, NEAREST_LEFT);
+			const after = host.dataByIndex(high + 1, NEAREST_RIGHT);
+			const from = first ? (first.time as number) : Number.NEGATIVE_INFINITY;
+			const to = after ? (after.time as number) : Number.POSITIVE_INFINITY;
+			for (const group of findGroupsInSpan(groups, from, to)) {
+				const index = timeScale.timeToIndex(group.second as UTCTimestamp, true);
+				if (index === null) continue;
+				const distance = Math.abs(index - logical);
+				if (distance > reach) continue;
+				if (distance < nearestDistance) {
+					nearestDistance = distance;
+					nearest = [group];
+				} else if (distance === nearestDistance) {
+					nearest.push(group);
+				}
+			}
 		}
-		hits.sort((a, b) => a.second - b.second);
-		return toHoverItems(hits);
+		return nearest.sort((a, b) => a.second - b.second);
+	}
+
+	private injectedName(series: ISeriesApi<SeriesType, Time>): string | undefined {
+		for (const [name, entry] of this.injected) {
+			if (entry.api === series) return name;
+		}
+		return undefined;
 	}
 
 	private formatInjectedValue(series: ISeriesApi<SeriesType, Time>, value: number) {
@@ -912,7 +1096,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	}
 
 	private addSeries(dim: string, dimName: string, isSelected: boolean, index?: number) {
-		const pricePrecision = getPricePrecision(this.dataset[dim] ?? []);
+		const pricePrecision = this.precisionOf(this.dataset[dim] ?? []);
 
 		const series = this.LightweightChart.addSeries(LineSeries, {
 			color: SERIES_COLORS[(index ?? this.series.size) % SERIES_COLORS.length],
@@ -1183,12 +1367,19 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	}
 
 	private getCandlestickPrecision(dims: OHLCDimensions): number {
+		const fixed = normalizeDecimals(this.builderConfig.priceDecimals);
+		if (fixed !== undefined) return fixed;
 		return Math.max(
 			getPricePrecision(this.dataset[dims.open] ?? []),
 			getPricePrecision(this.dataset[dims.high] ?? []),
 			getPricePrecision(this.dataset[dims.low] ?? []),
 			getPricePrecision(this.dataset[dims.close] ?? [])
 		);
+	}
+
+	/** Decimals of the price axis for `values`: the fixed `priceDecimals`, or what the data needs. */
+	private precisionOf(values: Iterable<ChartDataValue>): number {
+		return normalizeDecimals(this.builderConfig.priceDecimals) ?? getPricePrecision(values);
 	}
 
 	private getCandlestickPriceFormat(dims: OHLCDimensions) {

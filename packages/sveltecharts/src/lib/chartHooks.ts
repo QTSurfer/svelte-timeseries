@@ -11,6 +11,12 @@ export type ChartHoverHooks = {
 	getMarkerHover(param: MouseEventParams<Time>): MarkerHover | null;
 	/** Display string for a value of one of the builder's own series; `undefined` = use the default. */
 	formatValue(series: ISeriesApi<SeriesType, Time>, value: number): string | undefined;
+	/**
+	 * Name of one of the builder's own series, `undefined` = use the series title. A series that
+	 * hides its last-value label has no title on the chart (the chart draws the title next to the
+	 * axis), but its tooltip row still needs a name.
+	 */
+	getSeriesName?(series: ISeriesApi<SeriesType, Time>): string | undefined;
 };
 
 const registry = new WeakMap<object, ChartHoverHooks>();

@@ -33,6 +33,7 @@ import {
 	hasGaps,
 	normalizePane,
 	resolvePaneIndexes,
+	emptyPanes,
 	resolvePaneRatios,
 	snapshotInjectedSeries,
 	toEChartsLineData,
@@ -114,6 +115,14 @@ export type MarkArea = {
 };
 const CANDLESTICK_SERIES_ID = 'candlestick';
 
+/**
+ * Time-axis label: `HH:MM:SS` in UTC, like the Lightweight Charts axis and the `useUTC` option of
+ * this chart. (`Date#toTimeString` would use the viewer's time zone and disagree with both.)
+ */
+export function formatAxisTime(valueMs: number): string {
+	return new Date(valueMs).toISOString().slice(11, 19);
+}
+
 export class TimeSeriesChartBuilder {
 	public ECharts: ECharts;
 	private builderConfig: ConfigBuilder = {
@@ -133,6 +142,7 @@ export class TimeSeriesChartBuilder {
 	private injectedColorCount = 0;
 	private injectedMarkers: NormalizedMarker[] = [];
 	private paneHeights: Readonly<Record<number, number>> | undefined;
+	private collapseEmptyPanes = false;
 	/** The single-pane axes, saved while the stacked layout is active. */
 	private paneBase: { grid: unknown; xAxis: unknown; yAxis: unknown } | null = null;
 	private paneCount = 1;
@@ -210,10 +220,7 @@ export class TimeSeriesChartBuilder {
 			type: 'time',
 			axisLine: { show: true },
 			axisLabel: {
-				formatter: (value: number) => {
-					const d = new Date(value);
-					return d.toTimeString().slice(0, 8);
-				}
+				formatter: formatAxisTime
 			}
 		};
 
@@ -1067,6 +1074,16 @@ export class TimeSeriesChartBuilder {
 		return this;
 	}
 
+	/** Shrinks panes whose series are all hidden (`false`, the default, keeps them at full height). */
+	setCollapseEmptyPanes(collapse: boolean): this {
+		this.collapseEmptyPanes = collapse;
+		if (this.injectedState.size > 0) {
+			this.refreshInjected();
+			this.build();
+		}
+		return this;
+	}
+
 	private hasPricePane(): boolean {
 		return Boolean(this.yDimensions?.length) || this._ohlcDims !== null;
 	}
@@ -1088,7 +1105,15 @@ export class TimeSeriesChartBuilder {
 			)
 		);
 		const targets = resolvePaneIndexes(requested, hasPrice);
-		this.layoutPanes(resolvePaneRatios(this.paneHeights, requested.values(), hasPrice));
+		const collapsed = this.collapseEmptyPanes
+			? emptyPanes(
+					[...this.injectedState].map(([, state]) => ({
+						pane: normalizePane(state.request.pane),
+						visible: state.request.visible ?? true
+					}))
+				)
+			: undefined;
+		this.layoutPanes(resolvePaneRatios(this.paneHeights, requested.values(), hasPrice, collapsed));
 
 		const selected = this.getColumnsSelected();
 		const kept = (this.option.series as SeriesOption[]).filter(

@@ -14,9 +14,20 @@
 	import SVELightweightCharts from './SVELightweightCharts.svelte';
 	import { TimeSeriesChartBuilder } from './TimeSeriesChartBuilder';
 	import { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';
-	import type { CrosshairMoveEvent, TimeRangeMs, TimeSeriesChartAdapter } from './chartAdapter';
+	import type {
+		CrosshairMoveEvent,
+		LegendItem,
+		TimeRangeMs,
+		TimeSeriesChartAdapter
+	} from './chartAdapter';
 	import { describeUnsupportedInput } from './inputSupport';
-	import type { ECharts, LightweightChartApi, VelaChartApi } from './types';
+	import type {
+		ECharts,
+		LightweightChartApi,
+		LightweightChartOptions,
+		LightweightDeepPartial,
+		VelaChartApi
+	} from './types';
 	import type { InjectedMarker } from './injectedMarkers';
 	import type { InjectedSeries } from './seriesInput';
 	import {
@@ -35,12 +46,17 @@
 		injectedSeries,
 		injectedMarkers,
 		paneHeights,
+		collapseEmptyPanes,
+		priceDecimals,
+		lightweightOptions,
 		externalManagerLegend = false,
+		markerHoverTolerance,
 		isDark = false,
 		resetView,
 		onChartReady,
 		onCrosshairMove,
-		onVisibleRangeChange
+		onVisibleRangeChange,
+		onLegendChange
 	}: {
 		/** Chart backend. Default `'echarts'`. `'vela'` draws candles only. */
 		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
@@ -54,8 +70,27 @@
 		injectedMarkers?: readonly InjectedMarker[];
 		/** Relative pane heights keyed by pane number, e.g. `{ 0: 3, 1: 1 }`. */
 		paneHeights?: Readonly<Record<number, number>>;
+		/**
+		 * Lightweight Charts only: decimals on the price axis for the price line and the candles, a
+		 * whole number from 0 to 16. By default they follow the data, so one value with many decimals
+		 * widens the whole axis. Injected series keep their own decimals.
+		 */
+		priceDecimals?: number;
+		/**
+		 * Lightweight Charts only: options for the chart itself, merged into the defaults, for example
+		 * `{ layout: { background: { color: '#111' }, textColor: '#ddd' } }`. The TradingView
+		 * attribution logo is always shown, whatever `layout.attributionLogo` says.
+		 */
+		lightweightOptions?: LightweightDeepPartial<LightweightChartOptions>;
+		/** Shrink a pane whose series are all hidden (`visible: false`) to a sliver. Default `false`. */
+		collapseEmptyPanes?: boolean;
 		/** ECharts only: hide the built-in legend (default `false`, the legend toggles series). */
 		externalManagerLegend?: boolean;
+		/**
+		 * Lightweight Charts only: how far from a marker, in pixels, the cursor still shows its text.
+		 * Default 4; `0` shows it only for the bar under the cursor.
+		 */
+		markerHoverTolerance?: number;
 		isDark?: boolean;
 		/**
 		 * Change this value to show all the data again, for example when a new run replaces the arrays
@@ -72,6 +107,13 @@
 		onCrosshairMove?: (event: CrosshairMoveEvent) => void;
 		/** Visible time range changes, in epoch milliseconds. Lightweight only. */
 		onVisibleRangeChange?: (range: TimeRangeMs) => void;
+		/**
+		 * The series with their color and visibility, for a legend of your own: called when the chart
+		 * is ready and whenever a series is added, removed or toggled. Toggle one with
+		 * `adapter.toggleLegend(name)` or `visible` on an injected series. Lightweight only (ECharts
+		 * draws its own legend).
+		 */
+		onLegendChange?: (items: LegendItem[]) => void;
 	} = $props();
 
 	// The chart is rebuilt only when the kind of price data changes (line <-> candles, or another
@@ -121,7 +163,13 @@
 	}
 
 	async function onLoadLightweight(instance: LightweightChartApi) {
-		attach(new LightweightTimeSeriesChartBuilder(instance, { externalManagerLegend }));
+		attach(
+			new LightweightTimeSeriesChartBuilder(instance, {
+				externalManagerLegend,
+				markerHoverTolerance,
+				priceDecimals
+			})
+		);
 	}
 
 	async function onLoadVela(instance: VelaChartApi) {
@@ -159,6 +207,22 @@
 
 	$effect(() => {
 		const target = ready;
+		if (!target || target.key !== chartKey) return;
+		if (target.adapter instanceof LightweightTimeSeriesChartBuilder) {
+			target.adapter.setPriceDecimals(priceDecimals);
+		}
+	});
+
+	$effect(() => {
+		const target = ready;
+		if (!target || target.key !== chartKey || markerHoverTolerance === undefined) return;
+		if (target.adapter instanceof LightweightTimeSeriesChartBuilder) {
+			target.adapter.setMarkerHoverTolerance(markerHoverTolerance);
+		}
+	});
+
+	$effect(() => {
+		const target = ready;
 		if (!target || target.key !== chartKey || !onCrosshairMove) return;
 		if (!target.adapter.capabilities?.crosshairEvents) {
 			report([
@@ -167,6 +231,18 @@
 			return;
 		}
 		return target.adapter.onCrosshairMove?.((event) => onCrosshairMove?.(event));
+	});
+
+	$effect(() => {
+		const target = ready;
+		if (!target || target.key !== chartKey || !onLegendChange) return;
+		if (!target.adapter.capabilities?.legend) {
+			report([
+				`chartLibrary="${chartLibrary}" has no legend items: onLegendChange is never called.`
+			]);
+			return;
+		}
+		return target.adapter.onLegendChange?.((items) => onLegendChange?.(items));
 	});
 
 	$effect(() => {
@@ -197,6 +273,12 @@
 
 	$effect(() => {
 		const target = ready;
+		if (!target || target.key !== chartKey || collapseEmptyPanes === undefined) return;
+		target.adapter.setCollapseEmptyPanes?.(collapseEmptyPanes);
+	});
+
+	$effect(() => {
+		const target = ready;
 		if (!target || target.key !== chartKey || !paneHeights) return;
 		report(describeUnsupportedInput(target.adapter, chartLibrary, { paneHeights }));
 		target.adapter.setPaneHeights?.(paneHeights);
@@ -205,7 +287,11 @@
 
 {#key chartKey}
 	{#if chartLibrary === 'lightweight'}
-		<SVELightweightCharts onLoad={onLoadLightweight} {isDark} />
+		<SVELightweightCharts
+			onLoad={onLoadLightweight}
+			{isDark}
+			config={{ options: lightweightOptions }}
+		/>
 	{:else if chartLibrary === 'vela'}
 		{#await import('./SVEVelaCharts.svelte') then { default: SVEVelaCharts }}
 			<SVEVelaCharts onLoad={onLoadVela} {isDark} />

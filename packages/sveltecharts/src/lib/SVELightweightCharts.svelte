@@ -11,6 +11,7 @@
 	} from 'lightweight-charts';
 	import { formatPreciseValue } from './LightweightTimeSeriesChartBuilder';
 	import { getChartHoverHooks } from './chartHooks';
+	import { mergeChartOptions } from './chartOptions';
 	import type { MarkerHoverItem } from './injectedMarkers';
 
 	type LightweightChartsConfig = {
@@ -79,10 +80,8 @@
 		}
 	});
 
-	const chartOptions = $derived({
-		...baseOptions,
-		...(config?.options ?? {})
-	});
+	// Nested objects are merged, so `{ layout: { background } }` keeps the default text color.
+	const chartOptions = $derived(mergeChartOptions(baseOptions, config?.options));
 
 	function formatTime(time: Time): string {
 		const ts = (time as number) * 1000;
@@ -108,7 +107,8 @@
 			if (!series.options().visible) continue;
 			const value = data?.value;
 			if (value === undefined || value === null) continue;
-			const label = (series.options() as { title?: string }).title ?? '';
+			const label =
+				hooks?.getSeriesName?.(series) ?? (series.options() as { title?: string }).title ?? '';
 			rows.push({
 				label,
 				value: hooks?.formatValue(series, value) ?? formatPreciseValue(value)

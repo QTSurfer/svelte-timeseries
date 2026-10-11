@@ -81,6 +81,15 @@ function getDecimalPrecision(value: number, max: number, floor = 0): number {
 	return low;
 }
 
+/**
+ * A fixed number of decimals asked for by the app: a whole number from 0 to 16 (the most the
+ * price axis accepts), or `undefined` for anything else, which leaves the decimals automatic.
+ */
+export function normalizeDecimals(value: unknown): number | undefined {
+	if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+	return Math.min(MAX_CHART_PRECISION, Math.max(0, Math.round(value)));
+}
+
 export function getPricePrecision(values: Iterable<ChartDataValue>): number {
 	let precision = DEFAULT_PRICE_PRECISION;
 

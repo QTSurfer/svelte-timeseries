@@ -26,6 +26,11 @@ export type InjectedMarker = {
 	shape?: InjectedMarkerShape;
 	/** Name of an injected series to attach the marker to. Default: the price series. */
 	series?: string;
+	/**
+	 * Size multiplier of the glyph, `1` by default (`2` draws it twice as large). Must be a finite
+	 * number above zero. Markers of different sizes are never merged into one glyph.
+	 */
+	size?: number;
 };
 
 export type MarkerPosition =
@@ -99,6 +104,7 @@ export function normalizeInjectedMarkers(input: readonly InjectedMarker[]): {
 	const issues: string[] = [];
 	let skipped = 0;
 	let unknownKinds = 0;
+	let invalidSizes = 0;
 
 	for (const marker of input) {
 		if (!marker || typeof marker.time !== 'number' || !Number.isFinite(marker.time)) {
@@ -115,6 +121,14 @@ export function normalizeInjectedMarkers(input: readonly InjectedMarker[]): {
 		const style = MARKER_KIND_STYLE[kind];
 		const price =
 			typeof marker.price === 'number' && Number.isFinite(marker.price) ? marker.price : undefined;
+		let size: number | undefined;
+		if (marker.size !== undefined) {
+			if (typeof marker.size === 'number' && Number.isFinite(marker.size) && marker.size > 0) {
+				size = marker.size;
+			} else {
+				invalidSizes++;
+			}
+		}
 
 		markers.push({
 			timeMs: marker.time,
@@ -126,6 +140,7 @@ export function normalizeInjectedMarkers(input: readonly InjectedMarker[]): {
 			color: marker.color || style.color,
 			price,
 			text: marker.text ? truncate(String(marker.text)) : undefined,
+			size,
 			series: marker.series || undefined
 		});
 	}
@@ -135,6 +150,11 @@ export function normalizeInjectedMarkers(input: readonly InjectedMarker[]): {
 	}
 	if (unknownKinds > 0) {
 		issues.push(`${unknownKinds} injected marker(s) had an unknown "kind" and were drawn as info.`);
+	}
+	if (invalidSizes > 0) {
+		issues.push(
+			`${invalidSizes} injected marker(s) had a "size" that is not a number above zero and were drawn at the default size.`
+		);
 	}
 	return { markers, issues };
 }
@@ -172,8 +192,8 @@ export type MarkerGroup = {
 /**
  * Turns markers into the glyphs to draw, sorted by time (the order the chart requires).
  *
- * Rule: markers in the same UTC second with an identical look (position, shape, color and price)
- * are merged into one glyph labeled `×N`; every original marker stays in `entries`, so the hover
+ * Rule: markers in the same UTC second with an identical look (position, shape, color, size and
+ * price) are merged into one glyph labeled `×N`; every original marker stays in `entries`, so the hover
  * text lists all of them. Markers in the same second with a different look are kept as separate
  * glyphs, which the chart stacks on the bar. Nothing is dropped.
  */
@@ -192,7 +212,7 @@ export function groupMarkers(markers: readonly NormalizedMarker[]): MarkerGroup[
 			byLook = new Map();
 		}
 
-		const look = `${marker.position}|${marker.shape}|${marker.color}|${marker.price ?? ''}`;
+		const look = `${marker.position}|${marker.shape}|${marker.color}|${marker.size ?? 1}|${marker.price ?? ''}`;
 		const entry: MarkerEntry = {
 			kind: marker.kind,
 			kindLabel: marker.kindLabel,
