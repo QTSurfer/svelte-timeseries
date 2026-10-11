@@ -6,6 +6,8 @@ export type {
 	ChartCapabilities,
 	ChartDataValue,
 	ChartDatasetFormatSimpleObject,
+	CrosshairMoveEvent,
+	TimeRangeMs,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
 export { describeUnsupportedInput } from './inputSupport';

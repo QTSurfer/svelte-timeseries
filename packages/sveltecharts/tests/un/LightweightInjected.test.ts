@@ -108,7 +108,10 @@ describe('LightweightTimeSeriesChartBuilder injected series', () => {
 			panes: true,
 			paneHeights: true,
 			injectedMarkers: true,
-			markerTooltip: true
+			markerTooltip: true,
+			crosshairEvents: true,
+			visibleRangeEvents: true,
+			viewport: true
 		});
 	});
 
@@ -402,6 +405,7 @@ describe('LightweightTimeSeriesChartBuilder injected markers', () => {
 	});
 
 	it('does not change the visible range for injected markers', () => {
+		mock.timeScale.setVisibleRange.mockClear();
 		builder.setInjectedMarkers([{ time: 9_999_000, kind: 'info' }]);
 		expect(mock.timeScale.setVisibleRange).not.toHaveBeenCalled();
 	});

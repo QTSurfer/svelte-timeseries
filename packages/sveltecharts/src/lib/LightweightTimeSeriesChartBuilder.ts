@@ -24,7 +24,9 @@ import type {
 	ChartDatasetFormatObject,
 	ChartDatasetFormatSimpleObject,
 	ChartMarkerPointOptions,
+	CrosshairMoveEvent,
 	OHLCDimensions,
+	TimeRangeMs,
 	TimeSeriesChartAdapter
 } from './chartAdapter';
 import { registerChartHoverHooks } from './chartHooks';
@@ -92,6 +94,12 @@ const INJECTED_PREFIX = '\u0000injected:';
 const injectedHost = (name: string) => `${INJECTED_PREFIX}${name}`;
 /** `MismatchDirection` values of `ISeriesApi.dataByIndex`, spelled as numbers so the enum is not imported. */
 const NEAREST_LEFT = -1;
+/**
+ * Smallest bar spacing (pixels per bar) the chart accepts. Lightweight Charts' default floor is
+ * 0.5 px per bar, which stops `fitContent` short of the whole range once a series has more than
+ * about two bars per pixel (100k ticks over 14 hours show only the last 40 minutes).
+ */
+const MIN_BAR_SPACING = 0.001;
 const NEAREST_RIGHT = 1;
 
 export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter {
@@ -112,6 +120,10 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	private markersPlugins = new Map<string, ISeriesMarkersPluginApi<Time>>();
 	private markers = new Map<string, MarkerState[]>();
 	private _dataDirty = false;
+	/** Set when a whole new dataset replaces the old one: the next build shows all of it. */
+	private resetViewOnBuild = false;
+	private crosshairHandlers = new Set<(event: CrosshairMoveEvent) => void>();
+	private rangeHandlers = new Set<(range: TimeRangeMs) => void>();
 	private _building = false;
 	private _timeRangeForced = false;
 	private candlestickPlugin: ISeriesMarkersPluginApi<Time> | null = null;
@@ -129,12 +141,16 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		panes: true,
 		paneHeights: true,
 		injectedMarkers: true,
-		markerTooltip: true
+		markerTooltip: true,
+		crosshairEvents: true,
+		visibleRangeEvents: true,
+		viewport: true
 	};
 
 	constructor(instance: IChartApi, builderConfig?: ConfigBuilder) {
 		this.LightweightChart = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
+		instance.applyOptions({ timeScale: { minBarSpacing: MIN_BAR_SPACING } });
 		registerChartHoverHooks(instance, {
 			getMarkerHover: (param) => this.getMarkerHover(param),
 			formatValue: (series, value) => this.formatInjectedValue(series, value)
@@ -157,6 +173,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this._dataDirty = true;
 
 		this.createSeriesData();
+		this.resetViewOnBuild = true;
 		this.build();
 		this.reconcileInjectedPanes();
 		return this;
@@ -283,12 +300,13 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 				series.applyOptions({ visible: this.selected[dim] ?? false });
 			}
 
-			if (visibleLogicalRange) {
+			if (visibleLogicalRange && !this.resetViewOnBuild) {
 				this.LightweightChart.timeScale().setVisibleLogicalRange(visibleLogicalRange);
 			} else {
 				this.LightweightChart.timeScale().fitContent();
 				this.forceTimeRangeToDataset();
 			}
+			this.resetViewOnBuild = false;
 		}
 
 		this.syncAllMarkerHosts();
@@ -316,6 +334,75 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		this.series.get(column)?.applyOptions({ visible: nextVisible });
 		return this;
 	}
+
+	/** Shows all the data, as a new chart does. */
+	fitContent(): this {
+		this.LightweightChart.timeScale().fitContent();
+		return this;
+	}
+
+	/** Shows the time range `[fromMs, toMs]`, epoch milliseconds. */
+	setVisibleRange(fromMs: number, toMs: number): this {
+		this.LightweightChart.timeScale().setVisibleRange({
+			from: this.toChartTime(fromMs),
+			to: this.toChartTime(toMs)
+		});
+		return this;
+	}
+
+	/**
+	 * Calls `handler` on every crosshair move. The price is the value of the first series with one
+	 * at that bar. Absent fields mean the cursor is outside the chart.
+	 */
+	onCrosshairMove(handler: (event: CrosshairMoveEvent) => void): () => void {
+		if (this.crosshairHandlers.size === 0) {
+			this.LightweightChart.subscribeCrosshairMove(this.emitCrosshairMove);
+		}
+		this.crosshairHandlers.add(handler);
+		return () => {
+			this.crosshairHandlers.delete(handler);
+			if (this.crosshairHandlers.size === 0) {
+				this.LightweightChart.unsubscribeCrosshairMove(this.emitCrosshairMove);
+			}
+		};
+	}
+
+	/** Calls `handler` when the visible time range changes. */
+	onVisibleRangeChange(handler: (range: TimeRangeMs) => void): () => void {
+		const timeScale = this.LightweightChart.timeScale();
+		if (this.rangeHandlers.size === 0) {
+			timeScale.subscribeVisibleTimeRangeChange(this.emitRangeChange);
+		}
+		this.rangeHandlers.add(handler);
+		return () => {
+			this.rangeHandlers.delete(handler);
+			if (this.rangeHandlers.size === 0) {
+				this.LightweightChart.timeScale().unsubscribeVisibleTimeRangeChange(this.emitRangeChange);
+			}
+		};
+	}
+
+	private emitCrosshairMove = (param: MouseEventParams<Time>) => {
+		const event: CrosshairMoveEvent = {};
+		if (param.time !== undefined) event.time = Number(param.time) * 1000;
+		if (param.point) event.point = { x: param.point.x, y: param.point.y };
+		if (param.seriesData) {
+			for (const data of param.seriesData.values()) {
+				const value = 'value' in data ? data.value : 'close' in data ? data.close : undefined;
+				if (typeof value === 'number') {
+					event.price = value;
+					break;
+				}
+			}
+		}
+		for (const handler of this.crosshairHandlers) handler(event);
+	};
+
+	private emitRangeChange = (range: { from: Time; to: Time } | null) => {
+		if (!range) return;
+		const event = { from: Number(range.from) * 1000, to: Number(range.to) * 1000 };
+		for (const handler of this.rangeHandlers) handler(event);
+	};
 
 	goToZoom(start: number, end: number): this {
 		const [min, max] = this.getRangeValues();

@@ -20,13 +20,17 @@ function createMockChart() {
 		getVisibleRange: vi.fn(() => ({ from: 1, to: 3 })),
 		setVisibleLogicalRange: vi.fn(),
 		setVisibleRange: vi.fn(),
-		fitContent: vi.fn()
+		fitContent: vi.fn(),
+		subscribeVisibleTimeRangeChange: vi.fn(),
+		unsubscribeVisibleTimeRangeChange: vi.fn()
 	};
 
 	return {
 		addSeries: vi.fn(() => createMockSeries()),
 		removeSeries: vi.fn(),
 		applyOptions: vi.fn(),
+		subscribeCrosshairMove: vi.fn(),
+		unsubscribeCrosshairMove: vi.fn(),
 		timeScale: vi.fn(() => timeScale)
 	};
 }
@@ -469,6 +473,119 @@ describe('LightweightTimeSeriesChartBuilder', () => {
 			const passed = candleSeries.setData.mock.calls[0][0];
 			expect(passed).toHaveLength(2);
 			expect(passed.map((p: { time: number }) => p.time)).toEqual([1, 3]);
+		});
+	});
+});
+
+describe('LightweightTimeSeriesChartBuilder viewport API', () => {
+	let chart: ReturnType<typeof createMockChart>;
+	let builder: LightweightTimeSeriesChartBuilder;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		chart = createMockChart();
+		builder = new LightweightTimeSeriesChartBuilder(chart as never);
+	});
+
+	it('lets the time scale zoom out far enough for a dense series to fit', () => {
+		expect(chart.applyOptions).toHaveBeenCalledWith({ timeScale: { minBarSpacing: 0.001 } });
+	});
+
+	it('shows all the data when a new dataset replaces the old one under the same name', () => {
+		builder.setDataset({ _ts: [1000, 2000, 3000], price: [1, 2, 3] });
+		chart.timeScale().fitContent.mockClear();
+		chart.timeScale().setVisibleLogicalRange.mockClear();
+
+		builder.setDataset({ _ts: [4000, 5000, 6000], price: [4, 5, 6] });
+
+		expect(chart.timeScale().fitContent).toHaveBeenCalled();
+		expect(chart.timeScale().setVisibleLogicalRange).not.toHaveBeenCalled();
+	});
+
+	it('keeps the view when only the values of a dataset are updated', () => {
+		builder.setDataset({ _ts: [1000, 2000, 3000], price: [1, 2, 3] });
+		chart.timeScale().fitContent.mockClear();
+
+		builder.updateDimension({ _ts: [1000, 2000, 3000], price: [7, 8, 9] }, 'price');
+
+		expect(chart.timeScale().fitContent).not.toHaveBeenCalled();
+	});
+
+	it('sets the visible range from epoch milliseconds', () => {
+		builder.setVisibleRange(1_000_000, 2_500_000);
+		expect(chart.timeScale().setVisibleRange).toHaveBeenLastCalledWith({ from: 1000, to: 2500 });
+	});
+
+	it('fits the content on demand', () => {
+		builder.fitContent();
+		expect(chart.timeScale().fitContent).toHaveBeenCalledTimes(1);
+	});
+
+	it('reports the crosshair with time in milliseconds and the first value under the cursor', () => {
+		const handler = vi.fn();
+		builder.onCrosshairMove(handler);
+		const listener = chart.subscribeCrosshairMove.mock.calls[0][0];
+
+		listener({
+			time: 1700,
+			point: { x: 12, y: 34 },
+			seriesData: new Map([
+				['empty', {}],
+				['price', { value: 42.5 }]
+			])
+		});
+		listener({ point: undefined, seriesData: new Map() });
+
+		expect(handler).toHaveBeenNthCalledWith(1, {
+			time: 1_700_000,
+			price: 42.5,
+			point: { x: 12, y: 34 }
+		});
+		expect(handler).toHaveBeenNthCalledWith(2, {});
+	});
+
+	it('takes a candle close as the price', () => {
+		const handler = vi.fn();
+		builder.onCrosshairMove(handler);
+		const listener = chart.subscribeCrosshairMove.mock.calls[0][0];
+
+		listener({ time: 60, seriesData: new Map([['Candlestick', { close: 9 }]]) });
+
+		expect(handler).toHaveBeenCalledWith({ time: 60_000, price: 9 });
+	});
+
+	it('subscribes once, and unsubscribes when the last handler is removed', () => {
+		const first = vi.fn();
+		const second = vi.fn();
+		const stopFirst = builder.onCrosshairMove(first);
+		const stopSecond = builder.onCrosshairMove(second);
+		expect(chart.subscribeCrosshairMove).toHaveBeenCalledTimes(1);
+
+		stopFirst();
+		expect(chart.unsubscribeCrosshairMove).not.toHaveBeenCalled();
+		stopSecond();
+		expect(chart.unsubscribeCrosshairMove).toHaveBeenCalledTimes(1);
+	});
+
+	it('reports the visible range in milliseconds and ignores an empty range', () => {
+		const handler = vi.fn();
+		const stop = builder.onVisibleRangeChange(handler);
+		const listener = chart.timeScale().subscribeVisibleTimeRangeChange.mock.calls[0][0];
+
+		listener({ from: 10, to: 20 });
+		listener(null);
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(handler).toHaveBeenCalledWith({ from: 10_000, to: 20_000 });
+
+		stop();
+		expect(chart.timeScale().unsubscribeVisibleTimeRangeChange).toHaveBeenCalledTimes(1);
+	});
+
+	it('advertises the viewport capabilities', () => {
+		expect(builder.capabilities).toMatchObject({
+			crosshairEvents: true,
+			visibleRangeEvents: true,
+			viewport: true
 		});
 	});
 });
