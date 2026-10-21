@@ -627,6 +627,8 @@ The chart components and builders below live in `@qtsurfer/sveltecharts`. `@qtsu
 pnpm add @qtsurfer/sveltecharts echarts lightweight-charts
 ```
 
+`echarts` must be 6.1.0 or newer.
+
 ### 1. SVELightweightCharts
 
 Use this component directly when you want to manage the chart instance yourself:
