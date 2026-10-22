@@ -1,5 +1,22 @@
 # @qtsurfer/svelte-timeseries
 
+## 0.19.0
+
+### Minor Changes
+
+- [#120](https://github.com/QTSurfer/svelte-timeseries/pull/120) [`3a93866`](https://github.com/QTSurfer/svelte-timeseries/commit/3a93866b4e07d4a2814eda35a580cc7eab50d1a6) Thanks [@mrmx](https://github.com/mrmx)! - Require ECharts 6.1.0 or newer.
+
+  The `echarts` peer dependency of `@qtsurfer/sveltecharts` is now `^6.1.0` (it was `^6.0.0`). ECharts 6.0.x renders the `name` of a Lines series datum into its default tooltip without escaping it, a cross-site scripting issue fixed in 6.1.0. The charts of this package do not use Lines series, but your app may draw them on the same ECharts. If you are on 6.0.x, upgrade with `pnpm add echarts@^6.1.0`.
+
+- [#124](https://github.com/QTSurfer/svelte-timeseries/pull/124) [`28ce1d8`](https://github.com/QTSurfer/svelte-timeseries/commit/28ce1d80efc15af998df4db64694aaa3549636ea) Thanks [@mrmx](https://github.com/mrmx)! - Require Svelte 5.55.7 or newer.
+
+  The `svelte` peer dependency of both packages is now `^5.55.7` (it was `^5.43.14`). Svelte 5.55.6 and earlier have four cross-site scripting and denial of service issues, in server rendering (`hydratable`, spread attributes), in `<svelte:element>` and through DOM clobbering of the framework's internal state, all fixed in 5.55.7. The components of these packages use none of those features, but they are compiled by the Svelte of your app, so the peer range now keeps those versions out. If you are on an earlier Svelte 5, upgrade with `pnpm add svelte@^5.55.7`.
+
+### Patch Changes
+
+- Updated dependencies [[`3a93866`](https://github.com/QTSurfer/svelte-timeseries/commit/3a93866b4e07d4a2814eda35a580cc7eab50d1a6), [`28ce1d8`](https://github.com/QTSurfer/svelte-timeseries/commit/28ce1d80efc15af998df4db64694aaa3549636ea)]:
+  - @qtsurfer/sveltecharts@0.19.0
+
 ## 0.18.0
 
 ### Minor Changes
