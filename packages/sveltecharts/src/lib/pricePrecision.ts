@@ -81,6 +81,40 @@ function getDecimalPrecision(value: number, max: number, floor = 0): number {
 	return low;
 }
 
+const float = new Float64Array(1);
+const bits = new BigUint64Array(float.buffer);
+
+/** The double `steps` places away from `value` (positive: larger magnitude). */
+function stepDouble(value: number, steps: number): number {
+	float[0] = value;
+	bits[0] += BigInt(steps);
+	return float[0];
+}
+
+/**
+ * The `minMove` to give a price format of `precision` decimals.
+ *
+ * lightweight-charts builds its formatter from `10 ** precision` and `minMove * 10 ** precision`
+ * and needs the second to be exactly 1. `10 ** -precision` does not always give that: at 11
+ * decimals `1e-11 * 1e11` is 0.9999999999999999, and the axis then writes `0.99999999995` for
+ * 3.96e-8. This returns the nearest double that does give 1 (the neighbor above, at 11), or
+ * `10 ** -precision` if none within a few places does.
+ */
+export function exactMinMove(precision: number): number {
+	const scale = Math.pow(10, precision);
+	const nominal = 10 ** -precision;
+	for (const steps of [0, 1, -1, 2, -2, 3, -3]) {
+		const candidate = stepDouble(nominal, steps);
+		if (candidate * scale === 1) return candidate;
+	}
+	return nominal;
+}
+
+/** The `priceFormat` of a series that shows `precision` decimals. */
+export function priceFormatFor(precision: number) {
+	return { type: 'price' as const, precision, minMove: exactMinMove(precision) };
+}
+
 /**
  * A fixed number of decimals asked for by the app: a whole number from 0 to 16 (the most the
  * price axis accepts), or `undefined` for anything else, which leaves the decimals automatic.

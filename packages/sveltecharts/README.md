@@ -122,25 +122,25 @@ const bars = aggregateCandles({ times, values: lastPrice, volumes: tradeSizes },
 
 ### `TimeSeriesChart` props
 
-| Prop                     | Type                                            | Description                                                                                                                    |
-| ------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `chartLibrary?`          | `'echarts' \| 'lightweight' \| 'vela'`          | Chart backend. Default `'echarts'`. `'vela'` draws `candles` only (see below).                                                 |
-| `price?`                 | `PriceLineInput`                                | `{ name?, times, values }` or `{ name?, points: [time, value][] }`.                                                            |
-| `candles?`               | `CandlesInput \| TickCandlesInput`              | `{ times, open, high, low, close }`, or a price line to aggregate: `{ times, values, interval, volumes? }`. Wins over `price`. |
-| `injectedSeries?`        | `InjectedSeries[]`                              | Named lines computed by your app.                                                                                              |
-| `injectedMarkers?`       | `InjectedMarker[]`                              | Buy, sell and info events.                                                                                                     |
-| `paneHeights?`           | `Record<number, number>`                        | Relative pane heights by pane number. Default: the price pane `3`, every other pane `1`.                                       |
-| `collapseEmptyPanes?`    | `boolean`                                       | Shrink a pane whose series are all hidden (`visible: false`) to a sliver. Default `false`.                                     |
-| `priceDecimals?`         | `number`                                        | Lightweight Charts: decimals of the price axis for the price line and the candles, 0 to 16. Default: what the data needs.      |
-| `markerHoverTolerance?`  | `number`                                        | Lightweight Charts: how many pixels from a marker its text still shows. Default `4`; `0` = the bar under the cursor only.      |
-| `lightweightOptions?`    | `DeepPartial<ChartOptions>`                     | Lightweight Charts: options of the chart itself, merged into the defaults (background, text color, grid...).                   |
-| `resetView?`             | `unknown`                                       | Change it to show all the data again, for example when a new run replaces the arrays under the same series name.               |
-| `onCrosshairMove?`       | `(event: CrosshairMoveEvent) => void`           | Lightweight Charts: crosshair moves with the bar time (ms), its price and the pixel point.                                     |
-| `onVisibleRangeChange?`  | `(range: { from: number; to: number }) => void` | Lightweight Charts: visible range in epoch milliseconds, when it changes.                                                      |
-| `onLegendChange?`        | `(items: LegendItem[]) => void`                 | Lightweight Charts: series with color and visibility, for a legend of your own.                                                |
-| `externalManagerLegend?` | `boolean`                                       | ECharts only: hide the built-in legend. Default `false`.                                                                       |
-| `isDark?`                | `boolean`                                       | Dark palette for the chart and its tooltip.                                                                                    |
-| `onChartReady?`          | `(adapter: TimeSeriesChartAdapter) => void`     | Called once the chart exists and its data is drawn.                                                                            |
+| Prop                     | Type                                            | Description                                                                                                                                           |
+| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chartLibrary?`          | `'echarts' \| 'lightweight' \| 'vela'`          | Chart backend. Default `'echarts'`. `'vela'` draws `candles` only (see below).                                                                        |
+| `price?`                 | `PriceLineInput`                                | `{ name?, times, values }` or `{ name?, points: [time, value][] }`.                                                                                   |
+| `candles?`               | `CandlesInput \| TickCandlesInput`              | `{ times, open, high, low, close }`, or a price line to aggregate: `{ times, values, interval, volumes? }`. Wins over `price`.                        |
+| `injectedSeries?`        | `InjectedSeries[]`                              | Named lines computed by your app.                                                                                                                     |
+| `injectedMarkers?`       | `InjectedMarker[]`                              | Buy, sell and info events.                                                                                                                            |
+| `paneHeights?`           | `Record<number, number>`                        | Relative pane heights by pane number. Default: the price pane `3`, every other pane `1`.                                                              |
+| `collapseEmptyPanes?`    | `boolean`                                       | Shrink a pane whose series are all hidden (`visible: false`) to a sliver. Default `false`.                                                            |
+| `priceDecimals?`         | `number`                                        | Lightweight Charts: decimals of the price axis, the labels and the tooltip for the price line and the candles, 0 to 16. Default: what the data needs. |
+| `markerHoverTolerance?`  | `number`                                        | Lightweight Charts: how many pixels from a marker its text still shows. Default `4`; `0` = the bar under the cursor only.                             |
+| `lightweightOptions?`    | `DeepPartial<ChartOptions>`                     | Lightweight Charts: options of the chart itself, merged into the defaults (background, text color, grid...).                                          |
+| `resetView?`             | `unknown`                                       | Change it to show all the data again, for example when a new run replaces the arrays under the same series name.                                      |
+| `onCrosshairMove?`       | `(event: CrosshairMoveEvent) => void`           | Lightweight Charts: crosshair moves with the bar time (ms), its price and the pixel point.                                                            |
+| `onVisibleRangeChange?`  | `(range: { from: number; to: number }) => void` | Lightweight Charts: visible range in epoch milliseconds, when it changes.                                                                             |
+| `onLegendChange?`        | `(items: LegendItem[]) => void`                 | Lightweight Charts: series with color and visibility, for a legend of your own.                                                                       |
+| `externalManagerLegend?` | `boolean`                                       | ECharts only: hide the built-in legend. Default `false`.                                                                                              |
+| `isDark?`                | `boolean`                                       | Dark palette for the chart and its tooltip.                                                                                                           |
+| `onChartReady?`          | `(adapter: TimeSeriesChartAdapter) => void`     | Called once the chart exists and its data is drawn.                                                                                                   |
 
 Changing the kind of price data (line to candles, or another `price.name`) builds a new chart. Everything else updates in place.
 
@@ -241,7 +241,7 @@ On Lightweight Charts the adapter reports where the cursor is and what is visibl
 
 ### Price axis
 
-By default the price axis shows the most decimals any value needs, so one value such as `48000.123456789` shows every price as `48000.000000000`. Pass `priceDecimals` (0 to 16) to fix them for the price line and the candles. Injected series keep their own decimals.
+By default the price axis shows the most decimals any value needs, so one value such as `48000.123456789` shows every price as `48000.000000000`. Pass `priceDecimals` (0 to 16) to fix them for the price line and the candles: the axis, the last-value labels and the price rows of the tooltip then all show that many decimals (`46440.04794271` shows as `46440.05` with `priceDecimals: 2`). Without it the tooltip shows the shortest decimals the value needs. Injected series keep their own decimals. The chart formats prices as a whole number of steps of `10 ** -decimals`, so above about 15 decimals a price above 1 loses its last digits: stay at 15 or below for those.
 
 ### Chart options and attribution
 

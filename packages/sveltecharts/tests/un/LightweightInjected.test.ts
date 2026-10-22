@@ -846,4 +846,26 @@ describe('LightweightTimeSeriesChartBuilder hover hooks', () => {
 		expect(hooks.formatValue(mock.series[1] as never, 12.345)).toBe('~12.3');
 		expect(hooks.formatValue(mock.series[0] as never, 12.345)).toBeUndefined();
 	});
+
+	describe('with priceDecimals', () => {
+		it('formats the price series with the chart formatter, so the tooltip follows the axis', () => {
+			builder.setPriceDecimals(2);
+			const hooks = getChartHoverHooks(mock.chart)!;
+			expect(hooks.formatValue(mock.series[0] as never, 46440.04794271)).toBe('~46440.0');
+			builder.setInjectedSeries([ema]);
+			expect(hooks.formatValue(mock.series[1] as never, 12.345)).toBe('~12.3');
+		});
+
+		it('leaves the price series on the shortest decimals of the value without them', () => {
+			builder.setPriceDecimals(undefined);
+			const hooks = getChartHoverHooks(mock.chart)!;
+			expect(hooks.formatValue(mock.series[0] as never, 46440.04794271)).toBeUndefined();
+		});
+
+		it('does not format a series that is not one of the builder', () => {
+			builder.setPriceDecimals(2);
+			const hooks = getChartHoverHooks(mock.chart)!;
+			expect(hooks.formatValue({} as never, 1.5)).toBeUndefined();
+		});
+	});
 });

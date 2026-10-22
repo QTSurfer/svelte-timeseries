@@ -743,3 +743,39 @@ describe('LightweightTimeSeriesChartBuilder legend items', () => {
 		expect(handler).not.toHaveBeenCalled();
 	});
 });
+
+describe('LightweightTimeSeriesChartBuilder price format at 11 decimals', () => {
+	// lightweight-charts needs minMove * 10 ** precision to be exactly 1; 10 ** -11 does not give it.
+	const exact = (format: { precision: number; minMove: number }) =>
+		format.minMove * Math.pow(10, format.precision) === 1;
+
+	it('gives a line series a minMove the chart formatter can use', () => {
+		const chart = createMockChart();
+		const builder = new LightweightTimeSeriesChartBuilder(chart as never, { priceDecimals: 11 });
+		builder.setDataset({ _ts: [1000, 2000], price: [3.96e-8, 1e-7] });
+		expect(exact(chart.addSeries.mock.calls[0][1].priceFormat)).toBe(true);
+	});
+
+	it('gives the candles one, and keeps it when the decimals change later', () => {
+		const chart = createMockChart();
+		const builder = new LightweightTimeSeriesChartBuilder(chart as never);
+		builder.setCandlestickSeries(
+			{ _ts: [1000, 2000], open: [1, 2], high: [3, 4], low: [0.5, 1], close: [2, 3] },
+			{ open: 'open', high: 'high', low: 'low', close: 'close' }
+		);
+		builder.setPriceDecimals(11);
+		const candles = chart.addSeries.mock.results[0].value;
+		const format = candles.applyOptions.mock.lastCall[0].priceFormat;
+		expect(format.precision).toBe(11);
+		expect(exact(format)).toBe(true);
+	});
+
+	it('gives an injected series one when its decimals change', () => {
+		const chart = createMockChart();
+		const builder = new LightweightTimeSeriesChartBuilder(chart as never);
+		builder.setDataset({ _ts: [1000, 2000], price: [1, 2] });
+		builder.setPriceDecimals(11);
+		const line = chart.addSeries.mock.results[0].value;
+		expect(exact(line.applyOptions.mock.lastCall[0].priceFormat)).toBe(true);
+	});
+});

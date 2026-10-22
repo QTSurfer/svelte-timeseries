@@ -41,7 +41,12 @@ import {
 	type MarkerHover,
 	type NormalizedMarker
 } from './injectedMarkers';
-import { getPricePrecision, getSignificantPrecision, normalizeDecimals } from './pricePrecision';
+import {
+	getPricePrecision,
+	getSignificantPrecision,
+	normalizeDecimals,
+	priceFormatFor
+} from './pricePrecision';
 import {
 	defaultInjectedColor,
 	diffInjectedSeries,
@@ -70,8 +75,9 @@ type ConfigBuilder = {
 	/** Shrink panes whose series are all hidden (see `TimeSeriesChartAdapter.setCollapseEmptyPanes`). */
 	collapseEmptyPanes?: boolean;
 	/**
-	 * Decimals shown on the price axis for the price line and the candles: a whole number from 0
-	 * to 16. By default they follow the data (the most decimals any value needs).
+	 * Decimals shown on the price axis, the labels and the tooltip for the price line and the
+	 * candles: a whole number from 0 to 16. By default they follow the data (the most decimals any
+	 * value needs).
 	 */
 	priceDecimals?: number;
 };
@@ -323,7 +329,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 				const precision = this.precisionOf(this.dataset[dim] ?? []);
 				if (precision !== this.pricePrecisions.get(dim)) {
 					series.applyOptions({
-						priceFormat: { type: 'price', precision, minMove: 10 ** -precision }
+						priceFormat: priceFormatFor(precision)
 					});
 					this.pricePrecisions.set(dim, precision);
 				}
@@ -651,15 +657,16 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	}
 
 	/**
-	 * Fixes the decimals of the price axis for the price line and the candles (a whole number from 0
-	 * to 16), or hands them back to the data with `undefined`. Injected series keep their own.
+	 * Fixes the decimals of the price axis, the labels and the tooltip for the price line and the
+	 * candles (a whole number from 0 to 16), or hands them back to the data with `undefined`.
+	 * Injected series keep their own.
 	 */
 	setPriceDecimals(decimals: number | undefined): this {
 		this.builderConfig = { ...this.builderConfig, priceDecimals: decimals };
 		for (const [dim, series] of this.series) {
 			const precision = this.precisionOf(this.dataset[dim] ?? []);
 			if (precision === this.pricePrecisions.get(dim)) continue;
-			series.applyOptions({ priceFormat: { type: 'price', precision, minMove: 10 ** -precision } });
+			series.applyOptions({ priceFormat: priceFormatFor(precision) });
 			this.pricePrecisions.set(dim, precision);
 		}
 		if (this._candlestickSeries && this._ohlcDims) {
@@ -707,7 +714,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 				crosshairMarkerVisible: false,
 				lastValueVisible: series.lastValueVisible ?? true,
 				priceLineVisible: series.priceLineVisible ?? true,
-				priceFormat: { type: 'price', precision, minMove: 10 ** -precision }
+				priceFormat: priceFormatFor(precision)
 			},
 			paneIndex
 		);
@@ -732,7 +739,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			const precision = getSignificantPrecision(columns.values);
 			if (precision !== entry.precision) {
 				entry.api.applyOptions({
-					priceFormat: { type: 'price', precision, minMove: 10 ** -precision }
+					priceFormat: priceFormatFor(precision)
 				});
 				entry.precision = precision;
 			}
@@ -962,10 +969,21 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 		return undefined;
 	}
 
+	/**
+	 * Text of a value in the tooltip, or `undefined` to use the default (the shortest decimals the
+	 * value needs). An injected series is written with its own decimals. The series of the data
+	 * are written with `priceDecimals` when the app fixed them, so the tooltip, the axis and the
+	 * last-value labels agree.
+	 */
 	private formatInjectedValue(series: ISeriesApi<SeriesType, Time>, value: number) {
 		for (const entry of this.injected.values()) {
 			if (entry.api === series) {
 				return entry.api.priceFormatter().format(value);
+			}
+		}
+		if (normalizeDecimals(this.builderConfig.priceDecimals) !== undefined) {
+			for (const own of this.series.values()) {
+				if (own === series) return own.priceFormatter().format(value);
 			}
 		}
 		return undefined;
@@ -1106,11 +1124,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 			visible: isSelected,
 			crosshairMarkerVisible: false,
 			lastValueVisible: true,
-			priceFormat: {
-				type: 'price',
-				precision: pricePrecision,
-				minMove: 10 ** -pricePrecision
-			}
+			priceFormat: priceFormatFor(pricePrecision)
 		});
 
 		this.series.set(dim, series);
@@ -1383,8 +1397,7 @@ export class LightweightTimeSeriesChartBuilder implements TimeSeriesChartAdapter
 	}
 
 	private getCandlestickPriceFormat(dims: OHLCDimensions) {
-		const precision = this.getCandlestickPrecision(dims);
-		return { type: 'price' as const, precision, minMove: 10 ** -precision };
+		return priceFormatFor(this.getCandlestickPrecision(dims));
 	}
 
 	private toLineData(dim: string): Array<LineData<Time> | WhitespaceData<Time>> {
