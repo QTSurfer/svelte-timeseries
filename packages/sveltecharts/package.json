@@ -52,7 +52,7 @@
 		"@luxalgo/vela": "^0.7.7",
 		"echarts": "^6.1.0",
 		"lightweight-charts": "^5.1.0",
-		"svelte": "^5.43.14"
+		"svelte": "^5.55.7"
 	},
 	"devDependencies": {
 		"@eslint/eslintrc": "^3.3.5",
@@ -75,7 +75,7 @@
 		"prettier": "^3.8.1",
 		"prettier-plugin-svelte": "^3.5.1",
 		"publint": "^0.3.18",
-		"svelte": "^5.55.0",
+		"svelte": "^5.55.7",
 		"svelte-check": "^4.4.5",
 		"svelte-eslint-parser": "^1.6.0",
 		"typescript": "^5.9.3",
