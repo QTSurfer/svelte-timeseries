@@ -54,5 +54,10 @@
   "engines": {
     "pnpm": ">=10.18.0"
   },
-  "packageManager": "pnpm@10.18.0"
+  "packageManager": "pnpm@10.18.0",
+  "pnpm": {
+    "overrides": {
+      "shell-quote": "^1.8.4"
+    }
+  }
 }
