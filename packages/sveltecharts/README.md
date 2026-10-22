@@ -13,7 +13,7 @@ This package is the chart layer of [`@qtsurfer/svelte-timeseries`](https://www.n
 pnpm add @qtsurfer/sveltecharts echarts lightweight-charts @luxalgo/vela
 ```
 
-`echarts`, `lightweight-charts`, `@luxalgo/vela` and `svelte` are peer dependencies. ECharts must be 6.1.0 or newer: 6.0.x renders the `name` of a Lines series datum into its default tooltip without escaping it (an XSS issue fixed in 6.1.0). Vela is Apache-2.0 with an attribution requirement for the charts it draws (see its `NOTICE`).
+`echarts`, `lightweight-charts`, `@luxalgo/vela` and `svelte` are peer dependencies. ECharts must be 6.1.0 or newer: 6.0.x renders the `name` of a Lines series datum into its default tooltip without escaping it (an XSS issue fixed in 6.1.0). Svelte must be 5.55.7 or newer: earlier versions have cross-site scripting issues in server rendering and through DOM clobbering, fixed in 5.55.7. Vela is Apache-2.0 with an attribution requirement for the charts it draws (see its `NOTICE`).
 
 ## Price data from arrays
 

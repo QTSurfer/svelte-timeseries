@@ -640,7 +640,7 @@ The chart components and builders below live in `@qtsurfer/sveltecharts`. `@qtsu
 pnpm add @qtsurfer/sveltecharts echarts lightweight-charts
 ```
 
-`echarts` must be 6.1.0 or newer.
+`echarts` must be 6.1.0 or newer, and `svelte` 5.55.7 or newer.
 
 ### 1. SVELightweightCharts
 
