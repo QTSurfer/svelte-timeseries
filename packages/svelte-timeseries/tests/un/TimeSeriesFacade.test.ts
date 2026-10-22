@@ -112,25 +112,21 @@ function createDuckDB() {
 				_limit?: number
 			): Promise<ChartData> => ({ _ts: [2000, 4000], price: [2, 3] })
 		),
-		getWindowedOHLC: vi.fn(
-			async (): Promise<ChartData> => ({
-				_ts: [2000, 4000],
-				open: [10, 11],
-				high: [12, 13],
-				low: [9, 10],
-				close: [11, 12]
-			})
-		),
+		getWindowedOHLC: vi.fn(async (): Promise<ChartData> => ({
+			_ts: [2000, 4000],
+			open: [10, 11],
+			high: [12, 13],
+			low: [9, 10],
+			close: [11, 12]
+		})),
 		getTable: vi.fn<() => { resolution?: '1m' }>(() => ({ resolution: undefined })),
-		getOHLC: vi.fn(
-			async (): Promise<ChartData> => ({
-				_ts: [1000, 3000, 5000],
-				open: [10, 11, 12],
-				high: [12, 13, 14],
-				low: [9, 10, 11],
-				close: [11, 12, 13]
-			})
-		)
+		getOHLC: vi.fn(async (): Promise<ChartData> => ({
+			_ts: [1000, 3000, 5000],
+			open: [10, 11, 12],
+			high: [12, 13, 14],
+			low: [9, 10, 11],
+			close: [11, 12, 13]
+		}))
 	};
 }
 

@@ -1,11 +1,6 @@
 <script lang="ts" module>
 	export type DemoPage =
-		| '/'
-		| '/series'
-		| '/object'
-		| '/candlestick'
-		| '/injected'
-		| '/performance';
+		'/' | '/series' | '/object' | '/candlestick' | '/injected' | '/performance';
 </script>
 
 <script lang="ts">
