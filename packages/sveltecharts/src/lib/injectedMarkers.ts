@@ -34,12 +34,7 @@ export type InjectedMarker = {
 };
 
 export type MarkerPosition =
-	| 'aboveBar'
-	| 'belowBar'
-	| 'inBar'
-	| 'atPriceTop'
-	| 'atPriceBottom'
-	| 'atPriceMiddle';
+	'aboveBar' | 'belowBar' | 'inBar' | 'atPriceTop' | 'atPriceBottom' | 'atPriceMiddle';
 
 export const MARKER_KIND_STYLE: Record<
 	InjectedMarkerKind,

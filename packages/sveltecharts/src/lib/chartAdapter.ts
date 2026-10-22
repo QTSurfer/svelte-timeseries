@@ -14,9 +14,7 @@ export type OHLCDimensions = {
 };
 
 export type ChartDataset =
-	| ChartDatasetFormatArray
-	| ChartDatasetFormatObject
-	| ChartDatasetFormatSimpleObject;
+	ChartDatasetFormatArray | ChartDatasetFormatObject | ChartDatasetFormatSimpleObject;
 
 export type ChartMarkerPoint = {
 	dimName: string;
