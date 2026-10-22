@@ -71,9 +71,10 @@
 		/** Relative pane heights keyed by pane number, e.g. `{ 0: 3, 1: 1 }`. */
 		paneHeights?: Readonly<Record<number, number>>;
 		/**
-		 * Lightweight Charts only: decimals on the price axis for the price line and the candles, a
-		 * whole number from 0 to 16. By default they follow the data, so one value with many decimals
-		 * widens the whole axis. Injected series keep their own decimals.
+		 * Lightweight Charts only: decimals of the price axis, the labels and the tooltip for the price
+		 * line and the candles, a whole number from 0 to 16. By default they follow the data, so one
+		 * value with many decimals widens the whole axis, and the tooltip shows the shortest decimals of
+		 * each value. Injected series keep their own decimals.
 		 */
 		priceDecimals?: number;
 		/**
