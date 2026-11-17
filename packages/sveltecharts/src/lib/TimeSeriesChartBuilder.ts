@@ -47,6 +47,7 @@ import type { GridOption } from 'echarts/types/dist/shared';
 import type { ZRColor } from 'echarts/types/src/util/types.js';
 import type { MarkPointDataItemOption } from 'echarts/types/src/component/marker/MarkPointModel.js';
 import { formatPreciseValue } from './pricePrecision';
+import { formatChartClock, type ChartTimeZone } from './chartTime';
 
 type IconType =
 	// Cross-engine-consistent set (see ChartMarkerPointOptions.icon's doc comment) — 'square' is
@@ -99,6 +100,8 @@ type DatasetFormatArray = number[][];
  */
 type ConfigBuilder = {
 	externalManagerLegend?: boolean;
+	/** The clock the time axis and the tooltip read. Default `'utc'`. */
+	timeZone?: ChartTimeZone;
 };
 export type MarkerEvent = {
 	name?: string;
@@ -116,11 +119,12 @@ export type MarkArea = {
 const CANDLESTICK_SERIES_ID = 'candlestick';
 
 /**
- * Time-axis label: `HH:MM:SS` in UTC, like the Lightweight Charts axis and the `useUTC` option of
- * this chart. (`Date#toTimeString` would use the viewer's time zone and disagree with both.)
+ * Time-axis label: `HH:MM:SS`, in UTC unless the chart is asked for the viewer's clock, like the
+ * Lightweight Charts axis and the `useUTC` option of this chart. (`Date#toTimeString` would always
+ * use the viewer's time zone and disagree with both.)
  */
-export function formatAxisTime(valueMs: number): string {
-	return new Date(valueMs).toISOString().slice(11, 19);
+export function formatAxisTime(valueMs: number, timeZone: ChartTimeZone = 'utc'): string {
+	return formatChartClock(valueMs, timeZone);
 }
 
 export class TimeSeriesChartBuilder {
@@ -166,7 +170,7 @@ export class TimeSeriesChartBuilder {
 		this.ECharts = instance;
 		this.builderConfig = { ...this.builderConfig, ...builderConfig };
 
-		this.option.useUTC = true;
+		this.option.useUTC = this.builderConfig.timeZone !== 'local';
 		this.option.animation = false;
 
 		this.option.legend = this.builderConfig.externalManagerLegend
@@ -220,7 +224,7 @@ export class TimeSeriesChartBuilder {
 			type: 'time',
 			axisLine: { show: true },
 			axisLabel: {
-				formatter: formatAxisTime
+				formatter: (valueMs: number) => formatAxisTime(valueMs, this.builderConfig.timeZone)
 			}
 		};
 

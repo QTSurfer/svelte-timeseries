@@ -836,4 +836,30 @@ describe('time axis labels', () => {
 		expect(option.useUTC).toBe(true);
 		expect(option.xAxis.axisLabel.formatter(instant)).toBe('22:13:20');
 	});
+
+	it('is the viewer’s own clock when the chart is asked for "local"', () => {
+		process.env.TZ = 'Asia/Tokyo';
+		expect(formatAxisTime(instant, 'local')).toBe('07:13:20');
+		const echarts = createMockECharts();
+		new TimeSeriesChartBuilder(echarts, { timeZone: 'local' })
+			.setDataset({ _ts: [instant], price: [1] })
+			.build();
+		const [option] = lastSetOptionCall(echarts);
+		// `useUTC: false` is what makes the engine's own labels and tooltip read the viewer's clock.
+		expect(option.useUTC).toBe(false);
+		expect(option.xAxis.axisLabel.formatter(instant)).toBe('07:13:20');
+	});
+
+	it('stays UTC when the time zone is "utc" or not given', () => {
+		process.env.TZ = 'Asia/Tokyo';
+		for (const config of [undefined, {}, { timeZone: 'utc' as const }]) {
+			const echarts = createMockECharts();
+			new TimeSeriesChartBuilder(echarts, config)
+				.setDataset({ _ts: [instant], price: [1] })
+				.build();
+			const [option] = lastSetOptionCall(echarts);
+			expect(option.useUTC).toBe(true);
+			expect(option.xAxis.axisLabel.formatter(instant)).toBe('22:13:20');
+		}
+	});
 });

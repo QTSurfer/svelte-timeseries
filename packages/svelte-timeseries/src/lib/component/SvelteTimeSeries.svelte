@@ -26,6 +26,7 @@
 	} from '@qtsurfer/sveltecharts';
 	import type {
 		CandlesSource,
+		ChartTimeZone,
 		ECharts,
 		InjectedMarker,
 		InjectedSeries,
@@ -68,6 +69,7 @@
 		snippetClass,
 		chartClass,
 		chartLibrary = 'echarts',
+		timeZone = 'utc',
 		isDark,
 		onFacadeReady,
 		loadingSnippet
@@ -102,6 +104,11 @@
 		snippetClass?: string;
 		chartClass?: string;
 		chartLibrary?: 'echarts' | 'lightweight' | 'vela';
+		/**
+		 * The clock the time axis, the crosshair and the tooltip write their times in: `'utc'`
+		 * (default) or the viewer's own, `'local'`. ECharts and Lightweight Charts; `'vela'` is UTC.
+		 */
+		timeZone?: ChartTimeZone;
 		isDark?: boolean;
 		onFacadeReady?: (facade: TimeSeriesFacade) => void;
 		loadingSnippet?: Snippet;
@@ -244,7 +251,8 @@
 
 	const onLoadECharts = async (EChartInstance: ECharts) => {
 		const timeSeriesBuilder = new TimeSeriesChartBuilder(EChartInstance, {
-			externalManagerLegend
+			externalManagerLegend,
+			timeZone
 		});
 		await loadChart(timeSeriesBuilder);
 	};
@@ -324,25 +332,29 @@
 	</div>
 
 	<div class={chartClass}>
-		{#if dataSource.source === 'arrays'}
-			<TimeSeriesChart
-				{chartLibrary}
-				{price}
-				{candles}
-				{injectedSeries}
-				{injectedMarkers}
-				{paneHeights}
-				{externalManagerLegend}
-				{isDark}
-				onChartReady={onArraysChartReady}
-			/>
-		{:else if chartLibrary === 'lightweight'}
-			<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} />
-		{:else if chartLibrary === 'vela'}
-			<SVEVelaCharts onLoad={onLoadVela} {loading} {isDark} />
-		{:else}
-			<SVECharts onLoad={onLoadECharts} {onDataZoom} {loading} {isDark} />
-		{/if}
+		<!-- Keyed on the time zone: the ECharts builder reads it once, when the chart is made. -->
+		{#key timeZone}
+			{#if dataSource.source === 'arrays'}
+				<TimeSeriesChart
+					{chartLibrary}
+					{timeZone}
+					{price}
+					{candles}
+					{injectedSeries}
+					{injectedMarkers}
+					{paneHeights}
+					{externalManagerLegend}
+					{isDark}
+					onChartReady={onArraysChartReady}
+				/>
+			{:else if chartLibrary === 'lightweight'}
+				<SVELightweightCharts onLoad={onLoadLightweight} {loading} {isDark} {timeZone} />
+			{:else if chartLibrary === 'vela'}
+				<SVEVelaCharts onLoad={onLoadVela} {loading} {isDark} />
+			{:else}
+				<SVECharts onLoad={onLoadECharts} {onDataZoom} {loading} {isDark} />
+			{/if}
+		{/key}
 	</div>
 	{#if loading}
 		{#if loadingSnippet}

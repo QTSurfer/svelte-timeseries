@@ -341,6 +341,7 @@ The URL (Parquet or Lastra) path works exactly as before. Use `onFacadeReady` to
 | `markers?`               | `MarkersTableOptions`                                                         | Table and JSON column used to build the `markers` view (`shape`, `color`, `position`, `text`).                                                                                                       |
 | `debug?`                 | `boolean` (default `true`)                                                    | Enables verbose DuckDB/builder logging.                                                                                                                                                              |
 | `chartLibrary?`          | `'echarts' \| 'lightweight' \| 'vela'` (default `'echarts'`)                  | Selects the chart backend. `'lightweight'` renders via TradingView Lightweight Charts; `'vela'` renders candlesticks with Vela (see [Vela](#vela-candlesticks-only)).                                |
+| `timeZone?`              | `'utc' \| 'local'` (default `'utc'`)                                          | The clock the time axis, the crosshair and the tooltip write their times in: UTC, or the viewer's own. ECharts and Lightweight Charts; Vela is UTC.                                                  |
 | `externalManagerLegend?` | `boolean` (default `true`)                                                    | When `true`, legend management is handled by external snippets instead of the chart library.                                                                                                         |
 | `isDark?`                | `boolean`                                                                     | Passes dark-mode state to the chart component for theme-aware styling.                                                                                                                               |
 | `onFacadeReady?`         | `(facade: TimeSeriesFacade) => void`                                          | Called once the facade is initialized; useful for programmatic access to the facade.                                                                                                                 |
@@ -666,13 +667,14 @@ Use this component directly when you want to manage the chart instance yourself:
 
 `SVELightweightCharts` props:
 
-| Prop       | Type                                      | Description                                                                                                         |
-| ---------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `onLoad`   | `(chart: IChartApi) => Promise<void>`     | Called once the chart is mounted; receive the raw instance.                                                         |
-| `config?`  | `{ options?: DeepPartial<ChartOptions> }` | Pass TradingView chart options (layout, grid, etc.).                                                                |
-| `loading?` | `boolean`                                 | Accepted for symmetry with `SVECharts`; this component draws no overlay.                                            |
-| `onClear?` | `() => void` (bindable)                   | Assigned by the component (a no-op here; `SVECharts` assigns a function that clears the chart). Bind it to call it. |
-| `isDark?`  | `boolean`                                 | Applies dark palette to chart and tooltip.                                                                          |
+| Prop        | Type                                      | Description                                                                                                              |
+| ----------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `onLoad`    | `(chart: IChartApi) => Promise<void>`     | Called once the chart is mounted; receive the raw instance.                                                              |
+| `config?`   | `{ options?: DeepPartial<ChartOptions> }` | Pass TradingView chart options (layout, grid, etc.).                                                                     |
+| `loading?`  | `boolean`                                 | Accepted for symmetry with `SVECharts`; this component draws no overlay.                                                 |
+| `onClear?`  | `() => void` (bindable)                   | Assigned by the component (a no-op here; `SVECharts` assigns a function that clears the chart). Bind it to call it.      |
+| `isDark?`   | `boolean`                                 | Applies dark palette to chart and tooltip.                                                                               |
+| `timeZone?` | `'utc' \| 'local'` (default `'utc'`)      | The clock the time axis, the crosshair label and the tooltip write their times in. A formatter in `config.options` wins. |
 
 ### 2. LightweightTimeSeriesChartBuilder
 

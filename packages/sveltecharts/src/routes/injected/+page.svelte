@@ -1,6 +1,7 @@
 <script lang="ts">
 	import DemoNav from '../DemoNav.svelte';
 	import { TimeSeriesChart } from '$lib';
+	import { formatChartClock } from '$lib/chartTime';
 	import type {
 		CandleInterval,
 		CandlesSource,
@@ -44,6 +45,7 @@
 	let collapseEmptyPanes = $state(false);
 	let decimals = $state('auto');
 	let background = $state<'default' | 'dark' | 'sepia'>('default');
+	let timeZone = $state<'utc' | 'local'>('utc');
 
 	const priceDecimals = $derived(decimals === 'auto' ? undefined : Number(decimals));
 	const BACKGROUNDS: Record<string, LightweightDeepPartial<LightweightChartOptions> | undefined> = {
@@ -65,7 +67,8 @@
 	let crosshair = $state('');
 	let visibleRange = $state('');
 	let legend = $state<LegendItem[]>([]);
-	const clock = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+	// The readouts above the charts follow the time zone the charts are drawn in.
+	const clock = (ms: number) => formatChartClock(ms, timeZone);
 	function onCrosshairMove(event: CrosshairMoveEvent) {
 		crosshair =
 			event.time === undefined
@@ -176,6 +179,13 @@
 		>
 			Mode: {mode}
 		</button>
+		<label>
+			Time zone
+			<select data-testid="time-zone" bind:value={timeZone}>
+				<option value="utc">UTC</option>
+				<option value="local">Local</option>
+			</select>
+		</label>
 		{#if mode === 'ticks'}
 			<label>
 				Bar length
@@ -283,6 +293,7 @@
 			<div class="chart-wrapper">
 				<TimeSeriesChart
 					chartLibrary="lightweight"
+					{timeZone}
 					{price}
 					{candles}
 					injectedSeries={series}
@@ -305,6 +316,7 @@
 			<div class="chart-wrapper">
 				<TimeSeriesChart
 					chartLibrary="echarts"
+					{timeZone}
 					{price}
 					{candles}
 					injectedSeries={series}

@@ -12,6 +12,7 @@ export type {
 	TimeSeriesChartAdapter
 } from './chartAdapter';
 export { mergeChartOptions } from './chartOptions';
+export type { ChartTimeZone } from './chartTime';
 export { describeUnsupportedInput } from './inputSupport';
 export type { InjectedInput } from './inputSupport';
 export { LightweightTimeSeriesChartBuilder } from './LightweightTimeSeriesChartBuilder';

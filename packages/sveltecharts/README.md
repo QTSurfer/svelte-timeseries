@@ -134,6 +134,7 @@ const bars = aggregateCandles({ times, values: lastPrice, volumes: tradeSizes },
 | `priceDecimals?`         | `number`                                        | Lightweight Charts: decimals of the price axis, the labels and the tooltip for the price line and the candles, 0 to 16. Default: what the data needs. |
 | `markerHoverTolerance?`  | `number`                                        | Lightweight Charts: how many pixels from a marker its text still shows. Default `4`; `0` = the bar under the cursor only.                             |
 | `lightweightOptions?`    | `DeepPartial<ChartOptions>`                     | Lightweight Charts: options of the chart itself, merged into the defaults (background, text color, grid...).                                          |
+| `timeZone?`              | `'utc' \| 'local'` (default `'utc'`)            | The clock the time axis, the crosshair and the tooltip write their times in: UTC, or the viewer's own. ECharts and Lightweight Charts; Vela is UTC.   |
 | `resetView?`             | `unknown`                                       | Change it to show all the data again, for example when a new run replaces the arrays under the same series name.                                      |
 | `onCrosshairMove?`       | `(event: CrosshairMoveEvent) => void`           | Lightweight Charts: crosshair moves with the bar time (ms), its price and the pixel point.                                                            |
 | `onVisibleRangeChange?`  | `(range: { from: number; to: number }) => void` | Lightweight Charts: visible range in epoch milliseconds, when it changes.                                                                             |
@@ -246,6 +247,12 @@ By default the price axis shows the most decimals any value needs, so one value 
 ### Chart options and attribution
 
 `lightweightOptions` is merged into the defaults one object level at a time, so `{ layout: { background: { color: '#111' } } }` changes the background and keeps the default text color. The TradingView attribution logo is always shown, whatever `layout.attributionLogo` says.
+
+### Time zone
+
+Chart time is UTC, and the time axis, the crosshair label and the tooltip write it as it is. Pass `timeZone="local"` to write the viewer's own clock instead, to agree with the rest of your screens: the ECharts engine switches its `useUTC` off, and the Lightweight Charts engine gets a time formatter for its axis and crosshair, and the tooltip follows. The Vela engine is always UTC. Changing `timeZone` builds a new chart.
+
+A tick of the Lightweight Charts axis is only named for its day, month or year when it is at the start of one on the viewer's clock (the engine puts those ticks on UTC boundaries), and otherwise says what time it is. Your own `tickMarkFormatter` or `localization.timeFormatter` in `lightweightOptions` wins over these.
 
 ### What each backend supports
 
