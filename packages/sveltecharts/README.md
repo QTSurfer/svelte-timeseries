@@ -250,7 +250,7 @@ By default the price axis shows the most decimals any value needs, so one value 
 
 ### Time zone
 
-Chart time is UTC, and the time axis, the crosshair label and the tooltip write it as it is. Pass `timeZone="local"` to write the viewer's own clock instead, to agree with the rest of your screens: the ECharts engine switches its `useUTC` off, and the Lightweight Charts engine gets a time formatter for its axis and crosshair, and the tooltip follows. The Vela engine is always UTC. Changing `timeZone` builds a new chart.
+Chart time is UTC, and the time axis, the crosshair label and the tooltip write it as it is. Pass `timeZone="local"` to write the viewer's own clock instead, to agree with the rest of your screens: the ECharts engine switches its `useUTC` off, and the Lightweight Charts engine gets a time formatter for its axis and crosshair, and the tooltip follows. The Vela engine is always UTC. Changing `timeZone` builds a new chart (`SVELightweightCharts` calls `onLoad` again with it), because the Lightweight Charts engine cannot take a time formatter away from a chart that has one.
 
 A tick of the Lightweight Charts axis is only named for its day, month or year when it is at the start of one on the viewer's clock (the engine puts those ticks on UTC boundaries), and otherwise says what time it is. Your own `tickMarkFormatter` or `localization.timeFormatter` in `lightweightOptions` wins over these.
 

@@ -198,7 +198,14 @@
 </script>
 
 <div style="position: relative; width: 100%; height: 100%;">
-	<div class="lightweight-charts" use:chartAction></div>
+	<!--
+		Keyed on the time zone: the engine merges `applyOptions` deeply and skips `undefined`, so
+		nothing can take a time formatter away from a chart that has one. Going from "local" back to
+		"utc" has to build another chart, and `onLoad` is called again with it.
+	-->
+	{#key timeZone}
+		<div class="lightweight-charts" use:chartAction></div>
+	{/key}
 
 	{#if tooltipVisible}
 		<div

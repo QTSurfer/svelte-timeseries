@@ -64,6 +64,18 @@ export const TICK_MARK_TYPE = {
 	TimeWithSeconds: 4
 } as const;
 
+// The axis asks for the label of every tick at every zoom or pan, so the formatter of the month names
+// is made once per locale.
+const monthNames = new Map<string, Intl.DateTimeFormat>();
+const monthName = (locale: string, epochMs: number): string => {
+	let format = monthNames.get(locale);
+	if (!format) {
+		format = new Intl.DateTimeFormat(locale, { month: 'short' });
+		monthNames.set(locale, format);
+	}
+	return format.format(epochMs);
+};
+
 const isTimestamp = (time: Time): time is Time & number => typeof time === 'number';
 
 /**
@@ -87,9 +99,7 @@ function localTickMark(time: Time, type: TickMarkType, locale: string): string |
 		case TICK_MARK_TYPE.Year:
 			return atYearStart ? String(f.year) : clock(f, false);
 		case TICK_MARK_TYPE.Month:
-			return atMonthStart
-				? new Intl.DateTimeFormat(locale, { month: 'short' }).format(epochMs)
-				: clock(f, false);
+			return atMonthStart ? monthName(locale, epochMs) : clock(f, false);
 		case TICK_MARK_TYPE.DayOfMonth:
 			return atMidnight ? String(f.day) : clock(f, false);
 		case TICK_MARK_TYPE.TimeWithSeconds:

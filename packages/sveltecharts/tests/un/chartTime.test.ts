@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TickMarkType } from 'lightweight-charts';
 import {
 	TICK_MARK_TYPE,
@@ -116,6 +116,34 @@ describe('lightweightTimeOptions', () => {
 
 		it('does not call a local midnight the start of a month unless it is the first', () => {
 			expect(tick(seconds('2026-11-17T03:00:00Z'), TickMarkType.Month)).toBe('00:00');
+		});
+
+		// The axis asks for a label of every tick at every zoom or pan.
+		it('makes the month-name formatter once per locale, not once per tick', () => {
+			const Real = Intl.DateTimeFormat;
+			const make = vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function (
+				...args: ConstructorParameters<typeof Intl.DateTimeFormat>
+			) {
+				return new Real(...args);
+			} as never);
+			try {
+				const monthStart = seconds('2026-03-01T03:00:00Z');
+				for (let i = 0; i < 3; i++) tick(monthStart, TickMarkType.Month, 'fr');
+				tick(monthStart, TickMarkType.Month, 'de');
+				tick(monthStart, TickMarkType.Month, 'fr');
+
+				const locales = make.mock.calls.map(([locale]) => locale);
+				expect(locales.filter((locale) => locale === 'fr')).toHaveLength(1);
+				expect(locales.filter((locale) => locale === 'de')).toHaveLength(1);
+				expect(tick(monthStart, TickMarkType.Month, 'fr')).toBe(
+					new Intl.DateTimeFormat('fr', { month: 'short' }).format(monthStart * 1000)
+				);
+				expect(tick(monthStart, TickMarkType.Month, 'de')).toBe(
+					new Intl.DateTimeFormat('de', { month: 'short' }).format(monthStart * 1000)
+				);
+			} finally {
+				make.mockRestore();
+			}
 		});
 
 		it('names the month in the locale the chart is given', () => {
