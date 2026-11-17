@@ -30,6 +30,7 @@
 	let sourceMode = $state<SourceMode>('file');
 	let legendMode = $state<LegendMode>('external');
 	let chartLibrary = $state<ChartLibrary>('echarts');
+	let timeZone = $state<'utc' | 'local'>('utc');
 	let customUrl = $state('');
 	let customFile = $state<File | null>(null);
 	let customColumns = $state<string[]>([]);
@@ -350,6 +351,16 @@
 				</select>
 			</label>
 
+			<label class="form-control w-full max-w-40">
+				<div class="label pb-1">
+					<span class="label-text font-semibold">Time zone</span>
+				</div>
+				<select class="select select-bordered" bind:value={timeZone}>
+					<option value="utc">UTC</option>
+					<option value="local">Local</option>
+				</select>
+			</label>
+
 			{#if selected === CUSTOM_CONFIGURATION_ID}
 				<label class="form-control w-full max-w-40">
 					<div class="label pb-1">
@@ -518,6 +529,7 @@
 					debug={false}
 					externalManagerLegend={legendMode === 'external'}
 					{chartLibrary}
+					{timeZone}
 					containerClass={showCustomSidebar
 						? 'relative grid grid-cols-[300px_1fr] size-full'
 						: 'relative size-full'}

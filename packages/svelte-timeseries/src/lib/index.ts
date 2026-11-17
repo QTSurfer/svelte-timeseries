@@ -7,6 +7,7 @@ export type {
 	CandleInterval,
 	CandlesInput,
 	CandlesSource,
+	ChartTimeZone,
 	InjectedLineStyle,
 	InjectedMarker,
 	InjectedMarkerKind,

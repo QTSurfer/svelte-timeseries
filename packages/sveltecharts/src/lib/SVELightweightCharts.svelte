@@ -12,6 +12,7 @@
 	import { formatPreciseValue } from './LightweightTimeSeriesChartBuilder';
 	import { getChartHoverHooks } from './chartHooks';
 	import { mergeChartOptions } from './chartOptions';
+	import { formatChartDateTime, lightweightTimeOptions, type ChartTimeZone } from './chartTime';
 	import type { MarkerHoverItem } from './injectedMarkers';
 
 	type LightweightChartsConfig = {
@@ -25,13 +26,19 @@
 		config,
 		loading = $bindable(false),
 		onClear = $bindable(),
-		isDark = false
+		isDark = false,
+		timeZone = 'utc'
 	}: {
 		onLoad: (instance: IChartApi) => Promise<void>;
 		config?: LightweightChartsConfig;
 		loading?: boolean;
 		onClear?: () => void;
 		isDark?: boolean;
+		/**
+		 * The clock the time axis, the crosshair label and the tooltip write their times in: `'utc'`
+		 * (default) or the viewer's own, `'local'`. Formatters passed in `config.options` win.
+		 */
+		timeZone?: ChartTimeZone;
 	} = $props();
 
 	let chart: IChartApi | undefined;
@@ -80,13 +87,17 @@
 		}
 	});
 
-	// Nested objects are merged, so `{ layout: { background } }` keeps the default text color.
-	const chartOptions = $derived(mergeChartOptions(baseOptions, config?.options));
+	// Nested objects are merged, so `{ layout: { background } }` keeps the default text color. The
+	// time zone's formatters sit between the defaults and what the app passes.
+	const chartOptions = $derived(
+		mergeChartOptions(
+			mergeChartOptions(baseOptions, lightweightTimeOptions(timeZone)),
+			config?.options
+		)
+	);
 
 	function formatTime(time: Time): string {
-		const ts = (time as number) * 1000;
-		const d = new Date(ts);
-		return d.toISOString().replace('T', ' ').slice(0, 19);
+		return formatChartDateTime((time as number) * 1000, timeZone);
 	}
 
 	function handleCrosshairMove(param: MouseEventParams<Time>, container: HTMLElement) {
@@ -187,7 +198,14 @@
 </script>
 
 <div style="position: relative; width: 100%; height: 100%;">
-	<div class="lightweight-charts" use:chartAction></div>
+	<!--
+		Keyed on the time zone: the engine merges `applyOptions` deeply and skips `undefined`, so
+		nothing can take a time formatter away from a chart that has one. Going from "local" back to
+		"utc" has to build another chart, and `onLoad` is called again with it.
+	-->
+	{#key timeZone}
+		<div class="lightweight-charts" use:chartAction></div>
+	{/key}
 
 	{#if tooltipVisible}
 		<div

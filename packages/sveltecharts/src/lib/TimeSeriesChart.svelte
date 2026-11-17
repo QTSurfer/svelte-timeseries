@@ -21,6 +21,7 @@
 		TimeSeriesChartAdapter
 	} from './chartAdapter';
 	import { describeUnsupportedInput } from './inputSupport';
+	import type { ChartTimeZone } from './chartTime';
 	import type {
 		ECharts,
 		LightweightChartApi,
@@ -49,6 +50,7 @@
 		collapseEmptyPanes,
 		priceDecimals,
 		lightweightOptions,
+		timeZone = 'utc',
 		externalManagerLegend = false,
 		markerHoverTolerance,
 		isDark = false,
@@ -83,6 +85,11 @@
 		 * attribution logo is always shown, whatever `layout.attributionLogo` says.
 		 */
 		lightweightOptions?: LightweightDeepPartial<LightweightChartOptions>;
+		/**
+		 * The clock the time axis, the crosshair and the tooltip write their times in: `'utc'`
+		 * (default) or the viewer's own, `'local'`. ECharts and Lightweight Charts; `'vela'` is UTC.
+		 */
+		timeZone?: ChartTimeZone;
 		/** Shrink a pane whose series are all hidden (`visible: false`) to a sliver. Default `false`. */
 		collapseEmptyPanes?: boolean;
 		/** ECharts only: hide the built-in legend (default `false`, the legend toggles series). */
@@ -118,8 +125,9 @@
 	} = $props();
 
 	// The chart is rebuilt only when the kind of price data changes (line <-> candles, or another
-	// series name). Changing values, injected series or markers never rebuilds it.
-	const chartKey = $derived(`${chartLibrary}:${priceSignature(price, candles)}`);
+	// series name) or its time zone does (the ECharts builder reads it once, when it is made).
+	// Changing values, injected series or markers never rebuilds it.
+	const chartKey = $derived(`${chartLibrary}:${timeZone}:${priceSignature(price, candles)}`);
 
 	let ready = $state.raw<{ adapter: TimeSeriesChartAdapter; key: string }>();
 	/** Why the price input cannot be drawn by this engine, shown instead of an empty chart. */
@@ -160,7 +168,7 @@
 	}
 
 	async function onLoadECharts(instance: ECharts) {
-		attach(new TimeSeriesChartBuilder(instance, { externalManagerLegend }));
+		attach(new TimeSeriesChartBuilder(instance, { externalManagerLegend, timeZone }));
 	}
 
 	async function onLoadLightweight(instance: LightweightChartApi) {
@@ -291,6 +299,7 @@
 		<SVELightweightCharts
 			onLoad={onLoadLightweight}
 			{isDark}
+			{timeZone}
 			config={{ options: lightweightOptions }}
 		/>
 	{:else if chartLibrary === 'vela'}
